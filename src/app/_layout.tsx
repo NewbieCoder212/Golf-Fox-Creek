@@ -45,8 +45,9 @@ function useProtectedRoute() {
     const inAuthGroup = segments[0] === 'login';
     const inAdminGroup = segments[0] === 'admin';
 
-    // If not authenticated and not on login page, redirect to login
-    if (!isAuthenticated && !inAuthGroup) {
+    // If not authenticated and not on login page or admin page, redirect to login
+    // (Admin has its own auth system via Supabase)
+    if (!isAuthenticated && !inAuthGroup && !inAdminGroup) {
       router.replace('/login');
     }
     // If authenticated and on login page, redirect to home

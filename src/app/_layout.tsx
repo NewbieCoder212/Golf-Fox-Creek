@@ -44,10 +44,11 @@ function useProtectedRoute() {
 
     const inAuthGroup = segments[0] === 'login';
     const inAdminGroup = segments[0] === 'admin';
+    const inResetPassword = segments[0] === 'reset-password';
 
-    // If not authenticated and not on login page or admin page, redirect to login
+    // If not authenticated and not on login page, admin page, or reset password, redirect to login
     // (Admin has its own auth system via Supabase)
-    if (!isAuthenticated && !inAuthGroup && !inAdminGroup) {
+    if (!isAuthenticated && !inAuthGroup && !inAdminGroup && !inResetPassword) {
       router.replace('/login');
     }
     // If authenticated and on login page, redirect to home
@@ -82,6 +83,7 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="admin/dashboard" options={{ headerShown: false }} />
         <Stack.Screen name="admin/members" options={{ headerShown: false }} />
         <Stack.Screen name="report-condition" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="reset-password" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { View } from 'react-native';
-import { Home, Clock, Flag, Phone, ClipboardList, Newspaper } from 'lucide-react-native';
+import { View, Platform } from 'react-native';
+import { Home, Clock, Flag, Phone, ClipboardList, Users } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -12,8 +12,8 @@ export default function TabLayout() {
           backgroundColor: '#0c0c0c',
           borderTopColor: '#262626',
           borderTopWidth: 0.5,
-          height: 85,
-          paddingBottom: 28,
+          height: Platform.OS === 'web' ? 70 : 85,
+          paddingBottom: Platform.OS === 'web' ? 12 : 28,
           paddingTop: 12,
         },
         tabBarActiveTintColor: '#a3e635',
@@ -82,12 +82,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="news"
+        name="social"
         options={{
-          title: 'News',
+          title: 'Social',
           tabBarIcon: ({ color, focused }) => (
             <View className={focused ? 'opacity-100' : 'opacity-60'}>
-              <Newspaper size={22} color={color} strokeWidth={focused ? 2.5 : 1.5} />
+              <Users size={22} color={color} strokeWidth={focused ? 2.5 : 1.5} />
             </View>
           ),
         }}

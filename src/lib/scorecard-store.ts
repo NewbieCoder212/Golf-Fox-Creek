@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { HoleScore as TypedHoleScore, TeeName } from '@/types';
+import { prepareRoundForSubmission } from './handicap';
+import { awardRoundCompletionPoints, saveRound as saveRoundToDb } from './supabase';
+
 const STORAGE_KEY = '@foxcreek_scorecard';
 const HISTORY_KEY = '@foxcreek_round_history';
 
@@ -57,6 +61,11 @@ interface ScorecardState {
   roundStartTime: number;
   roundHistory: RoundSummary[];
 
+  // Geofence check-in state
+  isCheckedIn: boolean;
+  checkedInAt: number | null;
+  showFnbPrompt: boolean;
+
   // Actions
   setPlayerName: (playerId: number, name: string) => void;
   setScore: (hole: number, playerId: number, score: number | null) => void;
@@ -87,6 +96,19 @@ interface ScorecardState {
   resumeRound: () => void;
   discardSavedRound: () => Promise<void>;
   resetRound: () => Promise<void>;
+
+  // Geofence actions
+  setCheckedIn: (checkedIn: boolean) => void;
+  setShowFnbPrompt: (show: boolean) => void;
+
+  // Auto-start and complete round (geofence triggered)
+  autoStartRound: () => void;
+  completeRound: (userId: string, teePlayed: TeeName) => Promise<{
+    success: boolean;
+    roundId?: string;
+    pointsEarned?: number;
+    error?: string;
+  }>;
 }
 
 // Fox Creek Golf Club - Dieppe, NB, Canada
@@ -143,6 +165,11 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
   showRoundSummary: false,
   roundStartTime: Date.now(),
   roundHistory: [],
+
+  // Geofence check-in state
+  isCheckedIn: false,
+  checkedInAt: null,
+  showFnbPrompt: false,
 
   setPlayerName: (playerId, name) => {
     const initials = name
@@ -504,6 +531,126 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
       showResumePrompt: false,
       showRoundSummary: false,
       roundStartTime: Date.now(),
+      isCheckedIn: false,
+      checkedInAt: null,
+      showFnbPrompt: false,
     });
+  },
+
+  // Geofence actions
+  setCheckedIn: (checkedIn: boolean) => {
+    set({
+      isCheckedIn: checkedIn,
+      checkedInAt: checkedIn ? Date.now() : null,
+    });
+  },
+
+  setShowFnbPrompt: (show: boolean) => {
+    set({ showFnbPrompt: show });
+  },
+
+  // Auto-start round when user reaches Hole 1 Tee
+  autoStartRound: () => {
+    const { isTracking } = get();
+
+    // Don't auto-start if already tracking
+    if (isTracking) {
+      console.log('[Scorecard] Round already in progress, skipping auto-start');
+      return;
+    }
+
+    console.log('[Scorecard] Auto-starting round from Hole 1 Tee geofence');
+
+    set({
+      isTracking: true,
+      currentHole: 1,
+      holeStartTime: Date.now(),
+      elapsedSeconds: 0,
+      roundStartTime: Date.now(),
+      isCheckedIn: true,
+      checkedInAt: Date.now(),
+    });
+
+    get().saveRound();
+  },
+
+  // Complete round and save to database
+  completeRound: async (userId: string, teePlayed: TeeName) => {
+    const { scores, roundStartTime } = get();
+    const coursePar = get().getCoursePar();
+    const totalTime = get().getTotalRoundTime();
+
+    try {
+      // Convert scores to the format expected by handicap calculation
+      const holeScores: TypedHoleScore[] = scores.map((h) => ({
+        hole: h.hole,
+        par: h.par,
+        score: h.scores[0], // Use first player's score for handicap
+      }));
+
+      // Check if round has scores
+      const hasScores = holeScores.some((h) => h.score !== null);
+      if (!hasScores) {
+        return { success: false, error: 'No scores recorded' };
+      }
+
+      // Prepare round data for database
+      const roundData = prepareRoundForSubmission({
+        userId,
+        scores: holeScores,
+        teePlayed,
+        durationSeconds: totalTime,
+      });
+
+      if (!roundData) {
+        return { success: false, error: 'Could not prepare round data' };
+      }
+
+      // Save to database
+      const savedRound = await saveRoundToDb(roundData);
+
+      if (!savedRound) {
+        // Still save locally even if DB fails
+        await get().saveRoundToHistory();
+        return { success: true, error: 'Saved locally, database unavailable' };
+      }
+
+      // Award loyalty points
+      const grossScore = holeScores.reduce((sum, h) => sum + (h.score ?? 0), 0);
+      const pointsEarned = await awardRoundCompletionPoints(
+        userId,
+        savedRound.id,
+        grossScore,
+        coursePar
+      );
+
+      // Save to local history as well
+      await get().saveRoundToHistory();
+
+      // Reset the round
+      await get().resetRound();
+
+      console.log('[Scorecard] Round completed successfully:', {
+        roundId: savedRound.id,
+        differential: savedRound.differential,
+        pointsEarned,
+      });
+
+      return {
+        success: true,
+        roundId: savedRound.id,
+        pointsEarned,
+      };
+    } catch (error) {
+      console.log('[Scorecard] Error completing round:', error);
+
+      // Still save locally
+      await get().saveRoundToHistory();
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
   },
 }));

@@ -30,6 +30,9 @@ export const translations = {
     // Header
     memberHub: 'Member Hub',
     foxCreek: 'Fox Creek',
+    goodMorning: 'Good morning',
+    goodAfternoon: 'Good afternoon',
+    goodEvening: 'Good evening',
 
     // Stats
     handicap: 'Handicap',
@@ -67,13 +70,29 @@ export const translations = {
 
     // Quick Links
     quickAccess: 'Quick Access',
+    quickPlay: 'Quick Play',
     bookTeeTime: 'Book Tee Time',
     scorecard: 'Scorecard',
     history: 'History',
+    tournaments: 'Tournaments',
 
     // Pro Shop
     proShop: 'Pro Shop',
     newSeasonGear: 'New Season Gear Arrived',
+
+    // My Events
+    myEvents: 'My Events',
+    viewAll: 'View All',
+    event: 'Event',
+
+    // Practice Mode
+    practiceMode: 'Practice Mode',
+    atRange: 'At Range',
+    alertInMin: 'Alert in {minutes} min',
+    teeTimePassed: 'Tee time passed',
+    alertHint: "You'll be alerted 10 min before when at the range",
+    setTeeTimeModalTitle: 'Set Tee Time',
+    alertModalHint: "You'll be alerted 10 minutes before",
 
     // Announcements
     announcement: 'Announcement',
@@ -82,6 +101,9 @@ export const translations = {
     // Header
     memberHub: 'Espace Membre',
     foxCreek: 'Fox Creek',
+    goodMorning: 'Bonjour',
+    goodAfternoon: 'Bon après-midi',
+    goodEvening: 'Bonsoir',
 
     // Stats
     handicap: 'Handicap',
@@ -119,13 +141,29 @@ export const translations = {
 
     // Quick Links
     quickAccess: 'Accès rapide',
+    quickPlay: 'Jeu rapide',
     bookTeeTime: 'Réserver',
     scorecard: 'Carte de score',
     history: 'Historique',
+    tournaments: 'Tournois',
 
     // Pro Shop
     proShop: 'Boutique Pro',
     newSeasonGear: 'Nouveaux équipements disponibles',
+
+    // My Events
+    myEvents: 'Mes événements',
+    viewAll: 'Tout voir',
+    event: 'Événement',
+
+    // Practice Mode
+    practiceMode: 'Mode pratique',
+    atRange: 'Au practice',
+    alertInMin: 'Alerte dans {minutes} min',
+    teeTimePassed: 'Heure de départ passée',
+    alertHint: 'Alerte 10 min avant lorsque vous êtes au practice',
+    setTeeTimeModalTitle: 'Définir heure de départ',
+    alertModalHint: 'Alerte 10 minutes avant',
 
     // Announcements
     announcement: 'Annonce',

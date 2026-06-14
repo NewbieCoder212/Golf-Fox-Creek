@@ -32,7 +32,6 @@ export default function TeeTimesScreen() {
 
   return (
     <View className="flex-1 bg-[#0c0c0c]">
-      {/* Header */}
       <View
         style={{ paddingTop: insets.top }}
         className="bg-[#141414] border-b border-neutral-800"
@@ -50,16 +49,12 @@ export default function TeeTimesScreen() {
 
           <Text className="text-white text-lg font-semibold">Book Tee Time</Text>
 
-          <Pressable
-            onPress={handleRefresh}
-            className="p-2 active:opacity-60"
-          >
+          <Pressable onPress={handleRefresh} className="p-2 active:opacity-60">
             <RotateCw size={20} color="#a3e635" />
           </Pressable>
         </View>
       </View>
 
-      {/* WebView */}
       <View className="flex-1">
         <WebView
           ref={webViewRef}
@@ -71,20 +66,19 @@ export default function TeeTimesScreen() {
             setCanGoBack(navState.canGoBack);
           }}
           startInLoadingState={false}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          sharedCookiesEnabled={true}
-          thirdPartyCookiesEnabled={true}
-          allowsBackForwardNavigationGestures={true}
-          pullToRefreshEnabled={true}
+          javaScriptEnabled
+          domStorageEnabled
+          sharedCookiesEnabled
+          thirdPartyCookiesEnabled
+          allowsBackForwardNavigationGestures
+          pullToRefreshEnabled
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
           decelerationRate="normal"
           contentMode="mobile"
-          allowsInlineMediaPlayback={true}
+          allowsInlineMediaPlayback
         />
 
-        {/* Loading Overlay */}
         {isLoading && (
           <Animated.View
             entering={FadeIn.duration(200)}

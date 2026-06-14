@@ -360,3 +360,235 @@ export interface CourseReportInsert {
   latitude?: number;
   longitude?: number;
 }
+
+// ============================================
+// TOURNAMENTS
+// ============================================
+
+export type TournamentFormat = 'scramble' | 'best_ball' | 'alternate_shot' | 'singles';
+
+/** One calendar day; may include multiple rounds (e.g. AM scramble + PM singles). */
+export interface TournamentDaySchedule {
+  formats: TournamentFormat[];
+}
+
+export type TournamentTeamSide = 'side_a' | 'side_b';
+
+export type TournamentMatchHoleWinner = 'side_a' | 'side_b' | 'tie';
+
+export interface Tournament {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  round_schedule: TournamentDaySchedule[];
+  rounds_count: number;
+  /** Players from each team in a foursome (default 2 = 2v2). */
+  players_per_match: number;
+  created_at: string;
+}
+
+export interface TournamentInsert {
+  name: string;
+  start_date: string;
+  end_date: string;
+  round_schedule: TournamentDaySchedule[];
+  rounds_count: number;
+  players_per_match?: number;
+}
+
+export interface TournamentTeam {
+  id: string;
+  tournament_id: string;
+  team_name: string;
+  side: TournamentTeamSide | null;
+  player_ids: string[];
+}
+
+export interface TournamentTeamInsert {
+  tournament_id: string;
+  team_name: string;
+  side: TournamentTeamSide;
+  player_ids: string[];
+}
+
+export interface TournamentPlayer {
+  id: string;
+  tournament_id: string;
+  display_name: string;
+  handicap_index: number | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+export interface TournamentPlayerInsert {
+  tournament_id: string;
+  display_name: string;
+  handicap_index?: number | null;
+  user_id?: string | null;
+}
+
+export interface TournamentHoleScore {
+  hole: number;
+  par: number;
+  gross: number;
+  net: number;
+}
+
+export interface TournamentScore {
+  id: string;
+  tournament_id: string;
+  team_id: string | null;
+  user_id: string | null;
+  tournament_player_id: string | null;
+  match_group_id: string | null;
+  round_number: number;
+  hole_scores: TournamentHoleScore[];
+  total_gross: number;
+  total_net: number;
+  created_at: string;
+}
+
+export interface TournamentScoreInsert {
+  tournament_id: string;
+  team_id?: string | null;
+  user_id?: string | null;
+  tournament_player_id?: string | null;
+  match_group_id?: string | null;
+  round_number: number;
+  hole_scores: TournamentHoleScore[];
+  total_gross: number;
+  total_net: number;
+}
+
+/** One tee-time foursome: 2 players from side A vs 2 from side B. */
+export interface TournamentMatchGroup {
+  id: string;
+  tournament_id: string;
+  round_number: number;
+  format: TournamentFormat;
+  side_a_team_id: string;
+  side_b_team_id: string;
+  side_a_player_ids: string[];
+  side_b_player_ids: string[];
+  tee_time: string;
+  starting_hole: number;
+  group_number: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface TournamentMatchGroupInsert {
+  tournament_id: string;
+  round_number: number;
+  format: TournamentFormat;
+  side_a_team_id: string;
+  side_b_team_id: string;
+  side_a_player_ids: string[];
+  side_b_player_ids: string[];
+  tee_time: string;
+  starting_hole?: number;
+  group_number?: number;
+  notes?: string | null;
+}
+
+export interface TournamentMatchHoleResult {
+  id: string;
+  match_group_id: string;
+  round_number: number;
+  hole: number;
+  side_a_net: number;
+  side_b_net: number;
+  hole_winner: TournamentMatchHoleWinner;
+}
+
+export interface TournamentTeeAssignment {
+  id: string;
+  tournament_id: string;
+  round_number: number;
+  team_id: string | null;
+  user_id: string | null;
+  tee_time: string;
+  starting_hole: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface TournamentTeeAssignmentInsert {
+  tournament_id: string;
+  round_number: number;
+  team_id?: string | null;
+  user_id?: string | null;
+  tee_time: string;
+  starting_hole?: number;
+  notes?: string | null;
+}
+
+// ============================================
+// WAGERING / SIDE GAMES
+// ============================================
+
+export type WageringGameType = 'skins' | 'stableford_points';
+
+export interface SkinsSettings {
+  carryover: boolean;
+  value_per_skin?: number;
+}
+
+export interface StablefordPointValues {
+  eagle?: number;
+  birdie?: number;
+  par?: number;
+  bogey?: number;
+  double_bogey?: number;
+  worse?: number;
+}
+
+export interface StablefordSettings {
+  point_values: StablefordPointValues;
+}
+
+export type WageringSettings = SkinsSettings | StablefordSettings;
+
+export interface SkinsHoleResult {
+  hole: number;
+  winner_ids: string[];
+  skin_value: number;
+  carryover: number;
+  scores: Record<string, number>;
+}
+
+export interface SkinsResults {
+  holes: SkinsHoleResult[];
+  balances: Record<string, number>;
+}
+
+export interface StablefordHoleResult {
+  hole: number;
+  points: Record<string, number>;
+}
+
+export interface StablefordResults {
+  holes: StablefordHoleResult[];
+  totals: Record<string, number>;
+}
+
+export type WageringResults = SkinsResults | StablefordResults;
+
+export interface WageringSession {
+  id: string;
+  round_id: string | null;
+  tournament_id: string | null;
+  game_type: WageringGameType;
+  settings: WageringSettings;
+  results: WageringResults;
+  created_at: string;
+}
+
+export interface WageringSessionInsert {
+  round_id?: string | null;
+  tournament_id?: string | null;
+  game_type: WageringGameType;
+  settings?: WageringSettings;
+  results?: WageringResults;
+}

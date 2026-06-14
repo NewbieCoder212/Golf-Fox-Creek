@@ -1,0 +1,146 @@
+/**
+ * Shared Supabase REST client for tournament tables.
+ * Uses member/admin JWT when available; falls back to anon on auth errors (dev).
+ */
+
+import { useAdminAuthStore } from './admin-auth-store';
+import { useMemberAuthStore } from './member-auth-store';
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+export const isTournamentSupabaseConfigured = () =>
+  Boolean(supabaseUrl && supabaseAnonKey);
+
+function getAccessToken(): string {
+  return (
+    useMemberAuthStore.getState().accessToken ??
+    useAdminAuthStore.getState().accessToken ??
+    supabaseAnonKey
+  );
+}
+
+export interface TournamentServiceError {
+  data: null;
+  error: string;
+}
+
+export type TournamentServiceResult<T> = { data: T; error: null } | TournamentServiceError;
+
+function parseSupabaseError(status: number, errorText: string): string {
+  try {
+    const parsed = JSON.parse(errorText) as { message?: string; code?: string };
+    if (parsed.message?.includes('row-level security')) {
+      return 'Database permissions blocked this action. Run supabase/migrations/20260619000000_tournament_rls_dev_open.sql in Supabase.';
+    }
+    if (parsed.message?.includes('tournament_players') && parsed.code === '42P01') {
+      return 'Missing tournament_players table. Run supabase/migrations/20260621000000_tournament_players.sql in Supabase.';
+    }
+    if (parsed.message?.includes('side') && parsed.code === '42703') {
+      return 'Missing team side column. Run supabase/migrations/20260620000000_tournament_match_groups.sql in Supabase.';
+    }
+    if (parsed.code === 'PGRST301' || parsed.message?.includes('JWT')) {
+      return 'Session expired. Log out and log back in, then try again.';
+    }
+    return parsed.message ?? `Request failed (${status})`;
+  } catch {
+    return errorText || `Request failed (${status})`;
+  }
+}
+
+async function fetchWithToken(
+  url: string,
+  init: RequestInit,
+  token: string
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set('apikey', supabaseAnonKey);
+  headers.set('Authorization', `Bearer ${token}`);
+  return fetch(url, { ...init, headers });
+}
+
+export async function tournamentSupabaseRequest<T>(
+  table: string,
+  options: {
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    query?: Record<string, string>;
+    body?: Record<string, unknown> | Record<string, unknown>[];
+    single?: boolean;
+  } = {}
+): Promise<TournamentServiceResult<T>> {
+  if (!isTournamentSupabaseConfigured()) {
+    return { data: null, error: 'Supabase is not configured' };
+  }
+
+  const { method = 'GET', query = {}, body, single = false } = options;
+  const url = new URL(`${supabaseUrl}/rest/v1/${table}`);
+  Object.entries(query).forEach(([key, value]) => url.searchParams.append(key, value));
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  };
+
+  if (single) {
+    headers['Accept'] = 'application/vnd.pgrst.object+json';
+  }
+
+  const init: RequestInit = {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  };
+
+  try {
+    const primaryToken = getAccessToken();
+    let response = await fetchWithToken(url.toString(), init, primaryToken);
+
+    if (
+      !response.ok &&
+      response.status === 401 &&
+      primaryToken !== supabaseAnonKey
+    ) {
+      console.log('[Tournament] Auth token rejected, retrying with anon key');
+      response = await fetchWithToken(url.toString(), init, supabaseAnonKey);
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[Tournament] ${method} ${table} ${response.status}:`, errorText);
+      return { data: null, error: parseSupabaseError(response.status, errorText) };
+    }
+
+    const data = (await response.json()) as T;
+    return { data, error: null };
+  } catch (err) {
+    console.log(`[Tournament] ${method} ${table} network error:`, err);
+    return { data: null, error: 'Network error contacting Supabase' };
+  }
+}
+
+export function unwrapList<T>(result: TournamentServiceResult<T[]>): T[] {
+  if (result.error) return [];
+  return result.data ?? [];
+}
+
+export function unwrapSingle<T>(result: TournamentServiceResult<T>): T | null {
+  if (result.error) return null;
+  return result.data;
+}
+
+export function unwrapOk(result: TournamentServiceResult<unknown>): boolean {
+  return result.error === null;
+}
+
+export function requireData<T>(
+  result: TournamentServiceResult<T>,
+  fallbackMessage: string
+): T {
+  if (result.error) {
+    throw new Error(result.error);
+  }
+  if (result.data === null || result.data === undefined) {
+    throw new Error(fallbackMessage);
+  }
+  return result.data;
+}

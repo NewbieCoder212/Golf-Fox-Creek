@@ -29,6 +29,7 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  Trophy,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -303,6 +304,24 @@ export default function AdminDashboardScreen() {
               <Text className="text-white text-xs font-bold">{pendingReportsCount}</Text>
             </View>
           )}
+          <ChevronRight size={20} color="#525252" />
+        </Pressable>
+
+        {/* Tournaments */}
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/tournaments');
+          }}
+          className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-3 flex-row items-center active:opacity-80"
+        >
+          <View className="w-10 h-10 bg-lime-900/30 rounded-full items-center justify-center">
+            <Trophy size={20} color="#a3e635" />
+          </View>
+          <View className="flex-1 ml-4">
+            <Text className="text-white font-medium">Tournaments</Text>
+            <Text className="text-neutral-500 text-sm">Create events, teams, tee times</Text>
+          </View>
           <ChevronRight size={20} color="#525252" />
         </Pressable>
 

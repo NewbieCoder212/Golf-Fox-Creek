@@ -11,11 +11,26 @@ module.exports = {
   theme: {
     // NOTE to AI: You can extend the theme with custom colors or styles here.
     extend: {
-      // For example, you can add a primary or secondary color here.
-      // colors: {
-      //   primary: "#INSERT_VALID_HEX_CODE",
-      //   secondary: "#INSERT_VALID_HEX_CODE",
-      // },
+      colors: {
+        fox: {
+          background: '#0a0a0a',
+          surface: '#121212',
+          'surface-elevated': '#1a1a1a',
+          border: '#262626',
+          'border-accent': 'rgba(163,230,53,0.35)',
+          lime: '#a3e635',
+          'lime-muted': '#3f6212',
+          gold: '#facc15',
+          danger: '#ef4444',
+        },
+      },
+      fontFamily: {
+        display: ['BarlowCondensed_700Bold'],
+        body: ['Barlow_400Regular'],
+        'body-medium': ['Barlow_500Medium'],
+        'body-semibold': ['Barlow_600SemiBold'],
+        'body-bold': ['Barlow_700Bold'],
+      },
       fontSize: {
         xs: "10px",
         sm: "12px",

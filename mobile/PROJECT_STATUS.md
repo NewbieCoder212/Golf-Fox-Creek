@@ -1,6 +1,6 @@
 # Fox Creek Golf App - Project Status
 
-**Last Updated:** January 4, 2026
+**Last Updated:** June 14, 2026
 **Your Anchor for Tomorrow**
 
 ---
@@ -89,9 +89,17 @@ These are the features we discussed for future implementation:
   - Push notifications (would need expo-notifications setup)
   - Reminder 1 hour before, 30 min before, etc.
 
----
+### 5. Sponsor Ad Rotation (revisit)
+- **Shipped (feature branch):** `ad_placements` table, `SponsorBanner` component, admin CRUD, integrations (tournament scorecard header, hole sponsor, The Turn)
+- **Current behavior:** Static — one active ad per placement; newest `created_at` wins (`limit: 1` in `getActiveAdPlacement`)
+- **Revisit options when ready:**
+  - **Random:** pick one active ad per page load (fair split among sponsors)
+  - **Carousel:** swipe or auto-advance multiple banners in the same slot (e.g. scorecard header)
+  - **Priority / weight:** admin-controlled impression share
+  - **Scheduled:** `start_date` / `end_date` for calendar-based swaps
+- **Likely touch points:** `mobile/src/lib/ad-placement-service.ts`, `mobile/src/components/SponsorBanner.tsx`, optional DB columns (`priority`, `weight`, `starts_at`, `ends_at`)
 
-## Quick Reference
+---
 
 ### Key Files
 | Feature | Location |
@@ -103,6 +111,10 @@ These are the features we discussed for future implementation:
 | GPS Utilities | `src/lib/geo.ts` |
 | Tee Time Alerts | `src/lib/tee-time-alert-store.ts` |
 | Home Screen | `src/app/(tabs)/index.tsx` |
+| Sponsor ads (service) | `src/lib/ad-placement-service.ts` |
+| Sponsor banner UI | `src/components/SponsorBanner.tsx` |
+| Sponsor ads admin | `src/components/admin/AdminAdPlacementsSection.tsx` |
+| Ad placements SQL | `supabase/migrations/20260623000000_ad_placements.sql` |
 
 ### Storage Keys
 - `@foxcreek_scorecard` - Current round state

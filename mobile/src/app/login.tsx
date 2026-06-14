@@ -21,11 +21,12 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { Clock, Shield, Eye, EyeOff, LogIn } from 'lucide-react-native';
+import { Clock, Eye, EyeOff, LogIn } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { getAuthenticatedUserProfile, signIn } from '@/lib/supabase';
+import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -40,13 +41,7 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Animation values
-  const adminButtonScale = useSharedValue(1);
   const signInButtonScale = useSharedValue(1);
-
-  const adminButtonStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: adminButtonScale.value }],
-  }));
 
   const signInButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: signInButtonScale.value }],
@@ -89,25 +84,20 @@ export default function LoginScreen() {
         profile,
       });
 
+      await bridgeMemberAuthToAdmin();
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      if (profile.role === 'manager' || profile.role === 'super_admin') {
+        router.replace('/admin/dashboard');
+        return;
+      }
+
       router.replace('/(tabs)');
     } catch {
       setError('Network error. Please try again.');
       setIsLoading(false);
     }
-  };
-
-  const handleAdminPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/admin');
-  };
-
-  const handleAdminPressIn = () => {
-    adminButtonScale.value = withSpring(0.96, { damping: 15 });
-  };
-
-  const handleAdminPressOut = () => {
-    adminButtonScale.value = withSpring(1, { damping: 15 });
   };
 
   return (
@@ -198,7 +188,8 @@ export default function LoginScreen() {
                     Member Sign In
                   </Text>
                   <Text className="text-neutral-500 text-xs mb-4">
-                    Use your Supabase account for development. Chronogolf SSO is coming soon.
+                    Members, managers, and staff all use the same sign-in. Chronogolf SSO is coming
+                    soon.
                   </Text>
 
                   {error ? (
@@ -286,32 +277,12 @@ export default function LoginScreen() {
                       </>
                     )}
                   </AnimatedPressable>
-                </View>
 
-                {/* Admin Portal Button */}
-                <AnimatedPressable
-                  onPress={handleAdminPress}
-                  onPressIn={handleAdminPressIn}
-                  onPressOut={handleAdminPressOut}
-                  style={[
-                    {
-                      borderRadius: 16,
-                      paddingVertical: 16,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'row',
-                      backgroundColor: '#1a472a',
-                      borderWidth: 1,
-                      borderColor: 'rgba(163, 230, 53, 0.3)',
-                    },
-                    adminButtonStyle,
-                  ]}
-                >
-                  <Shield size={20} color="#a3e635" strokeWidth={2} />
-                  <Text className="text-lime-400 text-base font-semibold ml-2 tracking-wide">
-                    Staff Login
+                  <Text className="text-neutral-500 text-xs text-center mt-4 leading-relaxed">
+                    Managers and super admins are taken straight to the admin dashboard after
+                    sign-in.
                   </Text>
-                </AnimatedPressable>
+                </View>
               </View>
             </BlurView>
           </Animated.View>

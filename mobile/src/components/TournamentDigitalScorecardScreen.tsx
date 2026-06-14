@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { TournamentScorecardGrid } from '@/components/TournamentScorecardGrid';
+import { SponsorBanner } from '@/components/SponsorBanner';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
@@ -355,6 +356,10 @@ export function TournamentDigitalScorecardScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}>
+        <View className="mx-5 mt-4">
+          <SponsorBanner placementType="scorecard_header" />
+        </View>
+
         <TournamentScorecardGrid
           format={format}
           players={players}

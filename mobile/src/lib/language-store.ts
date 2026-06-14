@@ -75,6 +75,7 @@ export const translations = {
     scorecard: 'Scorecard',
     history: 'History',
     tournaments: 'Tournaments',
+    adminPortal: 'Admin Portal',
 
     // Pro Shop
     proShop: 'Pro Shop',
@@ -146,6 +147,7 @@ export const translations = {
     scorecard: 'Carte de score',
     history: 'Historique',
     tournaments: 'Tournois',
+    adminPortal: 'Portail admin',
 
     // Pro Shop
     proShop: 'Boutique Pro',

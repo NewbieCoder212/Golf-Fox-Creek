@@ -12,6 +12,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 import { SurfaceCard } from '@/components/ui/SurfaceCard';
+import { SponsorBanner } from '@/components/SponsorBanner';
 import { useTranslations } from '@/lib/language-store';
 import { useScorecardStore } from '@/lib/scorecard-store';
 import { useTeeTimeAlertStore } from '@/lib/tee-time-alert-store';
@@ -68,6 +69,9 @@ export function HubContextCard() {
               <Text className="text-amber-200 text-lg font-display">{t.theTurn}</Text>
               <Text className="text-amber-300/70 text-sm mt-0.5 font-body">{t.turnPrompt}</Text>
             </View>
+          </View>
+          <View className="mt-4">
+            <SponsorBanner placementType="the_turn" />
           </View>
           <View className="flex-row mt-4 gap-3">
             <Pressable

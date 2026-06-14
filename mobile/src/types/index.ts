@@ -67,6 +67,25 @@ export interface TeeTime {
   created_at: string;
 }
 
+export type AdPlacementType =
+  | 'scorecard_header'
+  | 'hole_sponsor'
+  | 'the_turn'
+  | 'leaderboard';
+
+export interface AdPlacement {
+  id: string;
+  sponsor_name: string;
+  placement_type: AdPlacementType;
+  hole_number: number | null;
+  image_url: string;
+  banner_text: string;
+  action_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============================================
 // GEOFENCE TRIGGER TYPES
 // ============================================

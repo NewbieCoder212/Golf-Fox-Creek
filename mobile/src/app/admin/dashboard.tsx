@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   Megaphone,
   ChevronRight,
   Check,
+  Plus,
   AlertTriangle,
   AlertCircle,
   Info,
@@ -30,6 +31,7 @@ import {
   CheckCircle,
   XCircle,
   Trophy,
+  ImageIcon,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -44,15 +46,20 @@ import {
   getGMAnnouncement,
 } from '@/lib/supabase';
 import { getCourseReports, updateReportStatus } from '@/lib/course-reports';
+import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
+import { useMemberAuthStore } from '@/lib/member-auth-store';
 import type { GeofenceSettings, GMAnnouncement, AnnouncementType, CourseReport } from '@/types';
+import { AdminAdPlacementsSection } from '@/components/admin/AdminAdPlacementsSection';
 
-type AdminSection = 'main' | 'geofencing' | 'announcements' | 'notifications' | 'reports';
+type AdminSection = 'main' | 'geofencing' | 'announcements' | 'notifications' | 'reports' | 'ads';
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
   const { profile, accessToken, clearAuth, isSuperAdmin } = useAdminAuthStore();
 
   const [section, setSection] = useState<AdminSection>('main');
+  const [openAdsFormOnMount, setOpenAdsFormOnMount] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,10 +95,32 @@ export default function AdminDashboardScreen() {
 
   const pendingReportsCount = courseReports?.filter((r) => r.status === 'pending').length ?? 0;
 
+  // Bridge member login into admin session (manager / super_admin)
+  useEffect(() => {
+    const ensureAdminAccess = async () => {
+      await bridgeMemberAuthToAdmin();
+      const adminState = useAdminAuthStore.getState();
+      if (!adminState.canAccessAdmin()) {
+        router.replace('/admin');
+      }
+    };
+    ensureAdminAccess();
+  }, [router]);
+
   // Load settings on mount
   useEffect(() => {
     loadSettings();
   }, []);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [section]);
+
+  const openSponsorAds = (openForm = false) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setOpenAdsFormOnMount(openForm);
+    setSection('ads');
+  };
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -125,7 +154,8 @@ export default function AdminDashboardScreen() {
       await signOut(accessToken);
     }
     await clearAuth();
-    router.replace('/');
+    await useMemberAuthStore.getState().clearAuth();
+    router.replace('/login');
   };
 
   const handleSendPushNotification = async () => {
@@ -264,6 +294,29 @@ export default function AdminDashboardScreen() {
             <Text className="text-neutral-500 text-sm">Post messages to members</Text>
           </View>
           <ChevronRight size={20} color="#525252" />
+        </Pressable>
+
+        {/* Sponsor Ads */}
+        <Pressable
+          onPress={() => openSponsorAds(false)}
+          className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-3 flex-row items-center active:opacity-80"
+        >
+          <View className="w-10 h-10 bg-purple-900/30 rounded-full items-center justify-center">
+            <ImageIcon size={20} color="#c084fc" />
+          </View>
+          <View className="flex-1 ml-4">
+            <Text className="text-white font-medium">Sponsor Ads</Text>
+            <Text className="text-neutral-500 text-sm">Scorecard & hole banners</Text>
+          </View>
+          <ChevronRight size={20} color="#525252" />
+        </Pressable>
+
+        <Pressable
+          onPress={() => openSponsorAds(true)}
+          className="bg-lime-600 rounded-xl py-3.5 mb-3 flex-row items-center justify-center active:opacity-80"
+        >
+          <Plus size={18} color="#fff" />
+          <Text className="text-white font-semibold text-base ml-2">New Sponsor Ad</Text>
         </Pressable>
 
         {/* Push Notifications */}
@@ -927,6 +980,7 @@ export default function AdminDashboardScreen() {
     <View className="flex-1 bg-[#0c0c0c]">
       <SafeAreaView className="flex-1">
         <ScrollView
+          ref={scrollRef}
           className="flex-1 px-5"
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -947,6 +1001,25 @@ export default function AdminDashboardScreen() {
           {section === 'announcements' && renderAnnouncementsSection()}
           {section === 'notifications' && renderNotificationsSection()}
           {section === 'reports' && renderReportsSection()}
+          {section === 'ads' && (
+            accessToken ? (
+              <AdminAdPlacementsSection
+                accessToken={accessToken}
+                onBack={() => {
+                  setOpenAdsFormOnMount(false);
+                  setSection('main');
+                }}
+                initialOpenForm={openAdsFormOnMount}
+                onFormOpened={() => setOpenAdsFormOnMount(false)}
+              />
+            ) : (
+              <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
+                <Text className="text-red-200 text-sm">
+                  Admin session expired. Log out and sign in again to manage sponsor ads.
+                </Text>
+              </View>
+            )
+          )}
 
           <View className="h-8" />
         </ScrollView>

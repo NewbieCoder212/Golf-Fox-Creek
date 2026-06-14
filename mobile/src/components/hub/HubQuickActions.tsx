@@ -1,11 +1,14 @@
 import { View } from 'react-native';
-import { Clock, ClipboardList, History, Trophy } from 'lucide-react-native';
+import { Clock, ClipboardList, History, Trophy, Shield } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInRight } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { QuickActionTile } from '@/components/ui/QuickActionTile';
 import { useTranslations } from '@/lib/language-store';
+import { useMemberAuthStore } from '@/lib/member-auth-store';
+import { bridgeMemberAuthToAdmin, canAccessAdminRole } from '@/lib/admin-auth-bridge';
 
 const QUICK_ACTIONS = [
   { titleKey: 'bookTeeTime' as const, icon: Clock, route: '/(tabs)/teetimes' },
@@ -17,6 +20,14 @@ const QUICK_ACTIONS = [
 export function HubQuickActions() {
   const router = useRouter();
   const t = useTranslations();
+  const profile = useMemberAuthStore((s) => s.profile);
+  const isAdmin = canAccessAdminRole(profile?.role);
+
+  const handleAdminPress = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await bridgeMemberAuthToAdmin();
+    router.push('/admin/dashboard');
+  };
 
   const rows = [
     QUICK_ACTIONS.slice(0, 2),
@@ -44,6 +55,17 @@ export function HubQuickActions() {
             ))}
           </View>
         ))}
+
+        {isAdmin ? (
+          <Animated.View entering={FadeInRight.delay(800).duration(500)}>
+            <QuickActionTile
+              icon={Shield}
+              label={t.adminPortal}
+              onPress={handleAdminPress}
+              className="border-lime-700/40"
+            />
+          </Animated.View>
+        ) : null}
       </View>
     </View>
   );

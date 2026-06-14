@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useAdminAuthStore } from '@/lib/admin-auth-store';
 import { signIn, getAuthenticatedUserProfile } from '@/lib/supabase';
+import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
@@ -31,6 +32,12 @@ export default function AdminLoginScreen() {
   // Check for existing auth on mount
   useEffect(() => {
     const checkAuth = async () => {
+      const bridged = await bridgeMemberAuthToAdmin();
+      if (bridged && useAdminAuthStore.getState().canAccessAdmin()) {
+        router.replace('/admin/dashboard');
+        return;
+      }
+
       const hasAuth = await loadStoredAuth();
       if (hasAuth && canAccessAdmin()) {
         router.replace('/admin/dashboard');

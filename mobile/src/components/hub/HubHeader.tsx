@@ -8,6 +8,8 @@ import * as Haptics from 'expo-haptics';
 import { SurfaceCard } from '@/components/ui/SurfaceCard';
 import { useTranslations, useLanguageStore } from '@/lib/language-store';
 import { getFirstName, getGreetingKey, foxColors } from '@/theme/tokens';
+import { bridgeMemberAuthToAdmin, canAccessAdminRole } from '@/lib/admin-auth-bridge';
+import { useMemberAuthStore } from '@/lib/member-auth-store';
 import type { UserProfile } from '@/types';
 
 const TRIPLE_TAP_TIMEOUT = 500;
@@ -32,7 +34,9 @@ export function HubHeader({ userProfile, onLogout }: HubHeaderProps) {
     ? `${t[greetingKey]}, ${firstName}`
     : t[greetingKey];
 
-  const handleHeaderTap = () => {
+  const memberProfile = useMemberAuthStore((s) => s.profile);
+
+  const handleHeaderTap = async () => {
     tapCountRef.current += 1;
 
     if (tapTimeoutRef.current) {
@@ -42,7 +46,12 @@ export function HubHeader({ userProfile, onLogout }: HubHeaderProps) {
     if (tapCountRef.current >= 3) {
       tapCountRef.current = 0;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.push('/admin');
+      if (canAccessAdminRole(memberProfile?.role)) {
+        await bridgeMemberAuthToAdmin();
+        router.push('/admin/dashboard');
+      } else {
+        router.push('/admin');
+      }
       return;
     }
 

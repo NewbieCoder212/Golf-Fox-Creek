@@ -16,6 +16,7 @@ import Animated, {
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useScorecardStore } from '@/lib/scorecard-store';
+import { SponsorBanner } from '@/components/SponsorBanner';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { cn } from '@/lib/cn';
 import { calculateDistance } from '@/lib/geo';
@@ -503,11 +504,13 @@ export default function ScorecardScreen() {
               {formatTurnTime(turnTimeRemaining)}
             </Text>
 
-            <View className="bg-[#141414] rounded-2xl border border-neutral-800 p-4 w-full items-center mb-8">
+            <View className="bg-[#141414] rounded-2xl border border-neutral-800 p-4 w-full items-center mb-6">
               <Text className="text-neutral-500 text-sm text-center">
                 Grab a snack, refresh your drink, and get ready for the back nine
               </Text>
             </View>
+
+            <SponsorBanner placementType="the_turn" className="w-full mb-6" />
 
             <Pressable
               onPress={() => {
@@ -698,6 +701,10 @@ export default function ScorecardScreen() {
             </View>
           </View>
         </Animated.View>
+
+        <View className="mx-5 mt-4">
+          <SponsorBanner placementType="hole_sponsor" holeNumber={currentHole} />
+        </View>
 
         {/* Full Scorecard */}
         <View className="mx-5 mt-6 mb-8">

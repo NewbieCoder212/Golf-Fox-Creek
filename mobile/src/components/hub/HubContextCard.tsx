@@ -33,7 +33,7 @@ export function HubContextCard() {
   const minutesUntil = getMinutesUntilTeeTime();
 
   return (
-    <Animated.View entering={FadeInDown.delay(200).duration(600)} className="mx-5 mt-4">
+    <Animated.View entering={FadeInDown.delay(200).duration(600)}>
       {isTracking ? (
         <Pressable
           onPress={() => {
@@ -134,7 +134,7 @@ export function HubContextCard() {
           </SurfaceCard>
         </Pressable>
       ) : (
-        <SurfaceCard className="p-4">
+        <View>
           <View className="flex-row items-center">
             <View className="w-12 h-12 bg-fox-surface-elevated rounded-full items-center justify-center mr-4 border border-fox-border">
               <Trophy size={22} color={foxColors.lime} strokeWidth={1.5} />
@@ -144,7 +144,16 @@ export function HubContextCard() {
               <Text className="text-neutral-500 text-sm mt-0.5 font-body">{t.setTeeTime}</Text>
             </View>
           </View>
-        </SurfaceCard>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push('/(tabs)/teetimes' as never);
+            }}
+            className="mt-4 bg-fox-lime rounded-xl py-3 items-center active:opacity-80"
+          >
+            <Text className="text-black font-body-bold">{t.bookTeeTimeCta}</Text>
+          </Pressable>
+        </View>
       )}
     </Animated.View>
   );

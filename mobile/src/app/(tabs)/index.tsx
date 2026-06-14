@@ -7,13 +7,13 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { HubHeader } from '@/components/hub/HubHeader';
-import { HubStatsRow } from '@/components/hub/HubStatsRow';
+import { HubHeroWelcome } from '@/components/hub/HubHeroWelcome';
 import { HubContextCard } from '@/components/hub/HubContextCard';
 import { HubMyEventsStrip } from '@/components/hub/HubMyEventsStrip';
 import { HubWeatherStrip } from '@/components/hub/HubWeatherStrip';
 import { HubQuickActions } from '@/components/hub/HubQuickActions';
 import { HubPromoBanner } from '@/components/hub/HubPromoBanner';
+import { HubSection } from '@/components/ui/HubSection';
 import { TeeTimeInput } from '@/components/TeeTimeInput';
 import { TeeTimeAlertMonitor } from '@/components/TeeTimeAlertMonitor';
 import { GeofenceMonitor } from '@/components/GeofenceMonitor';
@@ -21,6 +21,7 @@ import { useWeather } from '@/lib/useWeather';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 import { getGMAnnouncement, getUserProfile, isSupabaseConfigured, signOut } from '@/lib/supabase';
+import { useTranslations } from '@/lib/language-store';
 import type { GMAnnouncement } from '@/types';
 
 const FALLBACK_WEATHER = {
@@ -62,6 +63,7 @@ function getAnnouncementStyle(type: GMAnnouncement['type']) {
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const t = useTranslations();
   const { data: weather, isLoading: weatherLoading, isError: weatherError } = useWeather();
 
   const authUser = useMemberAuthStore((s) => s.user);
@@ -113,11 +115,12 @@ export default function HomeScreen() {
   const loyaltyPoints = userProfile?.loyalty_points ?? 0;
 
   return (
-    <View className="flex-1 bg-fox-background">
+    <View className="flex-1 bg-fox-background" style={{ width: '100%' }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         className="flex-1"
-        contentContainerStyle={{ paddingTop: insets.top }}
+        style={{ width: '100%' }}
+        contentContainerStyle={{ paddingTop: insets.top, paddingBottom: 8 }}
       >
         {announcement && (
           <Animated.View entering={FadeIn.duration(400)} className="mx-5 mt-4">
@@ -146,22 +149,41 @@ export default function HomeScreen() {
           </Animated.View>
         )}
 
-        <HubHeader userProfile={userProfile} onLogout={handleLogout} />
-        <HubStatsRow
+        <HubHeroWelcome
+          userProfile={userProfile}
           handicap={handicap}
           loyaltyPoints={loyaltyPoints}
           loading={profileLoading}
+          onLogout={handleLogout}
         />
-        <HubContextCard />
-        <HubMyEventsStrip userId={userId} />
-        <HubWeatherStrip
-          weather={weatherDisplay}
-          iconCode={weather?.iconCode}
-          loading={weatherLoading}
-          unavailable={showWeatherUnavailable}
-        />
-        <TeeTimeInput />
-        <HubQuickActions />
+
+        <HubSection title={t.todayAtCourse} className="mt-4">
+          <HubContextCard />
+          <HubWeatherStrip
+            weather={weatherDisplay}
+            iconCode={weather?.iconCode}
+            loading={weatherLoading}
+            unavailable={showWeatherUnavailable}
+            embedded
+          />
+        </HubSection>
+
+        <HubSection title={t.quickPlay}>
+          <HubQuickActions embedded />
+        </HubSection>
+
+        <HubSection
+          title={t.myEvents}
+          actionLabel={t.viewAll}
+          onActionPress={() => router.push('/tournaments' as never)}
+        >
+          <HubMyEventsStrip userId={userId} embedded />
+        </HubSection>
+
+        <HubSection title={t.practiceMode}>
+          <TeeTimeInput embedded />
+        </HubSection>
+
         <HubPromoBanner />
 
         <View className="h-4" />

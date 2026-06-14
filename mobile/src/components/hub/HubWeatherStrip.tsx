@@ -1,4 +1,4 @@
-import { View, Text, Pressable } from 'react-native';
+import { View, Text } from 'react-native';
 import {
   Sun,
   Wind,
@@ -12,7 +12,6 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { ActivityIndicator } from 'react-native';
 
-import { SurfaceCard } from '@/components/ui/SurfaceCard';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { useTranslations } from '@/lib/language-store';
 import { getWeatherIconType } from '@/lib/useWeather';
@@ -30,9 +29,10 @@ interface HubWeatherStripProps {
   iconCode?: string;
   loading?: boolean;
   unavailable?: boolean;
+  embedded?: boolean;
 }
 
-function WeatherIcon({ iconCode, size = 28 }: { iconCode?: string; size?: number }) {
+function WeatherIcon({ iconCode, size = 24 }: { iconCode?: string; size?: number }) {
   const iconType = iconCode ? getWeatherIconType(iconCode) : 'sun';
   const color = foxColors.gold;
 
@@ -57,45 +57,58 @@ export function HubWeatherStrip({
   iconCode,
   loading,
   unavailable,
+  embedded = false,
 }: HubWeatherStripProps) {
   const t = useTranslations();
 
+  const content = (
+    <>
+      <SectionLabel label={t.courseConditions} className="mb-2" />
+      {loading ? (
+        <View className="flex-row items-center justify-center py-1">
+          <ActivityIndicator size="small" color={foxColors.lime} />
+          <Text className="text-neutral-500 text-sm ml-2 font-body">{t.loadingWeather}</Text>
+        </View>
+      ) : unavailable ? (
+        <View className="flex-row items-center py-1">
+          <CloudFog size={24} color="#525252" />
+          <Text className="text-neutral-500 text-sm ml-3 font-body">{t.weatherUnavailable}</Text>
+        </View>
+      ) : (
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center flex-1">
+            <WeatherIcon iconCode={iconCode} />
+            <Text className="text-white text-2xl font-display ml-2">{weather.temp}°</Text>
+            <Text className="text-neutral-400 text-sm ml-2 font-body flex-shrink" numberOfLines={1}>
+              {weather.condition}
+            </Text>
+          </View>
+          <View className="flex-row gap-2 ml-2">
+            <View className="flex-row items-center bg-fox-surface-elevated rounded-full px-2 py-1 border border-fox-border gap-1">
+              <Wind size={12} color={foxColors.lime} />
+              <Text className="text-neutral-400 text-[10px] font-body">{weather.wind}</Text>
+            </View>
+            <View className="flex-row items-center bg-fox-surface-elevated rounded-full px-2 py-1 border border-fox-border gap-1">
+              <Droplets size={12} color={foxColors.lime} />
+              <Text className="text-neutral-400 text-[10px] font-body">{weather.humidity}</Text>
+            </View>
+          </View>
+        </View>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <Animated.View entering={FadeInDown.delay(300).duration(600)} className="mt-4 pt-4 border-t border-fox-border">
+        {content}
+      </Animated.View>
+    );
+  }
+
   return (
     <Animated.View entering={FadeInDown.delay(300).duration(600)} className="mx-5 mt-4">
-      <SurfaceCard className="p-4">
-        <SectionLabel label={t.courseConditions} className="mb-2" />
-        {loading ? (
-          <View className="flex-row items-center justify-center py-2">
-            <ActivityIndicator size="small" color={foxColors.lime} />
-            <Text className="text-neutral-500 text-sm ml-2 font-body">{t.loadingWeather}</Text>
-          </View>
-        ) : unavailable ? (
-          <View className="flex-row items-center py-2">
-            <CloudFog size={28} color="#525252" />
-            <Text className="text-neutral-500 text-base ml-3 font-body">{t.weatherUnavailable}</Text>
-          </View>
-        ) : (
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center flex-1">
-              <WeatherIcon iconCode={iconCode} />
-              <Text className="text-white text-3xl font-display ml-3">{weather.temp}°</Text>
-              <Text className="text-neutral-400 text-base ml-2 font-body flex-shrink" numberOfLines={1}>
-                {weather.condition}
-              </Text>
-            </View>
-            <View className="flex-row gap-2 ml-2">
-              <View className="flex-row items-center bg-fox-surface-elevated rounded-full px-2.5 py-1.5 border border-fox-border gap-1">
-                <Wind size={14} color={foxColors.lime} />
-                <Text className="text-neutral-400 text-xs font-body">{weather.wind}</Text>
-              </View>
-              <View className="flex-row items-center bg-fox-surface-elevated rounded-full px-2.5 py-1.5 border border-fox-border gap-1">
-                <Droplets size={14} color={foxColors.lime} />
-                <Text className="text-neutral-400 text-xs font-body">{weather.humidity}</Text>
-              </View>
-            </View>
-          </View>
-        )}
-      </SurfaceCard>
+      <View className="bg-fox-surface rounded-2xl border border-fox-border p-4">{content}</View>
     </Animated.View>
   );
 }

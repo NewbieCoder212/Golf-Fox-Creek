@@ -11,7 +11,7 @@ import { useTeeTimeAlertStore } from '@/lib/tee-time-alert-store';
 import { useTranslations } from '@/lib/language-store';
 import { foxColors } from '@/theme/tokens';
 
-export function TeeTimeInput() {
+export function TeeTimeInput({ embedded = false }: { embedded?: boolean }) {
   const [showPicker, setShowPicker] = useState(false);
   const [tempTime, setTempTime] = useState(new Date());
   const t = useTranslations();
@@ -60,53 +60,68 @@ export function TeeTimeInput() {
       ? t.alertInMin.replace('{minutes}', String(minutesUntil))
       : t.teeTimePassed;
 
+  const cardContent = (
+    <>
+      {!embedded ? (
+        <View className="flex-row items-center justify-between mb-1">
+          <SectionLabel label={t.practiceMode} className="mb-0" />
+          {isAtRange && (
+            <View className="flex-row items-center">
+              <MapPin size={12} color={foxColors.lime} />
+              <Text className="text-fox-lime text-xs ml-1 font-body-semibold">{t.atRange}</Text>
+            </View>
+          )}
+        </View>
+      ) : isAtRange ? (
+        <View className="flex-row items-center justify-end mb-1">
+          <MapPin size={12} color={foxColors.lime} />
+          <Text className="text-fox-lime text-xs ml-1 font-body-semibold">{t.atRange}</Text>
+        </View>
+      ) : null}
+
+      {teeTime ? (
+        <View className="flex-row items-center justify-between mt-3">
+          <View className="flex-row items-center flex-1">
+            <View className="w-12 h-12 rounded-full bg-amber-500/20 items-center justify-center mr-3 border border-amber-500/30">
+              <Bell size={22} color="#f59e0b" />
+            </View>
+            <View>
+              <Text className="text-white text-lg font-display">{formatTime(teeTime)}</Text>
+              <Text className="text-neutral-500 text-xs font-body">{alertSubtitle}</Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={handleClear}
+            className="w-10 h-10 rounded-full bg-fox-surface-elevated items-center justify-center border border-fox-border active:opacity-70"
+          >
+            <X size={18} color="#737373" />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          onPress={handleOpenPicker}
+          className="flex-row items-center justify-center py-3 mt-3 bg-fox-surface-elevated rounded-xl border border-fox-border active:opacity-70 active:scale-[0.99]"
+        >
+          <Clock size={18} color={foxColors.lime} />
+          <Text className="text-neutral-300 font-body-semibold ml-2">{t.setTeeTimeAlert}</Text>
+        </Pressable>
+      )}
+
+      {teeTime && (
+        <Text className="text-neutral-600 text-xs text-center mt-3 font-body">{t.alertHint}</Text>
+      )}
+    </>
+  );
+
   return (
     <>
-      <Animated.View entering={FadeInDown.delay(450).duration(600)} className="mx-5 mt-4">
-        <SurfaceCard className="p-4">
-          <View className="flex-row items-center justify-between mb-1">
-            <SectionLabel label={t.practiceMode} className="mb-0" />
-            {isAtRange && (
-              <View className="flex-row items-center">
-                <MapPin size={12} color={foxColors.lime} />
-                <Text className="text-fox-lime text-xs ml-1 font-body-semibold">{t.atRange}</Text>
-              </View>
-            )}
-          </View>
-
-          {teeTime ? (
-            <View className="flex-row items-center justify-between mt-3">
-              <View className="flex-row items-center flex-1">
-                <View className="w-12 h-12 rounded-full bg-amber-500/20 items-center justify-center mr-3 border border-amber-500/30">
-                  <Bell size={22} color="#f59e0b" />
-                </View>
-                <View>
-                  <Text className="text-white text-lg font-display">{formatTime(teeTime)}</Text>
-                  <Text className="text-neutral-500 text-xs font-body">{alertSubtitle}</Text>
-                </View>
-              </View>
-              <Pressable
-                onPress={handleClear}
-                className="w-10 h-10 rounded-full bg-fox-surface-elevated items-center justify-center border border-fox-border active:opacity-70"
-              >
-                <X size={18} color="#737373" />
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable
-              onPress={handleOpenPicker}
-              className="flex-row items-center justify-center py-3 mt-3 bg-fox-surface-elevated rounded-xl border border-fox-border active:opacity-70 active:scale-[0.99]"
-            >
-              <Clock size={18} color={foxColors.lime} />
-              <Text className="text-neutral-300 font-body-semibold ml-2">{t.setTeeTimeAlert}</Text>
-            </Pressable>
-          )}
-
-          {teeTime && (
-            <Text className="text-neutral-600 text-xs text-center mt-3 font-body">{t.alertHint}</Text>
-          )}
-        </SurfaceCard>
-      </Animated.View>
+      {embedded ? (
+        <Animated.View entering={FadeInDown.delay(450).duration(600)}>{cardContent}</Animated.View>
+      ) : (
+        <Animated.View entering={FadeInDown.delay(450).duration(600)} className="mx-5 mt-4">
+          <SurfaceCard className="p-4">{cardContent}</SurfaceCard>
+        </Animated.View>
+      )}
 
       <Modal visible={showPicker} transparent animationType="fade" statusBarTranslucent>
         <Pressable

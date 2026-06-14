@@ -30,6 +30,11 @@ export const translations = {
     // Header
     memberHub: 'Member Hub',
     foxCreek: 'Fox Creek',
+    homeCourseTagline: 'Your home course',
+    todayAtCourse: 'Today at the Course',
+    bookTeeTimeCta: 'Book a Tee Time',
+    noUpcomingEvents: 'No upcoming events',
+    browseTournaments: 'Browse tournaments',
     goodMorning: 'Good morning',
     goodAfternoon: 'Good afternoon',
     goodEvening: 'Good evening',
@@ -102,6 +107,11 @@ export const translations = {
     // Header
     memberHub: 'Espace Membre',
     foxCreek: 'Fox Creek',
+    homeCourseTagline: 'Votre parcours',
+    todayAtCourse: "Aujourd'hui au parcours",
+    bookTeeTimeCta: 'Réserver une heure de départ',
+    noUpcomingEvents: 'Aucun événement à venir',
+    browseTournaments: 'Parcourir les tournois',
     goodMorning: 'Bonjour',
     goodAfternoon: 'Bon après-midi',
     goodEvening: 'Bonsoir',

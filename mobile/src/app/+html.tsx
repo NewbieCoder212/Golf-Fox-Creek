@@ -53,6 +53,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
 }
 
 const responsiveBackground = `
+html, body, #root {
+  width: 100%;
+  height: 100%;
+}
 body {
   background-color: #0c0c0c;
   margin: 0;

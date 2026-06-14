@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import Animated, { FadeInRight } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
-import { SectionLabel } from '@/components/ui/SectionLabel';
 import { QuickActionTile } from '@/components/ui/QuickActionTile';
 import { useTranslations } from '@/lib/language-store';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
@@ -17,7 +16,11 @@ const QUICK_ACTIONS = [
   { titleKey: 'tournaments' as const, icon: Trophy, route: '/tournaments' },
 ];
 
-export function HubQuickActions() {
+interface HubQuickActionsProps {
+  embedded?: boolean;
+}
+
+export function HubQuickActions({ embedded = false }: HubQuickActionsProps) {
   const router = useRouter();
   const t = useTranslations();
   const profile = useMemberAuthStore((s) => s.profile);
@@ -29,14 +32,10 @@ export function HubQuickActions() {
     router.push('/admin/dashboard');
   };
 
-  const rows = [
-    QUICK_ACTIONS.slice(0, 2),
-    QUICK_ACTIONS.slice(2, 4),
-  ];
+  const rows = [QUICK_ACTIONS.slice(0, 2), QUICK_ACTIONS.slice(2, 4)];
 
   return (
-    <View className="px-5 mt-8">
-      <SectionLabel label={t.quickPlay} />
+    <View className={embedded ? undefined : 'px-5 mt-8'}>
       <View className="gap-3">
         {rows.map((row, rowIndex) => (
           <View key={rowIndex} className="flex-row gap-3">

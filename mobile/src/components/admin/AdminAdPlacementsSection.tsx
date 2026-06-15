@@ -31,6 +31,7 @@ const PLACEMENT_TYPES: AdPlacementType[] = [
   'hole_sponsor',
   'the_turn',
   'leaderboard',
+  'member_hub',
 ];
 
 const DISPLAY_POSITIONS: AdDisplayPosition[] = ['header_left', 'sidebar', 'footer'];
@@ -245,6 +246,9 @@ export function AdminAdPlacementsSection({
                 </Pressable>
               ))}
             </View>
+            <Text className="text-neutral-600 text-xs mb-4 leading-5">
+              Member Hub = sticky footer on Home tab. Scorecard Header = top banner on Scorecard tab.
+            </Text>
 
             {form.placement_type === 'hole_sponsor' && (
               <View className="mb-4">

@@ -1,277 +1,343 @@
-import { View, Text, ScrollView, Pressable, Image } from 'react-native';
-import { useState } from 'react';
-import { Flag, Ruler, TreePine, ChevronDown, ChevronUp } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { View, Text, ScrollView, Pressable, Image, Linking } from 'react-native';
+import {
+  Flag,
+  MapPin,
+  Phone,
+  Ruler,
+  TreePine,
+  ExternalLink,
+  Calendar,
+  User,
+} from 'lucide-react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { cn } from '@/lib/cn';
-import { FOX_CREEK_DATA, getFrontNine, getBackNine } from '@/lib/course-data';
-import type { HoleData } from '@/types';
+import * as Haptics from 'expo-haptics';
 
-const AMENITIES = [
+import { FOX_CREEK_DATA } from '@/lib/course-data';
+import {
+  getScorecardTee,
+  textColorForTeeColors,
+  TEE_COLORS,
+} from '@/lib/scorecard-tees';
+import { foxColors } from '@/theme/tokens';
+import { cn } from '@/lib/cn';
+import type { ScorecardTeeName } from '@/types';
+
+const FC_LOGO = require('@/assets/images/fc-logo.png');
+const LOGO_SIZE = 220;
+
+const PRACTICE_FACILITIES = [
   { icon: TreePine, title: 'Driving Range', desc: 'Full practice facility' },
-  { icon: Flag, title: 'Practice Greens', desc: 'Putting & Chipping' },
-  { icon: Ruler, title: 'Golf Lessons', desc: 'PGA Pro Available' },
+  { icon: Flag, title: 'Practice Greens', desc: 'Putting & chipping areas' },
+  { icon: Ruler, title: 'Golf Lessons', desc: 'PGA professional instruction' },
 ];
 
-type TeeColor = 'black' | 'blue' | 'white' | 'green' | 'red';
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text className="text-neutral-500 text-xs uppercase tracking-[0.15em] mb-3 font-body-semibold">
+      {children}
+    </Text>
+  );
+}
 
-const TEE_YARDAGE_KEY: Record<TeeColor, keyof HoleData['scorecardYardages']> = {
-  black: 'black',
-  blue: 'blue',
-  white: 'white2',
-  green: 'greenMens',
-  red: 'red1',
-};
+function InfoCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <View
+      className={cn(
+        'bg-fox-surface rounded-2xl border border-fox-border overflow-hidden',
+        className
+      )}
+    >
+      {children}
+    </View>
+  );
+}
+
+function TeeGuideBadge({ teeName }: { teeName: string }) {
+  const tee = getScorecardTee(teeName as ScorecardTeeName);
+  const colors = tee?.colors ?? [TEE_COLORS.white];
+  const textColor = textColorForTeeColors(colors);
+  const isCombo = colors.length >= 2;
+  const needsBorder = colors.some((c) => c === TEE_COLORS.white);
+
+  const label = (
+    <Text
+      className="text-[10px] font-body-bold text-center"
+      style={{ color: textColor }}
+      numberOfLines={1}
+    >
+      {teeName}
+    </Text>
+  );
+
+  if (isCombo) {
+    return (
+      <LinearGradient
+        colors={[colors[0], colors[1]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{
+          borderRadius: 8,
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          borderWidth: needsBorder ? 1 : 0,
+          borderColor: '#525252',
+        }}
+        className="flex-1"
+      >
+        {label}
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors[0],
+        borderWidth: needsBorder ? 1 : 0,
+        borderColor: '#525252',
+      }}
+      className="flex-1 rounded-lg px-2 py-1.5 items-center justify-center"
+    >
+      {label}
+    </View>
+  );
+}
 
 export default function CourseScreen() {
   const insets = useSafeAreaInsets();
-  const [showBackNine, setShowBackNine] = useState(false);
-  const [selectedTee, setSelectedTee] = useState<TeeColor>('white');
 
-  const frontNine = getFrontNine();
-  const backNine = getBackNine();
-
-  const getYards = (hole: HoleData): number => {
-    return hole.scorecardYardages[TEE_YARDAGE_KEY[selectedTee]];
+  const handleCall = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Linking.openURL(`tel:${FOX_CREEK_DATA.phone.replace(/[^0-9]/g, '')}`);
   };
 
-  const calculateTotal = (holes: HoleData[]) => ({
-    par: holes.reduce((sum, h) => sum + h.par, 0),
-    yards: holes.reduce((sum, h) => sum + getYards(h), 0),
-  });
-
-  const frontTotals = calculateTotal(frontNine);
-  const backTotals = calculateTotal(backNine);
-
-  const courseStats = [
-    { label: 'Total Par', value: String(FOX_CREEK_DATA.par) },
-    ...FOX_CREEK_DATA.teeRatings
-      .filter((t) => ['Black', 'Blue', 'White', 'Green', 'Red'].includes(t.name))
-      .map((t) => ({
-        label: `${t.name} Tees`,
-        value: `${t.yards.toLocaleString()} yds`,
-      })),
-  ];
-
-  const getTeeStyle = (tee: TeeColor, isSelected: boolean) => {
-    if (!isSelected) return 'bg-[#141414] border-neutral-800';
-    switch (tee) {
-      case 'black':
-        return 'bg-neutral-900 border-neutral-600';
-      case 'blue':
-        return 'bg-blue-600 border-blue-500';
-      case 'white':
-        return 'bg-neutral-200 border-neutral-300';
-      case 'green':
-        return 'bg-green-600 border-green-500';
-      case 'red':
-        return 'bg-red-600 border-red-500';
-    }
+  const handleDirections = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(FOX_CREEK_DATA.address)}`);
   };
 
-  const getTeeTextStyle = (tee: TeeColor, isSelected: boolean) => {
-    if (!isSelected) return 'text-neutral-500';
-    if (tee === 'white') return 'text-neutral-900';
-    if (tee === 'black') return 'text-white';
-    return 'text-white';
-  };
+  const blackTees = FOX_CREEK_DATA.teeRatings.find((t) => t.name === 'Black');
+  const whiteTees = FOX_CREEK_DATA.teeRatings.find((t) => t.name === 'White');
 
   return (
-    <View className="flex-1 bg-[#0c0c0c]">
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        <View className="relative h-56">
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=800&q=80' }}
-            className="absolute inset-0 w-full h-full"
-            resizeMode="cover"
-          />
-          <LinearGradient
-            colors={['transparent', '#0c0c0c']}
-            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 120 }}
-          />
-          <View className="absolute bottom-4 left-5 right-5">
-            <Animated.Text
-              entering={FadeInDown.delay(100).duration(500)}
-              className="text-white text-2xl font-bold tracking-tight"
-            >
-              Course Information
-            </Animated.Text>
-            <Animated.Text
-              entering={FadeInDown.delay(150).duration(500)}
-              className="text-neutral-400 text-sm mt-1"
-            >
-              Dieppe, NB • Graham Cooke Design
-            </Animated.Text>
-          </View>
-        </View>
-
+    <View className="flex-1 bg-fox-background">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={{ width: '100%' }}
+        contentContainerStyle={{
+          paddingTop: insets.top + 12,
+          paddingBottom: 32,
+          width: '100%',
+          alignItems: 'stretch',
+        }}
+      >
         <Animated.View
-          entering={FadeInDown.delay(200).duration(500)}
-          className="px-5 -mt-2"
+          entering={FadeInDown.delay(100).duration(500)}
+          style={{
+            width: '100%',
+            alignItems: 'center',
+            paddingHorizontal: 20,
+            paddingTop: 24,
+          }}
         >
+          <Image
+            source={FC_LOGO}
+            style={{ width: LOGO_SIZE, height: LOGO_SIZE, alignSelf: 'center' }}
+            resizeMode="contain"
+          />
+          <Text className="text-white text-2xl font-display mt-6 text-center tracking-tight w-full">
+            {FOX_CREEK_DATA.name}
+          </Text>
+          <Text className="text-neutral-500 text-sm font-body mt-3 text-center leading-5 w-full">
+            Dieppe, New Brunswick
+          </Text>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(150).duration(500)} className="px-5 mt-6">
+          <InfoCard className="p-4">
+            <Text className="text-neutral-300 text-sm font-body leading-6">
+              An 18-hole championship layout designed by{' '}
+              <Text className="text-white font-body-semibold">{FOX_CREEK_DATA.designer}</Text>, opened in{' '}
+              {FOX_CREEK_DATA.yearOpened}. Fox Creek offers a full practice range, tournament-ready
+              conditions, and tee options for every skill level.
+            </Text>
+          </InfoCard>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(200).duration(500)} className="px-5 mt-6">
           <View className="flex-row flex-wrap gap-3">
-            {courseStats.map((stat) => (
+            {[
+              { label: 'Par', value: String(FOX_CREEK_DATA.par) },
+              { label: 'Holes', value: String(FOX_CREEK_DATA.holes) },
+              {
+                label: 'Black Tees',
+                value: blackTees ? `${blackTees.yards.toLocaleString()} yds` : '—',
+              },
+              {
+                label: 'White Tees',
+                value: whiteTees ? `${whiteTees.yards.toLocaleString()} yds` : '—',
+              },
+            ].map((stat) => (
               <View
                 key={stat.label}
-                className="flex-1 min-w-[45%] bg-[#141414] rounded-xl p-4 border border-neutral-800"
+                className="flex-1 min-w-[44%] bg-fox-surface rounded-xl p-4 border border-fox-border"
               >
-                <Text className="text-neutral-500 text-xs uppercase tracking-wider">{stat.label}</Text>
-                <Text className="text-white text-xl font-bold mt-1">{stat.value}</Text>
+                <Text className="text-neutral-500 text-[10px] uppercase tracking-wider font-body-semibold">
+                  {stat.label}
+                </Text>
+                <Text className="text-white text-xl font-display mt-1">{stat.value}</Text>
               </View>
             ))}
           </View>
         </Animated.View>
 
-        <Animated.View
-          entering={FadeInDown.delay(300).duration(500)}
-          className="px-5 mt-6"
-        >
-          <Text className="text-neutral-500 text-xs uppercase tracking-[0.15em] mb-3">Select Tees</Text>
-          <View className="flex-row gap-2">
-            {(['black', 'blue', 'white', 'green', 'red'] as const).map((tee) => (
-              <Pressable
-                key={tee}
-                onPress={() => setSelectedTee(tee)}
-                className={cn(
-                  'flex-1 py-3 rounded-xl border items-center',
-                  getTeeStyle(tee, selectedTee === tee)
-                )}
-              >
-                <Text
-                  className={cn(
-                    'font-semibold capitalize text-xs',
-                    getTeeTextStyle(tee, selectedTee === tee)
-                  )}
-                >
-                  {tee}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </Animated.View>
-
-        <Animated.View
-          entering={FadeInDown.delay(400).duration(500)}
-          className="px-5 mt-6"
-        >
-          <Text className="text-neutral-500 text-xs uppercase tracking-[0.15em] mb-3">Scorecard</Text>
-
-          <View className="bg-[#141414] rounded-xl border border-neutral-800 overflow-hidden">
-            <View className="flex-row bg-neutral-900 py-2 px-3">
-              <Text className="text-neutral-500 font-medium w-12 text-xs">Hole</Text>
-              <Text className="text-neutral-500 font-medium flex-1 text-center text-xs">Par</Text>
-              <Text className="text-neutral-500 font-medium flex-1 text-center text-xs">Yards</Text>
-              <Text className="text-neutral-500 font-medium flex-1 text-center text-xs">Hcp</Text>
+        <Animated.View entering={FadeInDown.delay(250).duration(500)} className="px-5 mt-8">
+          <SectionLabel>Course & Slope Ratings</SectionLabel>
+          <InfoCard>
+            <View className="flex-row bg-fox-surface-elevated py-2.5 px-3 border-b border-fox-border">
+              <Text className="text-neutral-500 text-[10px] font-body-semibold flex-[1.2]">Tee</Text>
+              <Text className="text-neutral-500 text-[10px] font-body-semibold flex-1 text-center">
+                Yards
+              </Text>
+              <Text className="text-neutral-500 text-[10px] font-body-semibold flex-1 text-center">
+                Men&apos;s
+              </Text>
+              <Text className="text-neutral-500 text-[10px] font-body-semibold flex-1 text-center">
+                Ladies
+              </Text>
             </View>
-            {frontNine.map((hole, index) => (
-              <Animated.View
-                key={hole.holeNumber}
-                entering={FadeIn.delay(450 + index * 30).duration(200)}
+            {FOX_CREEK_DATA.teeRatings.map((tee, index) => (
+              <View
+                key={tee.name}
                 className={cn(
                   'flex-row py-2.5 px-3',
-                  index % 2 === 0 ? 'bg-neutral-900/30' : 'bg-transparent'
+                  index < FOX_CREEK_DATA.teeRatings.length - 1 && 'border-b border-fox-border/60'
                 )}
               >
-                <Text className="text-white font-medium w-12">{hole.holeNumber}</Text>
-                <Text className="text-white flex-1 text-center">{hole.par}</Text>
-                <Text className="text-white flex-1 text-center">{getYards(hole)}</Text>
-                <Text className="text-neutral-500 flex-1 text-center">{hole.handicapIndex}</Text>
-              </Animated.View>
+                <Text className="text-white text-xs font-body-semibold flex-[1.2]" numberOfLines={1}>
+                  {tee.name}
+                </Text>
+                <Text className="text-neutral-300 text-xs font-body flex-1 text-center">
+                  {tee.yards.toLocaleString()}
+                </Text>
+                <Text className="text-neutral-400 text-xs font-body flex-1 text-center">
+                  {tee.mensRating}/{tee.mensSlope}
+                </Text>
+                <Text className="text-neutral-400 text-xs font-body flex-1 text-center">
+                  {tee.womensRating}/{tee.womensSlope}
+                </Text>
+              </View>
             ))}
-            <View className="flex-row bg-neutral-800/50 py-2 px-3">
-              <Text className="text-white font-bold w-12">Out</Text>
-              <Text className="text-white font-bold flex-1 text-center">{frontTotals.par}</Text>
-              <Text className="text-lime-400 font-bold flex-1 text-center">
-                {frontTotals.yards.toLocaleString()}
-              </Text>
-              <Text className="text-neutral-500 font-bold flex-1 text-center">-</Text>
-            </View>
-          </View>
-
-          <Pressable
-            onPress={() => setShowBackNine(!showBackNine)}
-            className="flex-row items-center justify-center mt-4 py-3 bg-[#141414] border border-neutral-800 rounded-xl active:opacity-70"
-          >
-            <Text className="text-lime-400 font-medium mr-2">
-              {showBackNine ? 'Hide Back Nine' : 'Show Back Nine'}
-            </Text>
-            {showBackNine ? (
-              <ChevronUp size={18} color="#a3e635" />
-            ) : (
-              <ChevronDown size={18} color="#a3e635" />
-            )}
-          </Pressable>
-
-          {showBackNine && (
-            <Animated.View
-              entering={FadeInDown.duration(300)}
-              className="bg-[#141414] rounded-xl border border-neutral-800 overflow-hidden mt-4"
-            >
-              <View className="flex-row bg-neutral-900 py-2 px-3">
-                <Text className="text-neutral-500 font-medium w-12 text-xs">Hole</Text>
-                <Text className="text-neutral-500 font-medium flex-1 text-center text-xs">Par</Text>
-                <Text className="text-neutral-500 font-medium flex-1 text-center text-xs">Yards</Text>
-                <Text className="text-neutral-500 font-medium flex-1 text-center text-xs">Hcp</Text>
-              </View>
-              {backNine.map((hole, index) => (
-                <View
-                  key={hole.holeNumber}
-                  className={cn(
-                    'flex-row py-2.5 px-3',
-                    index % 2 === 0 ? 'bg-neutral-900/30' : 'bg-transparent'
-                  )}
-                >
-                  <Text className="text-white font-medium w-12">{hole.holeNumber}</Text>
-                  <Text className="text-white flex-1 text-center">{hole.par}</Text>
-                  <Text className="text-white flex-1 text-center">{getYards(hole)}</Text>
-                  <Text className="text-neutral-500 flex-1 text-center">{hole.handicapIndex}</Text>
-                </View>
-              ))}
-              <View className="flex-row bg-neutral-800/50 py-2 px-3">
-                <Text className="text-white font-bold w-12">In</Text>
-                <Text className="text-white font-bold flex-1 text-center">{backTotals.par}</Text>
-                <Text className="text-lime-400 font-bold flex-1 text-center">
-                  {backTotals.yards.toLocaleString()}
-                </Text>
-                <Text className="text-neutral-500 font-bold flex-1 text-center">-</Text>
-              </View>
-
-              <View className="flex-row bg-lime-400/10 py-2.5 px-3 border-t border-neutral-700">
-                <Text className="text-lime-400 font-bold w-12">Tot</Text>
-                <Text className="text-lime-400 font-bold flex-1 text-center">
-                  {frontTotals.par + backTotals.par}
-                </Text>
-                <Text className="text-lime-400 font-bold flex-1 text-center">
-                  {(frontTotals.yards + backTotals.yards).toLocaleString()}
-                </Text>
-                <Text className="text-neutral-500 font-bold flex-1 text-center">-</Text>
-              </View>
-            </Animated.View>
-          )}
+          </InfoCard>
+          <Text className="text-neutral-600 text-[10px] font-body mt-2 px-1">
+            Rating / slope from the official Fox Creek scorecard.
+          </Text>
         </Animated.View>
 
-        <Animated.View
-          entering={FadeInDown.delay(500).duration(500)}
-          className="px-5 mt-8 mb-8"
-        >
-          <Text className="text-neutral-500 text-xs uppercase tracking-[0.15em] mb-4">
-            Practice Facilities
-          </Text>
-          {AMENITIES.map((amenity) => (
-            <View
-              key={amenity.title}
-              className="flex-row items-center bg-[#141414] rounded-xl p-4 mb-3 border border-neutral-800"
-            >
-              <View className="w-12 h-12 bg-neutral-900 rounded-full items-center justify-center mr-4 border border-neutral-800">
-                <amenity.icon size={20} color="#a3e635" strokeWidth={1.5} />
+        <Animated.View entering={FadeInDown.delay(300).duration(500)} className="px-5 mt-8">
+          <SectionLabel>Tee Selection Guide</SectionLabel>
+          <InfoCard>
+            <View className="flex-row bg-fox-surface-elevated py-2.5 px-3 border-b border-fox-border">
+              <Text className="text-neutral-500 text-[10px] font-body-semibold flex-1">Tee</Text>
+              <Text className="text-neutral-500 text-[10px] font-body-semibold flex-1 text-center">
+                Handicap
+              </Text>
+              <Text className="text-neutral-500 text-[10px] font-body-semibold flex-1 text-center">
+                Drive
+              </Text>
+            </View>
+            {FOX_CREEK_DATA.handicapRecommendations.map((rec, index) => (
+              <View
+                key={rec.teeName}
+                className={cn(
+                  'flex-row items-center gap-2 py-2.5 px-3',
+                  index < FOX_CREEK_DATA.handicapRecommendations.length - 1 &&
+                    'border-b border-fox-border/60'
+                )}
+              >
+                <View className="flex-[1.1]">
+                  <TeeGuideBadge teeName={rec.teeName} />
+                </View>
+                <Text className="text-neutral-400 text-xs font-body flex-1 text-center">
+                  {rec.handicapRange}
+                </Text>
+                <Text className="text-neutral-400 text-xs font-body flex-1 text-center">
+                  {rec.drivingDistance}
+                </Text>
               </View>
-              <View>
-                <Text className="text-white font-medium">{amenity.title}</Text>
-                <Text className="text-neutral-500 text-sm">{amenity.desc}</Text>
+            ))}
+          </InfoCard>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(350).duration(500)} className="px-5 mt-8">
+          <SectionLabel>Practice Facilities</SectionLabel>
+          {PRACTICE_FACILITIES.map((facility) => (
+            <View
+              key={facility.title}
+              className="flex-row items-center bg-fox-surface rounded-xl p-4 mb-3 border border-fox-border"
+            >
+              <View className="w-12 h-12 bg-fox-surface-elevated rounded-full items-center justify-center mr-4 border border-fox-border">
+                <facility.icon size={20} color={foxColors.lime} strokeWidth={1.5} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-white font-body-semibold">{facility.title}</Text>
+                <Text className="text-neutral-500 text-sm font-body mt-0.5">{facility.desc}</Text>
               </View>
             </View>
           ))}
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(400).duration(500)} className="px-5 mt-8">
+          <SectionLabel>Visit Us</SectionLabel>
+          <InfoCard>
+            <Pressable
+              onPress={handleDirections}
+              className="flex-row items-center p-4 border-b border-fox-border/60 active:opacity-80"
+            >
+              <View className="w-10 h-10 bg-fox-surface-elevated rounded-full items-center justify-center mr-4 border border-fox-border">
+                <MapPin size={16} color={foxColors.lime} strokeWidth={1.5} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-neutral-500 text-[10px] uppercase tracking-wider font-body-semibold">
+                  Address
+                </Text>
+                <Text className="text-white font-body mt-0.5">{FOX_CREEK_DATA.address}</Text>
+              </View>
+              <ExternalLink size={16} color="#525252" />
+            </Pressable>
+
+            <Pressable onPress={handleCall} className="flex-row items-center p-4 active:opacity-80">
+              <View className="w-10 h-10 bg-fox-surface-elevated rounded-full items-center justify-center mr-4 border border-fox-border">
+                <Phone size={16} color={foxColors.lime} strokeWidth={1.5} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-neutral-500 text-[10px] uppercase tracking-wider font-body-semibold">
+                  Phone
+                </Text>
+                <Text className="text-white font-body mt-0.5">{FOX_CREEK_DATA.phone}</Text>
+              </View>
+              <ExternalLink size={16} color="#525252" />
+            </Pressable>
+          </InfoCard>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(450).duration(500)} className="px-5 mt-6">
+          <View className="flex-row items-center justify-center gap-6">
+            <View className="flex-row items-center">
+              <Calendar size={14} color="#525252" strokeWidth={1.5} />
+              <Text className="text-neutral-600 text-xs font-body ml-2">
+                Est. {FOX_CREEK_DATA.yearOpened}
+              </Text>
+            </View>
+            <View className="flex-row items-center">
+              <User size={14} color="#525252" strokeWidth={1.5} />
+              <Text className="text-neutral-600 text-xs font-body ml-2">
+                {FOX_CREEK_DATA.designer}, Course Architect
+              </Text>
+            </View>
+          </View>
         </Animated.View>
       </ScrollView>
     </View>

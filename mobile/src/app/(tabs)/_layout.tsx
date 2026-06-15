@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { View, Platform } from 'react-native';
-import { Home, Clock, Flag, Phone, ClipboardList, Users } from 'lucide-react-native';
+import { Home, Clock, Flag, Phone, ClipboardList, Users, Newspaper } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -40,6 +40,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="teetimes"
         options={{
+          href: null,
           title: 'Book',
           tabBarIcon: ({ color, focused }) => (
             <View className={focused ? 'opacity-100' : 'opacity-60'}>
@@ -88,6 +89,17 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <View className={focused ? 'opacity-100' : 'opacity-60'}>
               <Users size={22} color={color} strokeWidth={focused ? 2.5 : 1.5} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="news"
+        options={{
+          title: 'News',
+          tabBarIcon: ({ color, focused }) => (
+            <View className={focused ? 'opacity-100' : 'opacity-60'}>
+              <Newspaper size={22} color={color} strokeWidth={focused ? 2.5 : 1.5} />
             </View>
           ),
         }}

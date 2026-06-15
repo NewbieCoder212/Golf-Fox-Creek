@@ -12,6 +12,43 @@ import {
 } from '@/lib/ad-placement-service';
 import type { AdDisplayPosition, AdPlacementType } from '@/types';
 
+export const COMPACT_SPONSOR_BANNER_HEIGHT = 96;
+export const STICKY_FOOTER_AD_EXTRA = 20;
+
+interface UseAdPlacementOptions {
+  holeNumber?: number;
+  displayPosition?: AdDisplayPosition;
+}
+
+export function useAdPlacement(
+  placementType: AdPlacementType | string,
+  options?: UseAdPlacementOptions
+) {
+  const useMulti =
+    placementType === 'leaderboard' && options?.displayPosition != null;
+
+  return useQuery({
+    queryKey: [
+      'adPlacement',
+      placementType,
+      options?.holeNumber ?? null,
+      options?.displayPosition ?? null,
+      useMulti,
+    ],
+    queryFn: () =>
+      useMulti
+        ? getActiveAdPlacements(placementType, {
+            displayPosition: options!.displayPosition,
+            limit: 1,
+          })
+        : getActiveAdPlacement(placementType, options?.holeNumber).then((ad) =>
+            ad ? [ad] : []
+          ),
+    enabled: isAdPlacementServiceConfigured(),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 interface SponsorBannerProps {
   placementType: AdPlacementType | string;
   holeNumber?: number;
@@ -35,18 +72,7 @@ export function SponsorBanner({
   className,
   compact = false,
 }: SponsorBannerProps) {
-  const useMulti =
-    placementType === 'leaderboard' && displayPosition != null;
-
-  const { data: ads = [] } = useQuery({
-    queryKey: ['adPlacement', placementType, holeNumber ?? null, displayPosition ?? null, useMulti],
-    queryFn: () =>
-      useMulti
-        ? getActiveAdPlacements(placementType, { displayPosition, limit: 1 })
-        : getActiveAdPlacement(placementType, holeNumber).then((ad) => (ad ? [ad] : [])),
-    enabled: isAdPlacementServiceConfigured(),
-    staleTime: 1000 * 60 * 5,
-  });
+  const { data: ads = [] } = useAdPlacement(placementType, { holeNumber, displayPosition });
 
   const ad = ads[0];
 

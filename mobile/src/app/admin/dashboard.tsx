@@ -39,7 +39,6 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useAdminAuthStore } from '@/lib/admin-auth-store';
 import { getTournamentsResult } from '@/lib/tournament-service';
-import { TournamentLeaderboardCard } from '@/components/TournamentLeaderboardCard';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
 import {
   getGeofenceSettings,
@@ -53,8 +52,12 @@ import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import type { GeofenceSettings, GMAnnouncement, AnnouncementType, CourseReport } from '@/types';
 import { AdminAdPlacementsSection } from '@/components/admin/AdminAdPlacementsSection';
+import { AdminEventTeamsSection } from '@/components/admin/AdminEventTeamsSection';
+import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import { buildMatchPointsLeaderboard, getTournamentTeams } from '@/lib/tournament-service';
+import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
 
-type AdminSection = 'main' | 'geofencing' | 'announcements' | 'notifications' | 'reports' | 'ads';
+type AdminSection = 'main' | 'geofencing' | 'announcements' | 'notifications' | 'reports' | 'ads' | 'teams';
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
@@ -108,6 +111,26 @@ export default function AdminDashboardScreen() {
   });
 
   const adminLeaderboardTournamentId = adminTournaments[0]?.id;
+
+  const { data: adminTeams = [] } = useQuery({
+    queryKey: ['tournamentTeams', adminLeaderboardTournamentId],
+    queryFn: () => getTournamentTeams(adminLeaderboardTournamentId!),
+    enabled: Boolean(adminLeaderboardTournamentId),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const { data: adminMatchGroups = [] } = useQuery({
+    queryKey: ['tournamentMatchGroups', adminLeaderboardTournamentId],
+    queryFn: () => getTournamentMatchGroups(adminLeaderboardTournamentId!),
+    enabled: Boolean(adminLeaderboardTournamentId),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const adminTeamStats = buildMatchPointsLeaderboard(adminTeams, adminMatchGroups).map((row) => ({
+    teamId: row.teamId,
+    matchPoints: row.matchPoints,
+    matchesWon: row.matchesWon,
+  }));
 
   // Bridge member login into admin session (manager / super_admin)
   useEffect(() => {
@@ -374,10 +397,15 @@ export default function AdminDashboardScreen() {
           <ChevronRight size={20} color="#525252" />
         </Pressable>
 
-        {/* Tournaments */}
+        {/* Event Teams */}
         {adminLeaderboardTournamentId ? (
           <View className="mb-3">
-            <TournamentLeaderboardCard tournamentId={adminLeaderboardTournamentId} compact />
+            <TournamentTeamMatchupBoard
+              teams={adminTeams}
+              teamStats={adminTeamStats}
+              subtitle="Team Matchup"
+              compact
+            />
             {adminTournaments[0]?.display_token ? (
               <View className="mt-2">
                 <TournamentCopyTvLinkButton
@@ -389,6 +417,23 @@ export default function AdminDashboardScreen() {
             ) : null}
           </View>
         ) : null}
+
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setSection('teams');
+          }}
+          className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-3 flex-row items-center active:opacity-80"
+        >
+          <View className="w-10 h-10 bg-lime-900/30 rounded-full items-center justify-center">
+            <Users size={20} color="#a3e635" />
+          </View>
+          <View className="flex-1 ml-4">
+            <Text className="text-white font-medium">Event Teams</Text>
+            <Text className="text-neutral-500 text-sm">Upload team logos & manage matchup</Text>
+          </View>
+          <ChevronRight size={20} color="#525252" />
+        </Pressable>
 
         <Pressable
           onPress={() => {
@@ -1045,6 +1090,20 @@ export default function AdminDashboardScreen() {
               <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
                 <Text className="text-red-200 text-sm">
                   Admin session expired. Log out and sign in again to manage sponsor ads.
+                </Text>
+              </View>
+            )
+          )}
+          {section === 'teams' && (
+            accessToken ? (
+              <AdminEventTeamsSection
+                accessToken={accessToken}
+                onBack={() => setSection('main')}
+              />
+            ) : (
+              <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
+                <Text className="text-red-200 text-sm">
+                  Admin session expired. Log out and sign in again to manage event teams.
                 </Text>
               </View>
             )

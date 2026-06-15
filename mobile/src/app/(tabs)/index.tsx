@@ -12,12 +12,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HubHeroWelcome } from '@/components/hub/HubHeroWelcome';
 import { HubContextCard } from '@/components/hub/HubContextCard';
 import { HubMyEventsStrip } from '@/components/hub/HubMyEventsStrip';
+import { HubAdBanner } from '@/components/hub/HubAdBanner';
+import {
+  COMPACT_SPONSOR_BANNER_HEIGHT,
+  STICKY_FOOTER_AD_EXTRA,
+  useAdPlacement,
+} from '@/components/SponsorBanner';
 import { TournamentLeaderboardCard } from '@/components/TournamentLeaderboardCard';
 import { HubWeatherStrip } from '@/components/hub/HubWeatherStrip';
 import { HubQuickActions } from '@/components/hub/HubQuickActions';
-import { HubPromoBanner } from '@/components/hub/HubPromoBanner';
 import { HubSection } from '@/components/ui/HubSection';
-import { TeeTimeInput } from '@/components/TeeTimeInput';
 import { TeeTimeAlertMonitor } from '@/components/TeeTimeAlertMonitor';
 import { GeofenceMonitor } from '@/components/GeofenceMonitor';
 import { useWeather } from '@/lib/useWeather';
@@ -98,7 +102,7 @@ export default function HomeScreen() {
     bridgeMemberAuthToAdmin();
   }, [userId, authProfile?.role]);
 
-  const { data: fetchedProfile, isLoading: profileLoading } = useQuery({
+  const { data: fetchedProfile } = useQuery({
     queryKey: ['userProfile', userId],
     queryFn: () => getUserProfile(userId!),
     enabled: isSupabaseConfigured() && !!userId && !authProfile,
@@ -133,8 +137,12 @@ export default function HomeScreen() {
       }
     : FALLBACK_WEATHER;
   const showWeatherUnavailable = weatherError || (!weatherLoading && !weather);
-  const handicap = userProfile?.handicap_index ?? null;
-  const loyaltyPoints = userProfile?.loyalty_points ?? 0;
+
+  const { data: memberHubAds = [] } = useAdPlacement('member_hub');
+  const hasStickyFooterAd = memberHubAds.length > 0;
+  const stickyFooterHeight = hasStickyFooterAd
+    ? COMPACT_SPONSOR_BANNER_HEIGHT + STICKY_FOOTER_AD_EXTRA
+    : 0;
 
   return (
     <View className="flex-1 bg-fox-background" style={{ width: '100%' }}>
@@ -142,7 +150,10 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         className="flex-1"
         style={{ width: '100%' }}
-        contentContainerStyle={{ paddingTop: insets.top, paddingBottom: 8 }}
+        contentContainerStyle={{
+          paddingTop: insets.top,
+          paddingBottom: stickyFooterHeight + 16,
+        }}
       >
         {announcement && (
           <Animated.View entering={FadeIn.duration(400)} className="mx-5 mt-4">
@@ -171,15 +182,9 @@ export default function HomeScreen() {
           </Animated.View>
         )}
 
-        <HubHeroWelcome
-          userProfile={userProfile}
-          handicap={handicap}
-          loyaltyPoints={loyaltyPoints}
-          loading={profileLoading}
-          onLogout={handleLogout}
-        />
+        <HubHeroWelcome userProfile={userProfile} onLogout={handleLogout} />
 
-        <HubSection title={t.todayAtCourse} className="mt-4">
+        <HubSection title={t.yourRound} className="mt-4">
           <HubContextCard />
           <HubWeatherStrip
             weather={weatherDisplay}
@@ -188,10 +193,6 @@ export default function HomeScreen() {
             unavailable={showWeatherUnavailable}
             embedded
           />
-        </HubSection>
-
-        <HubSection title={t.quickPlay}>
-          <HubQuickActions embedded />
         </HubSection>
 
         <HubSection
@@ -208,14 +209,16 @@ export default function HomeScreen() {
           </HubSection>
         ) : null}
 
-        <HubSection title={t.practiceMode}>
-          <TeeTimeInput embedded />
+        <HubSection title={t.play}>
+          <HubQuickActions embedded />
         </HubSection>
-
-        <HubPromoBanner />
-
-        <View className="h-4" />
       </ScrollView>
+
+      {hasStickyFooterAd ? (
+        <View className="bg-fox-background border-t border-fox-border/60 pt-2">
+          <HubAdBanner embedded />
+        </View>
+      ) : null}
 
       <TeeTimeAlertMonitor />
       <GeofenceMonitor />

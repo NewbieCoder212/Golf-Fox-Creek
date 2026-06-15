@@ -76,7 +76,8 @@ export type AdPlacementType =
   | 'scorecard_header'
   | 'hole_sponsor'
   | 'the_turn'
-  | 'leaderboard';
+  | 'leaderboard'
+  | 'member_hub';
 
 export type AdDisplayPosition = 'header_left' | 'sidebar' | 'footer';
 
@@ -528,6 +529,7 @@ export interface TournamentTeam {
   team_name: string;
   side: TournamentTeamSide | null;
   player_ids: string[];
+  logo_url: string | null;
 }
 
 export interface TournamentTeamInsert {
@@ -535,6 +537,7 @@ export interface TournamentTeamInsert {
   team_name: string;
   side: TournamentTeamSide;
   player_ids: string[];
+  logo_url?: string | null;
 }
 
 export interface TournamentPlayer {

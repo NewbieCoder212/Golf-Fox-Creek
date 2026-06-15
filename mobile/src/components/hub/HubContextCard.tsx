@@ -5,7 +5,7 @@ import {
   Coffee,
   Bell,
   MapPin,
-  Trophy,
+  ClipboardList,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -170,21 +170,30 @@ export function HubContextCard() {
         <View>
           <View className="flex-row items-center">
             <View className="w-12 h-12 bg-fox-surface-elevated rounded-full items-center justify-center mr-4 border border-fox-border">
-              <Trophy size={22} color={foxColors.lime} strokeWidth={1.5} />
+              <ClipboardList size={22} color={foxColors.lime} strokeWidth={1.5} />
             </View>
             <View className="flex-1">
-              <Text className="text-white text-lg font-display">{t.welcomeTo}</Text>
-              <Text className="text-neutral-500 text-sm mt-0.5 font-body">{t.setTeeTime}</Text>
+              <Text className="text-white text-lg font-display">{t.readyToScore}</Text>
+              <Text className="text-neutral-500 text-sm mt-0.5 font-body">{t.scorecardHubSubtitle}</Text>
             </View>
           </View>
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              router.push('/(tabs)/teetimes' as never);
+              router.push('/(tabs)/scorecard' as never);
             }}
             className="mt-4 bg-fox-lime rounded-xl py-3 items-center active:opacity-80"
           >
-            <Text className="text-black font-body-bold">{t.bookTeeTimeCta}</Text>
+            <Text className="text-black font-body-bold">{t.openScorecard}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/tournaments' as never);
+            }}
+            className="mt-3 items-center active:opacity-70"
+          >
+            <Text className="text-fox-lime text-sm font-body-semibold">{t.browseTournaments}</Text>
           </Pressable>
         </View>
       )}

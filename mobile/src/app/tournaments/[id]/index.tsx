@@ -17,7 +17,6 @@ import {
   Trophy,
   Users,
   ClipboardList,
-  Coins,
   Plus,
   X,
   Medal,
@@ -80,6 +79,7 @@ import {
 import { cn } from '@/lib/cn';
 import { SponsorBanner } from '@/components/SponsorBanner';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
+import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 
 type DetailTab = 'leaderboard' | 'teams' | 'matches' | 'teeTimes';
 
@@ -186,7 +186,6 @@ export default function TournamentDetailScreen() {
     : null;
 
   const matchPointsLeaderboard = buildMatchPointsLeaderboard(teams, matchGroups);
-  const hasMatchPoints = matchPointsLeaderboard.some((row) => row.matchPoints > 0);
 
   const eventHoleWins = aggregateEventHoleWins(matchHoleResults);
   const hasMatchResults = matchHoleResults.length > 0;
@@ -534,44 +533,17 @@ export default function TournamentDetailScreen() {
               compact
             />
 
-            {hasMatchPoints && sideATeam && sideBTeam && (
-              <View className="bg-[#141414] rounded-2xl border border-lime-700/40 p-4 mt-2 mb-3">
-                <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-3">
-                  Match Points Standings
-                </Text>
-                {matchPointsLeaderboard.map((row, index) => (
-                  <View
-                    key={row.teamId}
-                    className={cn(
-                      'flex-row items-center py-2',
-                      index > 0 && 'border-t border-neutral-800'
-                    )}
-                  >
-                    <View
-                      className={cn(
-                        'w-8 h-8 rounded-full items-center justify-center mr-3',
-                        index === 0 ? 'bg-yellow-500/20' : 'bg-neutral-800'
-                      )}
-                    >
-                      <Text
-                        className={cn(
-                          'font-bold text-sm',
-                          index === 0 ? 'text-yellow-400' : 'text-neutral-400'
-                        )}
-                      >
-                        {index + 1}
-                      </Text>
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-white font-semibold">{row.teamName}</Text>
-                      <Text className="text-neutral-500 text-xs">
-                        {row.matchesWon} match wins · {row.matchesPlayed} played
-                      </Text>
-                    </View>
-                    <Text className="text-lime-400 font-bold text-2xl">{row.matchPoints}</Text>
-                  </View>
-                ))}
-              </View>
+            {sideATeam && sideBTeam && (
+              <TournamentTeamMatchupBoard
+                teams={teams}
+                teamStats={matchPointsLeaderboard.map((row) => ({
+                  teamId: row.teamId,
+                  matchPoints: row.matchPoints,
+                  matchesWon: row.matchesWon,
+                }))}
+                subtitle="Team Matchup"
+                className="mt-2 mb-3"
+              />
             )}
 
             {hasMatchResults && sideATeam && sideBTeam && (
@@ -769,32 +741,23 @@ export default function TournamentDetailScreen() {
             </Text>
           </View>
         )}
-        <View className="flex-row gap-3">
-          <Pressable
-            onPress={handleEnterScores}
-            disabled={!canEnterScores || isOpeningScorecard}
-            className={cn(
-              'flex-1 flex-row items-center justify-center rounded-xl py-3.5',
-              canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
-            )}
-          >
-            {isOpeningScorecard ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <ClipboardList size={18} color="#fff" />
-                <Text className="text-white font-bold ml-2">Enter Scores</Text>
-              </>
-            )}
-          </Pressable>
-          <Pressable
-            onPress={() => router.push(`/tournament/wagering?id=${id}`)}
-            className="flex-1 flex-row items-center justify-center bg-neutral-800 rounded-xl py-3.5 active:opacity-80"
-          >
-            <Coins size={18} color="#a3e635" />
-            <Text className="text-lime-400 font-bold ml-2">Side Games</Text>
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={handleEnterScores}
+          disabled={!canEnterScores || isOpeningScorecard}
+          className={cn(
+            'flex-row items-center justify-center rounded-xl py-3.5',
+            canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
+          )}
+        >
+          {isOpeningScorecard ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <ClipboardList size={18} color="#fff" />
+              <Text className="text-white font-bold ml-2">Enter Scores</Text>
+            </>
+          )}
+        </Pressable>
       </View>
 
       <Modal visible={showTeamModal} animationType="slide" transparent>

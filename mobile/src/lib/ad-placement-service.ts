@@ -244,6 +244,7 @@ export const PLACEMENT_TYPE_LABELS: Record<AdPlacementType, string> = {
   hole_sponsor: 'Hole Sponsor (casual scorecard)',
   the_turn: 'The Turn (mid-round F&B)',
   leaderboard: 'Leaderboard / TV Display',
+  member_hub: 'Member Hub (home screen)',
 };
 
 export const DISPLAY_POSITION_LABELS: Record<AdDisplayPosition, string> = {

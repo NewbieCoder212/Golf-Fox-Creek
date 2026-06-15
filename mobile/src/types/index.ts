@@ -108,10 +108,26 @@ export interface TeeBox {
   yards: number;
 }
 
+/** Per-hole yardages matching the physical Fox Creek scorecard columns */
+export interface ScorecardYardages {
+  black: number;
+  blue: number;
+  white1: number;
+  white2: number;
+  greenMens: number;
+  greenLadies: number;
+  red1: number;
+  red2: number;
+  /** White/Green combo — par 5s from White, par 3/4 from Green (Fox Creek combo routing). */
+  whiteGreen: number;
+}
+
 export interface HoleData {
   holeNumber: number;
   par: number;
   handicapIndex: number;
+  womensHandicapIndex: number;
+  scorecardYardages: ScorecardYardages;
   teeBoxes: TeeBox[];
   teeBoxCoords: Coordinates; // Placeholder - fill in with exact GPS
   greenCoords: Coordinates; // Placeholder - fill in with exact GPS
@@ -126,6 +142,12 @@ export interface TeeRating {
   womensSlope: number;
 }
 
+export interface HandicapRecommendation {
+  teeName: string;
+  handicapRange: string;
+  drivingDistance: string;
+}
+
 export interface CourseData {
   name: string;
   address: string;
@@ -135,6 +157,7 @@ export interface CourseData {
   designer: string;
   yearOpened: number;
   teeRatings: TeeRating[];
+  handicapRecommendations: HandicapRecommendation[];
   geofences: Geofence[];
   holeData: HoleData[];
 }
@@ -158,6 +181,28 @@ export interface MemberProfile {
 // ============================================
 
 export type TeeName = 'Black' | 'Blue' | 'White' | 'Green' | 'Red';
+
+/** Combo tees shown on the Fox Creek scorecard (split-color squares). */
+export type ComboTeeName = 'Blue/White' | 'White/Green' | 'Green/Red';
+
+export type ScorecardTeeName = TeeName | ComboTeeName;
+
+export interface ScorecardTeeDefinition {
+  id: ScorecardTeeName;
+  ratingName: string;
+  yardageKey: keyof ScorecardYardages;
+  colors: readonly [string, string] | readonly [string];
+  isCombo: boolean;
+  shortLabel: string;
+}
+
+export interface ScorecardYardageRow {
+  yardageKey: keyof ScorecardYardages;
+  ratingName: string;
+  colors: readonly [string, string] | readonly [string];
+  isCombo: boolean;
+  section: 'mens' | 'ladies';
+}
 
 export interface HoleScore {
   hole: number;

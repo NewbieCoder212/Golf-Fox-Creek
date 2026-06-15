@@ -124,7 +124,7 @@ export function TournamentMatchGroupsTab({
       round: String(roundNumber),
     });
     if (side) params.set('side', side);
-    router.push(`/tournament/scorecard?${params.toString()}`);
+    router.push(`/(tabs)/scorecard?${params.toString()}`);
   };
 
   const saveMutation = useMutation({

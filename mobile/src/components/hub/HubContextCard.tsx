@@ -24,7 +24,11 @@ export function HubContextCard() {
 
   const isCheckedIn = useScorecardStore((s) => s.isCheckedIn);
   const isTracking = useScorecardStore((s) => s.isTracking);
+  const isTurnPaused = useScorecardStore((s) => s.isTurnPaused);
+  const hasUnfinishedRound = useScorecardStore((s) => s.hasUnfinishedRound);
   const currentHole = useScorecardStore((s) => s.currentHole);
+  const resumeRound = useScorecardStore((s) => s.resumeRound);
+  const hasRoundProgress = useScorecardStore((s) => s.hasRoundProgress);
   const showFnbPrompt = useScorecardStore((s) => s.showFnbPrompt);
   const setShowFnbPrompt = useScorecardStore((s) => s.setShowFnbPrompt);
 
@@ -32,14 +36,19 @@ export function HubContextCard() {
   const getMinutesUntilTeeTime = useTeeTimeAlertStore((s) => s.getMinutesUntilTeeTime);
   const minutesUntil = getMinutesUntilTeeTime();
 
+  const goToScorecard = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!hasRoundProgress()) {
+      await resumeRound();
+    }
+    router.push('/(tabs)/scorecard' as never);
+  };
+
   return (
     <Animated.View entering={FadeInDown.delay(200).duration(600)}>
       {isTracking ? (
         <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            router.push('/(tabs)/scorecard' as never);
-          }}
+          onPress={goToScorecard}
           className="active:opacity-80 active:scale-[0.99]"
         >
           <SurfaceCard variant="live" className="p-4 pl-5">
@@ -52,6 +61,30 @@ export function HubContextCard() {
                   <Text className="text-fox-lime text-lg font-display">{t.roundInProgress}</Text>
                   <Text className="text-lime-400/70 text-sm mt-0.5 font-body">
                     {t.currentlyOnHole} {currentHole}
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={22} color={foxColors.lime} />
+            </View>
+          </SurfaceCard>
+        </Pressable>
+      ) : (hasUnfinishedRound || isTurnPaused) ? (
+        <Pressable
+          onPress={goToScorecard}
+          className="active:opacity-80 active:scale-[0.99]"
+        >
+          <SurfaceCard variant="live" className="p-4 pl-5">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center flex-1">
+                <View className="w-12 h-12 bg-fox-lime-muted/40 rounded-full items-center justify-center mr-4 border border-fox-border-accent">
+                  <Play size={22} color={foxColors.lime} fill={foxColors.lime} />
+                </View>
+                <View>
+                  <Text className="text-fox-lime text-lg font-display">{t.continueRound}</Text>
+                  <Text className="text-lime-400/70 text-sm mt-0.5 font-body">
+                    {isTurnPaused
+                      ? t.theTurn
+                      : `${t.currentlyOnHole} ${currentHole}`}
                   </Text>
                 </View>
               </View>

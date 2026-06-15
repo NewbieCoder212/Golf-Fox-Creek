@@ -2,6 +2,8 @@ import { View, Text, ScrollView } from 'react-native';
 import { useEffect } from 'react';
 import { AlertCircle, Info, AlertTriangle } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
@@ -22,6 +24,7 @@ import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 import { getGMAnnouncement, getUserProfile, isSupabaseConfigured, signOut } from '@/lib/supabase';
 import { useTranslations } from '@/lib/language-store';
+import { useScorecardStore } from '@/lib/scorecard-store';
 import type { GMAnnouncement } from '@/types';
 
 const FALLBACK_WEATHER = {
@@ -71,6 +74,14 @@ export default function HomeScreen() {
   const accessToken = useMemberAuthStore((s) => s.accessToken);
   const clearAuth = useMemberAuthStore((s) => s.clearAuth);
   const userId = authUser?.id;
+
+  const refreshUnfinishedRoundStatus = useScorecardStore((s) => s.refreshUnfinishedRoundStatus);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshUnfinishedRoundStatus();
+    }, [refreshUnfinishedRoundStatus])
+  );
 
   useEffect(() => {
     bridgeMemberAuthToAdmin();

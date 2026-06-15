@@ -1,11 +1,94 @@
-import type { CourseData } from '@/types';
+import type { CourseData, HoleData, ScorecardYardages } from '@/types';
+
+const PLACEHOLDER_COORDS = { lat: 0, lng: 0 };
+
+type HoleRow = [
+  number, // hole
+  number, // par
+  number, // mens hcp
+  number, // ladies hcp
+  number, // black
+  number, // blue
+  number, // white1
+  number, // white2
+  number, // green mens
+  number, // green ladies
+  number, // red1
+  number, // red2
+];
+
+const HOLE_ROWS: HoleRow[] = [
+  [1, 5, 7, 11, 529, 498, 498, 471, 471, 447, 380, 380],
+  [2, 3, 16, 15, 190, 165, 165, 157, 142, 142, 142, 101],
+  [3, 4, 10, 5, 418, 393, 378, 378, 346, 346, 315, 315],
+  [4, 3, 18, 17, 151, 134, 134, 122, 122, 102, 102, 75],
+  [5, 5, 2, 7, 575, 541, 514, 514, 494, 494, 400, 400],
+  [6, 4, 12, 9, 422, 396, 374, 374, 343, 343, 311, 311],
+  [7, 4, 4, 3, 459, 430, 397, 397, 380, 380, 338, 338],
+  [8, 3, 8, 13, 222, 198, 180, 180, 160, 160, 160, 150],
+  [9, 5, 6, 1, 560, 523, 523, 490, 490, 463, 422, 422],
+  [10, 5, 5, 4, 555, 532, 532, 498, 498, 459, 416, 416],
+  [11, 4, 11, 8, 320, 293, 293, 285, 285, 273, 273, 247],
+  [12, 4, 1, 2, 448, 421, 396, 396, 370, 370, 328, 328],
+  [13, 3, 3, 12, 241, 212, 199, 199, 179, 179, 179, 132],
+  [14, 4, 13, 6, 427, 401, 378, 378, 352, 352, 313, 313],
+  [15, 5, 9, 10, 543, 509, 509, 482, 482, 443, 443, 406],
+  [16, 4, 14, 14, 304, 273, 273, 256, 256, 233, 233, 190],
+  [17, 3, 17, 16, 158, 151, 151, 140, 140, 131, 131, 108],
+  [18, 4, 15, 18, 403, 378, 348, 348, 348, 295, 295, 204],
+];
+
+function buildHoleData(row: HoleRow): HoleData {
+  const [
+    holeNumber,
+    par,
+    handicapIndex,
+    womensHandicapIndex,
+    black,
+    blue,
+    white1,
+    white2,
+    greenMens,
+    greenLadies,
+    red1,
+    red2,
+  ] = row;
+
+  const scorecardYardages: ScorecardYardages = {
+    black,
+    blue,
+    white1,
+    white2,
+    greenMens,
+    greenLadies,
+    red1,
+    red2,
+    whiteGreen: par >= 5 ? white2 : greenMens,
+  };
+
+  return {
+    holeNumber,
+    par,
+    handicapIndex,
+    womensHandicapIndex,
+    scorecardYardages,
+    teeBoxes: [
+      { name: 'Black', yards: black },
+      { name: 'Blue', yards: blue },
+      { name: 'White', yards: white2 },
+      { name: 'Green', yards: greenMens },
+      { name: 'Red', yards: red1 },
+    ],
+    teeBoxCoords: PLACEHOLDER_COORDS,
+    greenCoords: PLACEHOLDER_COORDS,
+  };
+}
 
 /**
  * Fox Creek Golf Club - Dieppe, NB
- * Course layout FLIPPED: Old back 9 is now front 9
+ * Data from official physical scorecard (yardages, ratings, stroke indexes).
  *
  * NOTE: teeBoxCoords and greenCoords are PLACEHOLDERS
- * Replace with exact GPS coordinates from course GM or GPS provider
  */
 export const FOX_CREEK_DATA: CourseData = {
   name: 'Fox Creek Golf Club',
@@ -20,324 +103,101 @@ export const FOX_CREEK_DATA: CourseData = {
     {
       name: 'Black',
       yards: 6925,
-      mensRating: 73.8,
-      mensSlope: 131,
-      womensRating: 80.3,
-      womensSlope: 149,
+      mensRating: 74.8,
+      mensSlope: 140,
+      womensRating: 81.0,
+      womensSlope: 152,
     },
     {
       name: 'Blue',
-      yards: 6428,
-      mensRating: 71.6,
-      mensSlope: 128,
-      womensRating: 77.9,
-      womensSlope: 141,
+      yards: 6448,
+      mensRating: 72.7,
+      mensSlope: 142,
+      womensRating: 78.6,
+      womensSlope: 152,
+    },
+    {
+      name: 'Blue/White',
+      yards: 6242,
+      mensRating: 71.8,
+      mensSlope: 139,
+      womensRating: 77.6,
+      womensSlope: 149,
     },
     {
       name: 'White',
-      yards: 6033,
-      mensRating: 69.8,
-      mensSlope: 127,
+      yards: 6065,
+      mensRating: 70.9,
+      mensSlope: 137,
+      womensRating: 76.6,
+      womensSlope: 146,
+    },
+    {
+      name: 'White/Green',
+      yards: 5912,
+      mensRating: 69.9,
+      mensSlope: 136,
       womensRating: 75.4,
-      womensSlope: 136,
+      womensSlope: 144,
     },
     {
       name: 'Green',
-      yards: 5589,
-      mensRating: 67.8,
-      mensSlope: 123,
-      womensRating: 73.0,
-      womensSlope: 128,
+      yards: 5858,
+      mensRating: 69.1,
+      mensSlope: 131,
+      womensRating: 74.0,
+      womensSlope: 142,
+    },
+    {
+      name: 'Green/Red',
+      yards: 5347,
+      mensRating: 67.2,
+      mensSlope: 126,
+      womensRating: 71.6,
+      womensSlope: 132,
     },
     {
       name: 'Red',
       yards: 4836,
-      mensRating: 64.1,
-      mensSlope: 112,
-      womensRating: 68.4,
-      womensSlope: 116,
+      mensRating: 65.7,
+      mensSlope: 123,
+      womensRating: 69.9,
+      womensSlope: 126,
     },
+  ],
+
+  handicapRecommendations: [
+    { teeName: 'Black', handicapRange: '0–4', drivingDistance: '280+' },
+    { teeName: 'Blue', handicapRange: '5–12', drivingDistance: '260+' },
+    { teeName: 'Blue/White', handicapRange: '8–15', drivingDistance: '240+' },
+    { teeName: 'White', handicapRange: '13–19', drivingDistance: '230+' },
+    { teeName: 'White/Green', handicapRange: '15–22', drivingDistance: '215+' },
+    { teeName: 'Green', handicapRange: '20–25', drivingDistance: '200+' },
+    { teeName: 'Green/Red', handicapRange: '22–26', drivingDistance: '180+' },
+    { teeName: 'Red', handicapRange: '26+', drivingDistance: '180–' },
   ],
 
   geofences: [
     {
       name: 'Clubhouse',
-      coords: { lat: 46.083, lng: -64.683 }, // PLACEHOLDER - update with exact coords
+      coords: { lat: 46.083, lng: -64.683 },
       radiusMeters: 50,
     },
     {
       name: 'Practice Range',
-      coords: { lat: 46.084, lng: -64.682 }, // PLACEHOLDER - update with exact coords
+      coords: { lat: 46.084, lng: -64.682 },
       radiusMeters: 100,
     },
     {
       name: 'Canteen',
-      coords: { lat: 46.0835, lng: -64.684 }, // PLACEHOLDER - update with exact coords
+      coords: { lat: 46.0835, lng: -64.684 },
       radiusMeters: 30,
     },
   ],
 
-  // FLIPPED LAYOUT: Old holes 10-18 are now 1-9, old holes 1-9 are now 10-18
-  holeData: [
-    // === FRONT NINE (formerly back 9) ===
-    {
-      holeNumber: 1,
-      par: 5,
-      handicapIndex: 6,
-      teeBoxes: [
-        { name: 'Black', yards: 529 },
-        { name: 'Blue', yards: 498 },
-        { name: 'White', yards: 471 },
-        { name: 'Green', yards: 447 },
-        { name: 'Red', yards: 380 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 2,
-      par: 3,
-      handicapIndex: 16,
-      teeBoxes: [
-        { name: 'Black', yards: 190 },
-        { name: 'Blue', yards: 165 },
-        { name: 'White', yards: 157 },
-        { name: 'Green', yards: 142 },
-        { name: 'Red', yards: 101 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 3,
-      par: 4,
-      handicapIndex: 10,
-      teeBoxes: [
-        { name: 'Black', yards: 418 },
-        { name: 'Blue', yards: 393 },
-        { name: 'White', yards: 378 },
-        { name: 'Green', yards: 346 },
-        { name: 'Red', yards: 315 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 4,
-      par: 3,
-      handicapIndex: 18,
-      teeBoxes: [
-        { name: 'Black', yards: 151 },
-        { name: 'Blue', yards: 134 },
-        { name: 'White', yards: 122 },
-        { name: 'Green', yards: 102 },
-        { name: 'Red', yards: 75 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 5,
-      par: 5,
-      handicapIndex: 2,
-      teeBoxes: [
-        { name: 'Black', yards: 575 },
-        { name: 'Blue', yards: 541 },
-        { name: 'White', yards: 514 },
-        { name: 'Green', yards: 494 },
-        { name: 'Red', yards: 400 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 6,
-      par: 4,
-      handicapIndex: 12,
-      teeBoxes: [
-        { name: 'Black', yards: 422 },
-        { name: 'Blue', yards: 396 },
-        { name: 'White', yards: 374 },
-        { name: 'Green', yards: 343 },
-        { name: 'Red', yards: 311 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 7,
-      par: 4,
-      handicapIndex: 8,
-      teeBoxes: [
-        { name: 'Black', yards: 459 },
-        { name: 'Blue', yards: 430 },
-        { name: 'White', yards: 397 },
-        { name: 'Green', yards: 380 },
-        { name: 'Red', yards: 338 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 8,
-      par: 3,
-      handicapIndex: 14,
-      teeBoxes: [
-        { name: 'Black', yards: 222 },
-        { name: 'Blue', yards: 198 },
-        { name: 'White', yards: 180 },
-        { name: 'Green', yards: 160 },
-        { name: 'Red', yards: 150 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 9,
-      par: 5,
-      handicapIndex: 4,
-      teeBoxes: [
-        { name: 'Black', yards: 560 },
-        { name: 'Blue', yards: 523 },
-        { name: 'White', yards: 490 },
-        { name: 'Green', yards: 463 },
-        { name: 'Red', yards: 422 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-
-    // === BACK NINE (formerly front 9) ===
-    {
-      holeNumber: 10,
-      par: 5,
-      handicapIndex: 3,
-      teeBoxes: [
-        { name: 'Black', yards: 555 },
-        { name: 'Blue', yards: 532 },
-        { name: 'White', yards: 498 },
-        { name: 'Green', yards: 459 },
-        { name: 'Red', yards: 416 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 11,
-      par: 4,
-      handicapIndex: 11,
-      teeBoxes: [
-        { name: 'Black', yards: 320 },
-        { name: 'Blue', yards: 293 },
-        { name: 'White', yards: 285 },
-        { name: 'Green', yards: 273 },
-        { name: 'Red', yards: 247 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 12,
-      par: 4,
-      handicapIndex: 5,
-      teeBoxes: [
-        { name: 'Black', yards: 448 },
-        { name: 'Blue', yards: 421 },
-        { name: 'White', yards: 396 },
-        { name: 'Green', yards: 370 },
-        { name: 'Red', yards: 328 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 13,
-      par: 3,
-      handicapIndex: 15,
-      teeBoxes: [
-        { name: 'Black', yards: 241 },
-        { name: 'Blue', yards: 212 },
-        { name: 'White', yards: 199 },
-        { name: 'Green', yards: 179 },
-        { name: 'Red', yards: 132 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 14,
-      par: 4,
-      handicapIndex: 7,
-      teeBoxes: [
-        { name: 'Black', yards: 427 },
-        { name: 'Blue', yards: 401 },
-        { name: 'White', yards: 378 },
-        { name: 'Green', yards: 352 },
-        { name: 'Red', yards: 313 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 15,
-      par: 5,
-      handicapIndex: 1,
-      teeBoxes: [
-        { name: 'Black', yards: 543 },
-        { name: 'Blue', yards: 509 },
-        { name: 'White', yards: 482 },
-        { name: 'Green', yards: 443 },
-        { name: 'Red', yards: 406 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 16,
-      par: 4,
-      handicapIndex: 13,
-      teeBoxes: [
-        { name: 'Black', yards: 304 },
-        { name: 'Blue', yards: 273 },
-        { name: 'White', yards: 256 },
-        { name: 'Green', yards: 233 },
-        { name: 'Red', yards: 190 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 17,
-      par: 3,
-      handicapIndex: 17,
-      teeBoxes: [
-        { name: 'Black', yards: 158 },
-        { name: 'Blue', yards: 131 },
-        { name: 'White', yards: 108 },
-        { name: 'Green', yards: 108 },
-        { name: 'Red', yards: 108 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-    {
-      holeNumber: 18,
-      par: 4,
-      handicapIndex: 9,
-      teeBoxes: [
-        { name: 'Black', yards: 403 },
-        { name: 'Blue', yards: 378 },
-        { name: 'White', yards: 348 },
-        { name: 'Green', yards: 295 },
-        { name: 'Red', yards: 204 },
-      ],
-      teeBoxCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-      greenCoords: { lat: 0, lng: 0 }, // PLACEHOLDER
-    },
-  ],
+  holeData: HOLE_ROWS.map(buildHoleData),
 };
 
-// Helper functions
 export function getHoleByNumber(holeNumber: number) {
   return FOX_CREEK_DATA.holeData.find((h) => h.holeNumber === holeNumber);
 }
@@ -360,4 +220,11 @@ export function calculateFrontNinePar() {
 
 export function calculateBackNinePar() {
   return getBackNine().reduce((sum, hole) => sum + hole.par, 0);
+}
+
+export function sumScorecardYardages(
+  holes: HoleData[],
+  column: keyof ScorecardYardages
+): number {
+  return holes.reduce((sum, hole) => sum + hole.scorecardYardages[column], 0);
 }

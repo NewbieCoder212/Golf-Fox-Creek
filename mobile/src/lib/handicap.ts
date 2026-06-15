@@ -181,7 +181,7 @@ export function calculateHandicapIndex(differentials: number[]): number | null {
  * Get course rating and slope for Fox Creek by tee
  */
 export function getFoxCreekRatings(
-  teeName: TeeName,
+  teeName: string,
   gender: 'mens' | 'womens' = 'mens'
 ): { courseRating: number; slopeRating: number } | null {
   const tee = getTeeRating(teeName);
@@ -211,6 +211,7 @@ export function prepareRoundForSubmission(params: {
   userId: string;
   scores: HoleScore[];
   teePlayed: TeeName;
+  ratingTeeName?: string;
   gender?: 'mens' | 'womens';
   durationSeconds?: number;
   weatherConditions?: string;
@@ -226,10 +227,10 @@ export function prepareRoundForSubmission(params: {
   duration_seconds?: number;
   weather_conditions?: string;
 } | null {
-  const { userId, scores, teePlayed, gender = 'mens', durationSeconds, weatherConditions } = params;
+  const { userId, scores, teePlayed, ratingTeeName, gender = 'mens', durationSeconds, weatherConditions } =
+    params;
 
-  // Get ratings for tee played
-  const ratings = getFoxCreekRatings(teePlayed, gender);
+  const ratings = getFoxCreekRatings(ratingTeeName ?? teePlayed, gender);
   if (!ratings) {
     console.log('[Handicap] Could not get ratings for tee:', teePlayed);
     return null;

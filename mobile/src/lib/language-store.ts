@@ -46,6 +46,9 @@ export const translations = {
     // Contextual Cards
     roundInProgress: 'Round in Progress',
     currentlyOnHole: 'Currently on Hole',
+    continueRound: 'Continue Your Round',
+    resumeScorecard: 'Pick up where you left off',
+    mainMenu: 'Main Menu',
     theTurn: 'The Turn',
     turnPrompt: 'Stop by the canteen for refreshments?',
     viewMenu: 'View Menu',
@@ -123,6 +126,9 @@ export const translations = {
     // Contextual Cards
     roundInProgress: 'Partie en cours',
     currentlyOnHole: 'Actuellement au trou',
+    continueRound: 'Reprendre la partie',
+    resumeScorecard: 'Reprenez où vous en étiez',
+    mainMenu: 'Menu principal',
     theTurn: 'Mi-parcours',
     turnPrompt: 'Arrêtez-vous à la cantine pour des rafraîchissements?',
     viewMenu: 'Voir le menu',

@@ -1,28 +1,27 @@
-import { View, Text, ScrollView, Pressable, TextInput, Alert } from 'react-native';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, MapPin, Clock, AlertTriangle, Coffee, RotateCcw, Flag, Trophy, Timer, Target, Save, X } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Coffee, RotateCcw, Trophy, Timer, Target, Save, X, Trash2, Home } from 'lucide-react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
-  interpolateColor,
-  Easing
 } from 'react-native-reanimated';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useScorecardStore } from '@/lib/scorecard-store';
 import { SponsorBanner } from '@/components/SponsorBanner';
+import { FoxCreekPaperScorecard } from '@/components/FoxCreekPaperScorecard';
+import { ScorecardAssistPanel } from '@/components/ScorecardAssistPanel';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { cn } from '@/lib/cn';
 import { calculateDistance } from '@/lib/geo';
-import type { TeeName } from '@/types';
-
-const DEFAULT_TEE: TeeName = 'White';
+import type { ScorecardTeeName } from '@/types';
+import { scorecardTeeToDbTee } from '@/lib/scorecard-tees';
+import { useTranslations } from '@/lib/language-store';
+import { useTournamentScorecardSession } from '@/hooks/useTournamentScorecardSession';
+import { TournamentScorecardToolbar } from '@/components/TournamentScorecardToolbar';
+import type { TournamentTeamSide } from '@/types';
 
 // Fox Creek Golf Club - Dieppe, NB, Canada
 // GPS coordinates for each hole tee box
@@ -75,9 +74,23 @@ const WARNING_THRESHOLD = 12 * 60; // 12 minutes - yellow warning
 
 export default function ScorecardScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const t = useTranslations();
+  const { id: tournamentId, matchGroupId, round, side } = useLocalSearchParams<{
+    id?: string;
+    matchGroupId?: string;
+    round?: string;
+    side?: TournamentTeamSide;
+  }>();
+  const isTournamentMode = Boolean(tournamentId);
+
+  const tournamentSession = useTournamentScorecardSession(
+    tournamentId
+      ? { id: tournamentId, matchGroupId, round, side }
+      : null
+  );
   const [locationPermission, setLocationPermission] = useState(false);
-  const [editingPlayer, setEditingPlayer] = useState<number | null>(null);
-  const [playerNameInput, setPlayerNameInput] = useState('');
+  const [playerTees, setPlayerTees] = useState<Record<string, ScorecardTeeName>>({});
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const overTimeHapticFired = useRef(false);
 
@@ -106,13 +119,13 @@ export default function ScorecardScreen() {
   const getRelativeToPar = useScorecardStore((s) => s.getRelativeToPar);
   const loadSavedRound = useScorecardStore((s) => s.loadSavedRound);
   const resumeRound = useScorecardStore((s) => s.resumeRound);
-  const discardSavedRound = useScorecardStore((s) => s.discardSavedRound);
   const showRoundSummary = useScorecardStore((s) => s.showRoundSummary);
   const finishRound = useScorecardStore((s) => s.finishRound);
   const saveRoundToHistory = useScorecardStore((s) => s.saveRoundToHistory);
   const completeRound = useScorecardStore((s) => s.completeRound);
   const dismissRoundSummary = useScorecardStore((s) => s.dismissRoundSummary);
   const resetRound = useScorecardStore((s) => s.resetRound);
+  const leaveForMainMenu = useScorecardStore((s) => s.leaveForMainMenu);
   const authUser = useMemberAuthStore((s) => s.user);
   const getTotalScore = useScorecardStore((s) => s.getTotalScore);
   const getCoursePar = useScorecardStore((s) => s.getCoursePar);
@@ -122,8 +135,11 @@ export default function ScorecardScreen() {
   const handleSaveRound = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+    const primaryTee = playerTees[String(players[0]?.id)] ?? 'White';
+    const dbTee = scorecardTeeToDbTee(primaryTee);
+
     if (authUser?.id) {
-      const result = await completeRound(authUser.id, DEFAULT_TEE);
+      const result = await completeRound(authUser.id, dbTee, primaryTee);
       if (!result.success && result.error) {
         Alert.alert('Round Saved Locally', result.error);
       }
@@ -134,8 +150,58 @@ export default function ScorecardScreen() {
     await resetRound();
   };
 
-  // Check for saved round on mount
+  const handleDeleteRound = () => {
+    Alert.alert(
+      'Delete Round?',
+      'All scores will be cleared and you will return to a blank scorecard. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Round',
+          style: 'destructive',
+          onPress: async () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            await resetRound();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleGoToMainMenu = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isTournamentMode) {
+      await tournamentSession.persistSession();
+    } else {
+      await leaveForMainMenu();
+    }
+    router.push('/(tabs)/' as never);
+  };
+
+  const handleTournamentSync = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const result = await tournamentSession.handleSync();
+    if (result.success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        'Saved',
+        tournamentSession.activeMatchGroup
+          ? 'Scores synced. Match hole wins updated automatically.'
+          : 'Tournament scores synced to Supabase.'
+      );
+      return;
+    }
+    Alert.alert('Save failed', result.error ?? 'Could not sync scores.');
+  };
+
+  const hasRoundProgress = useMemo(
+    () => isTracking || scores.some((hole) => hole.scores.some((score) => score !== null)),
+    [isTracking, scores]
+  );
+
+  // Check for saved round on mount (casual only)
   useEffect(() => {
+    if (isTournamentMode) return;
     const checkSavedRound = async () => {
       try {
         await loadSavedRound();
@@ -144,48 +210,8 @@ export default function ScorecardScreen() {
       }
     };
     checkSavedRound();
-  }, []);
+  }, [isTournamentMode]);
 
-  // Animation for warning state
-  const pulseAnim = useSharedValue(0);
-  const isOverTime = elapsedSeconds >= FIFTEEN_MINUTES;
-  const isWarning = elapsedSeconds >= WARNING_THRESHOLD && !isOverTime;
-
-  // Handle overtime - turn status bar red and send haptic vibrate
-  useEffect(() => {
-    if (isOverTime) {
-      pulseAnim.value = withRepeat(
-        withSequence(
-          withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: 500, easing: Easing.inOut(Easing.ease) })
-        ),
-        -1,
-        false
-      );
-      // Only fire haptic once when first going overtime
-      if (!overTimeHapticFired.current) {
-        overTimeHapticFired.current = true;
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-    } else {
-      pulseAnim.value = 0;
-      overTimeHapticFired.current = false;
-    }
-  }, [isOverTime]);
-
-  const tempoBarStyle = useAnimatedStyle(() => {
-    if (isOverTime) {
-      const backgroundColor = interpolateColor(
-        pulseAnim.value,
-        [0, 1],
-        ['#dc2626', '#991b1b']
-      );
-      return { backgroundColor };
-    }
-    return {};
-  });
-
-  // Timer effect
   useEffect(() => {
     if (!isTracking || isTurnPaused) return;
 
@@ -286,26 +312,65 @@ export default function ScorecardScreen() {
   };
 
   const handleScoreChange = (hole: number, playerId: number, increment: number) => {
-    const currentScore = scores[hole - 1]?.scores[playerId] ?? 0;
+    const holePar = scores[hole - 1]?.par ?? 4;
+    const currentScore = scores[hole - 1]?.scores[playerId] ?? holePar;
     const newScore = Math.max(1, Math.min(15, currentScore + increment));
     setScore(hole, playerId, newScore);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const handlePlayerNameEdit = (playerId: number) => {
-    setEditingPlayer(playerId);
-    setPlayerNameInput(players[playerId]?.name ?? '');
-  };
+  const isOverTime = elapsedSeconds >= FIFTEEN_MINUTES;
+  const isWarning = elapsedSeconds >= WARNING_THRESHOLD && !isOverTime;
 
-  const handlePlayerNameSave = () => {
-    if (editingPlayer !== null && playerNameInput.trim()) {
-      setPlayerName(editingPlayer, playerNameInput.trim());
+  useEffect(() => {
+    if (isOverTime && !overTimeHapticFired.current) {
+      overTimeHapticFired.current = true;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } else if (!isOverTime) {
+      overTimeHapticFired.current = false;
     }
-    setEditingPlayer(null);
-    setPlayerNameInput('');
-  };
+  }, [isOverTime]);
 
   const currentHoleData = scores[currentHole - 1];
+
+  const paperPlayers = useMemo(
+    () =>
+      players.map((player) => ({
+        id: String(player.id),
+        name: player.name,
+        tee: playerTees[String(player.id)] ?? 'White',
+      })),
+    [players, playerTees]
+  );
+
+  const paperScores = useMemo(() => {
+    const map: Record<string, Record<number, number | null>> = {};
+    players.forEach((player, index) => {
+      map[String(player.id)] = {};
+      scores.forEach((holeScore) => {
+        map[String(player.id)][holeScore.hole] = holeScore.scores[index];
+      });
+    });
+    return map;
+  }, [players, scores]);
+
+  const handlePaperScoreChange = (playerId: string, hole: number, score: number | null) => {
+    const playerIndex = players.findIndex((p) => String(p.id) === playerId);
+    if (playerIndex >= 0) {
+      setScore(hole, playerIndex, score);
+    }
+  };
+
+  const handlePaperNameChange = (playerId: string, name: string) => {
+    const playerIndex = players.findIndex((p) => String(p.id) === playerId);
+    if (playerIndex >= 0 && name.trim()) {
+      setPlayerName(playerIndex, name.trim());
+    }
+  };
+
+  const handlePaperTeeChange = (playerId: string, tee: ScorecardTeeName) => {
+    setPlayerTees((prev) => ({ ...prev, [playerId]: tee }));
+  };
 
   // Format turn time remaining
   const formatTurnTime = (seconds: number): string => {
@@ -314,10 +379,54 @@ export default function ScorecardScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  if (isTournamentMode && tournamentSession.isLoading) {
+    return (
+      <View className="flex-1 bg-[#0c0c0c] items-center justify-center">
+        <ActivityIndicator color="#a3e635" />
+      </View>
+    );
+  }
+
+  const assistPanelProps = isTournamentMode
+    ? {
+        currentHole: tournamentSession.currentHole,
+        holePar: tournamentSession.currentHolePar,
+        elapsedSeconds: 0,
+        isOverTime: false,
+        isWarning: false,
+        isTracking: false,
+        locationPermission: false,
+        players: tournamentSession.assistPlayers,
+        holeScores: tournamentSession.currentHoleScores,
+        onSetCurrentHole: tournamentSession.setCurrentHole,
+        onScoreAdjust: tournamentSession.handleTournamentScoreAdjust,
+        onTriggerHoleComplete: () => {},
+        formatTime,
+        getRelativeToPar: tournamentSession.getTournamentRelativeToPar,
+      }
+    : {
+        currentHole,
+        holePar: currentHoleData?.par ?? 4,
+        elapsedSeconds,
+        isOverTime,
+        isWarning,
+        isTracking,
+        locationPermission,
+        players,
+        holeScores: currentHoleData?.scores ?? [],
+        onSetCurrentHole: setCurrentHole,
+        onScoreAdjust: (playerIndex: number, delta: number) =>
+          handleScoreChange(currentHole, playerIndex, delta),
+        onTriggerHoleComplete: () => triggerHoleComplete(currentHole),
+        formatTime,
+        getRelativeToPar,
+        onDeleteRound: hasRoundProgress ? handleDeleteRound : undefined,
+      };
+
   return (
     <View className="flex-1 bg-[#0c0c0c]">
       {/* Resume Round Prompt */}
-      {showResumePrompt && (
+      {!isTournamentMode && showResumePrompt && (
         <Animated.View
           entering={FadeIn.duration(300)}
           style={{ paddingTop: insets.top }}
@@ -339,13 +448,13 @@ export default function ScorecardScreen() {
 
               <View className="p-4 flex-row gap-3">
                 <Pressable
-                  onPress={() => {
+                  onPress={async () => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    discardSavedRound();
+                    await resetRound();
                   }}
                   className="flex-1 bg-neutral-800 rounded-xl py-4 items-center active:opacity-80"
                 >
-                  <Text className="text-neutral-300 font-medium">Start New</Text>
+                  <Text className="text-neutral-300 font-medium">Delete & Start New</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
@@ -363,7 +472,7 @@ export default function ScorecardScreen() {
       )}
 
       {/* Score Prompt Modal */}
-      {isScorePromptVisible && pendingHoleTransition !== null && (
+      {!isTournamentMode && isScorePromptVisible && pendingHoleTransition !== null && (
         <Animated.View
           entering={FadeIn.duration(300)}
           style={{ paddingTop: insets.top }}
@@ -483,7 +592,7 @@ export default function ScorecardScreen() {
       )}
 
       {/* The Turn Overlay */}
-      {isTurnPaused && (
+      {!isTournamentMode && isTurnPaused && (
         <Animated.View
           entering={FadeIn.duration(300)}
           style={{ paddingTop: insets.top }}
@@ -525,301 +634,127 @@ export default function ScorecardScreen() {
         </Animated.View>
       )}
 
-      {/* Tempo Tracker Bar */}
-      <Animated.View
-        style={[
-          {
-            paddingTop: insets.top,
-            backgroundColor: isOverTime ? '#dc2626' : isWarning ? '#ca8a04' : '#1a1a1a',
-          },
-          isOverTime ? tempoBarStyle : {},
-        ]}
-      >
-        <View className="px-5 py-3 flex-row items-center justify-between">
-          <View className="flex-row items-center">
-            {isOverTime ? (
-              <AlertTriangle size={18} color="#fff" />
-            ) : (
-              <Clock size={18} color={isWarning ? '#fef3c7' : '#a3e635'} />
-            )}
-            <Text
-              className={cn(
-                'ml-2 font-mono text-lg font-bold',
-                isOverTime ? 'text-white' : isWarning ? 'text-amber-100' : 'text-lime-400'
-              )}
-            >
-              {formatTime(elapsedSeconds)}
+      <View style={{ paddingTop: insets.top }} className="bg-[#0c0c0c] border-b border-neutral-800">
+        <View className="flex-row items-center justify-between px-4 py-2">
+          <Pressable
+            onPress={handleGoToMainMenu}
+            className="flex-row items-center active:opacity-70"
+          >
+            <Home size={18} color="#a3e635" />
+            <Text className="text-lime-400 font-semibold text-sm ml-2">{t.mainMenu}</Text>
+          </Pressable>
+          {!isTournamentMode && hasRoundProgress ? (
+            <Text className="text-neutral-500 text-xs">
+              Hole {currentHole}/18 · saved on exit
             </Text>
-          </View>
+          ) : !isTournamentMode ? null : (
+            <Text className="text-neutral-500 text-xs">
+              Hole {tournamentSession.currentHole}/18 · saved on exit
+            </Text>
+          )}
+        </View>
+        {isTournamentMode && tournamentSession.tournament ? (
+          <TournamentScorecardToolbar
+            tournament={tournamentSession.tournament}
+            roundNumber={tournamentSession.roundNumber}
+            isDirty={tournamentSession.isDirty}
+            onRoundChange={tournamentSession.handleRoundChange}
+          />
+        ) : null}
+        <ScorecardAssistPanel {...assistPanelProps} />
+      </View>
 
-          <View className="flex-row items-center">
-            {isTracking && (
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  triggerHoleComplete(currentHole);
-                }}
-                className="flex-row items-center bg-neutral-800/80 px-2 py-1 rounded-lg mr-3 active:opacity-60"
-              >
-                <Flag size={12} color="#737373" />
-                <Text className="text-neutral-500 text-xs ml-1">Advance</Text>
-              </Pressable>
-            )}
-            <View className="flex-row items-center mr-4">
-              <MapPin size={14} color={locationPermission ? '#a3e635' : '#525252'} />
-              <Text className="text-neutral-500 text-xs ml-1">
-                {locationPermission ? 'GPS Active' : 'GPS Off'}
-              </Text>
-            </View>
-            <Text className="text-neutral-400 text-sm">
-              Hole <Text className="text-white font-bold">{currentHole}</Text>/18
-            </Text>
-          </View>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          isTournamentMode ? { paddingBottom: insets.bottom + 100 } : undefined
+        }
+      >
+        <View className="mx-4 mt-4">
+          <SponsorBanner placementType="scorecard_header" />
         </View>
 
-        {isOverTime && (
-          <View className="bg-red-900/50 px-5 py-2">
-            <Text className="text-red-200 text-xs text-center font-medium">
-              Pace Alert: Please pick up the pace to maintain course flow
-            </Text>
-          </View>
-        )}
-      </Animated.View>
-
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Current Hole Card */}
-        <Animated.View entering={FadeIn.duration(400)} className="mx-5 mt-5">
-          <View className="bg-[#141414] rounded-2xl border border-neutral-800 overflow-hidden">
-            {/* Hole Header */}
-            <View className="flex-row items-center justify-between p-4 border-b border-neutral-800">
-              <Pressable
-                onPress={() => currentHole > 1 && setCurrentHole(currentHole - 1)}
-                disabled={currentHole === 1}
-                className="p-2 active:opacity-50"
-              >
-                <ChevronLeft size={24} color={currentHole === 1 ? '#404040' : '#a3e635'} />
-              </Pressable>
-
-              <View className="items-center">
-                <Text className="text-neutral-500 text-xs uppercase tracking-widest">Hole</Text>
-                <Text className="text-white text-4xl font-bold">{currentHole}</Text>
-                <Text className="text-lime-400 text-sm font-medium">
-                  Par {currentHoleData?.par}
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() => currentHole < 18 && setCurrentHole(currentHole + 1)}
-                disabled={currentHole === 18}
-                className="p-2 active:opacity-50"
-              >
-                <ChevronRight size={24} color={currentHole === 18 ? '#404040' : '#a3e635'} />
-              </Pressable>
-            </View>
-
-            {/* Score Grid */}
-            <View className="p-4">
-              {players.map((player, index) => {
-                const score = currentHoleData?.scores[index];
-                const relativeToPar = getRelativeToPar(index);
-
-                return (
-                  <View
-                    key={player.id}
-                    className={cn(
-                      'flex-row items-center py-3',
-                      index < players.length - 1 && 'border-b border-neutral-800/50'
-                    )}
-                  >
-                    {/* Player Info */}
-                    <Pressable
-                      onPress={() => handlePlayerNameEdit(index)}
-                      className="flex-row items-center flex-1 active:opacity-70"
-                    >
-                      <View className="w-10 h-10 rounded-full bg-neutral-800 items-center justify-center mr-3">
-                        <Text className="text-lime-400 font-bold text-sm">
-                          {player.initials}
-                        </Text>
-                      </View>
-                      <View>
-                        <Text className="text-white font-medium">{player.name}</Text>
-                        <Text
-                          className={cn(
-                            'text-xs',
-                            relativeToPar === 0
-                              ? 'text-neutral-500'
-                              : relativeToPar > 0
-                              ? 'text-red-400'
-                              : 'text-lime-400'
-                          )}
-                        >
-                          {relativeToPar === 0
-                            ? 'E'
-                            : relativeToPar > 0
-                            ? `+${relativeToPar}`
-                            : relativeToPar}
-                        </Text>
-                      </View>
-                    </Pressable>
-
-                    {/* Score Controls */}
-                    <View className="flex-row items-center">
-                      <Pressable
-                        onPress={() => handleScoreChange(currentHole, index, -1)}
-                        className="w-10 h-10 rounded-full bg-neutral-800 items-center justify-center active:bg-neutral-700"
-                      >
-                        <Text className="text-lime-400 text-xl font-bold">−</Text>
-                      </Pressable>
-
-                      <View className="w-16 items-center">
-                        <Text
-                          className={cn(
-                            'text-3xl font-bold',
-                            score === null
-                              ? 'text-neutral-600'
-                              : score === currentHoleData?.par
-                              ? 'text-white'
-                              : score !== undefined && currentHoleData?.par !== undefined && score < currentHoleData.par
-                              ? 'text-lime-400'
-                              : 'text-red-400'
-                          )}
-                        >
-                          {score ?? '–'}
-                        </Text>
-                      </View>
-
-                      <Pressable
-                        onPress={() => handleScoreChange(currentHole, index, 1)}
-                        className="w-10 h-10 rounded-full bg-neutral-800 items-center justify-center active:bg-neutral-700"
-                      >
-                        <Text className="text-lime-400 text-xl font-bold">+</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
+        <Animated.View entering={FadeIn.duration(400)} className="mx-4 mt-4">
+          <FoxCreekPaperScorecard
+            players={isTournamentMode ? tournamentSession.paperPlayers : paperPlayers}
+            scores={isTournamentMode && tournamentSession.isTeamFormat ? {} : isTournamentMode ? tournamentSession.paperScores : paperScores}
+            currentHole={isTournamentMode ? tournamentSession.currentHole : currentHole}
+            onHoleSelect={isTournamentMode ? tournamentSession.setCurrentHole : setCurrentHole}
+            onNameChange={isTournamentMode ? undefined : handlePaperNameChange}
+            onTeeChange={isTournamentMode ? undefined : handlePaperTeeChange}
+            onScoreChange={(playerId, hole, score) => {
+              if (isTournamentMode) {
+                if (score !== null) {
+                  tournamentSession.setPlayerGross(playerId, hole, score);
+                }
+              } else {
+                handlePaperScoreChange(playerId, hole, score);
+              }
+            }}
+            netScores={
+              isTournamentMode && !tournamentSession.isTeamFormat
+                ? tournamentSession.paperNetScores
+                : undefined
+            }
+            showNetColumn={isTournamentMode && !tournamentSession.isTeamFormat}
+            teamMode={isTournamentMode && tournamentSession.isTeamFormat}
+            teamLabel={tournamentSession.teamName ?? 'Team'}
+            teamScores={isTournamentMode ? tournamentSession.teamGrossScores : undefined}
+            onTeamScoreChange={
+              isTournamentMode ? tournamentSession.setTeamGross : undefined
+            }
+            bestBallByHole={
+              isTournamentMode ? tournamentSession.bestBallByHole : undefined
+            }
+          />
         </Animated.View>
 
-        <View className="mx-5 mt-4">
-          <SponsorBanner placementType="hole_sponsor" holeNumber={currentHole} />
+        <View className="mx-4 mt-4">
+          <SponsorBanner
+            placementType="hole_sponsor"
+            holeNumber={isTournamentMode ? tournamentSession.currentHole : currentHole}
+          />
         </View>
 
-        {/* Full Scorecard */}
-        <View className="mx-5 mt-6 mb-8">
-          <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-3">
-            Full Scorecard
-          </Text>
+        {/* Round actions */}
+        {!isTournamentMode && hasRoundProgress && !showRoundSummary && (
+          <View className="mx-5 mb-4 gap-3">
+            {isTracking && !(currentHole === 18 && scores[17]?.scores.some((s) => s !== null)) && (
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  finishRound();
+                }}
+                className="bg-neutral-800 border border-neutral-700 rounded-xl py-3 items-center active:opacity-70"
+              >
+                <Text className="text-neutral-400 font-medium">End Round Early</Text>
+              </Pressable>
+            )}
 
-          <View className="bg-[#141414] rounded-2xl border border-neutral-800 overflow-hidden">
-            {/* Header Row */}
-            <View className="flex-row bg-[#1a1a1a] border-b border-neutral-800">
-              <View className="w-14 py-3 items-center border-r border-neutral-800">
-                <Text className="text-neutral-500 text-xs font-medium">Hole</Text>
-              </View>
-              <View className="w-12 py-3 items-center border-r border-neutral-800">
-                <Text className="text-neutral-500 text-xs font-medium">Par</Text>
-              </View>
-              {players.map((player, index) => (
-                <View key={player.id} className="flex-1 py-3 items-center">
-                  <Text className="text-lime-400 text-xs font-bold">{player.initials}</Text>
-                </View>
-              ))}
-            </View>
+            {isTracking && currentHole === 18 && scores[17]?.scores.some((s) => s !== null) && (
+              <Pressable
+                onPress={() => {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  finishRound();
+                }}
+                className="bg-lime-400 rounded-xl py-4 items-center active:opacity-80"
+              >
+                <Text className="text-black font-bold text-lg">Finish Round</Text>
+              </Pressable>
+            )}
 
-            {/* Score Rows */}
-            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
-              {scores.map((hole, holeIndex) => (
-                <Pressable
-                  key={hole.hole}
-                  onPress={() => setCurrentHole(hole.hole)}
-                  className={cn(
-                    'flex-row border-b border-neutral-800/50',
-                    hole.hole === currentHole && 'bg-lime-400/5'
-                  )}
-                >
-                  <View
-                    className={cn(
-                      'w-14 py-3 items-center border-r border-neutral-800/50',
-                      hole.hole === currentHole && 'bg-lime-400/10'
-                    )}
-                  >
-                    <Text
-                      className={cn(
-                        'font-bold',
-                        hole.hole === currentHole ? 'text-lime-400' : 'text-white'
-                      )}
-                    >
-                      {hole.hole}
-                    </Text>
-                  </View>
-                  <View className="w-12 py-3 items-center border-r border-neutral-800/50">
-                    <Text className="text-neutral-500">{hole.par}</Text>
-                  </View>
-                  {hole.scores.map((score, playerIndex) => (
-                    <View key={playerIndex} className="flex-1 py-3 items-center">
-                      <Text
-                        className={cn(
-                          'font-medium',
-                          score === null
-                            ? 'text-neutral-700'
-                            : score === hole.par
-                            ? 'text-white'
-                            : score < hole.par
-                            ? 'text-lime-400'
-                            : 'text-red-400'
-                        )}
-                      >
-                        {score ?? '–'}
-                      </Text>
-                    </View>
-                  ))}
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            {/* Totals Row */}
-            <View className="flex-row bg-[#1a1a1a] border-t border-neutral-700">
-              <View className="w-14 py-3 items-center border-r border-neutral-800">
-                <Text className="text-neutral-400 text-xs font-bold">Total</Text>
-              </View>
-              <View className="w-12 py-3 items-center border-r border-neutral-800">
-                <Text className="text-neutral-400 font-bold">72</Text>
-              </View>
-              {players.map((player, index) => {
-                const total = useScorecardStore.getState().getTotalScore(index);
-                const relativeToPar = useScorecardStore.getState().getRelativeToPar(index);
-                return (
-                  <View key={player.id} className="flex-1 py-3 items-center">
-                    <Text className="text-white font-bold">{total || '–'}</Text>
-                    {total > 0 && (
-                      <Text
-                        className={cn(
-                          'text-xs',
-                          relativeToPar === 0
-                            ? 'text-neutral-500'
-                            : relativeToPar > 0
-                            ? 'text-red-400'
-                            : 'text-lime-400'
-                        )}
-                      >
-                        {relativeToPar === 0
-                          ? 'E'
-                          : relativeToPar > 0
-                          ? `+${relativeToPar}`
-                          : relativeToPar}
-                      </Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
+            <Pressable
+              onPress={handleDeleteRound}
+              className="flex-row items-center justify-center border border-red-900/50 bg-red-950/30 rounded-xl py-3 active:opacity-70"
+            >
+              <Trash2 size={16} color="#f87171" />
+              <Text className="text-red-400 font-medium ml-2">Delete Round</Text>
+            </Pressable>
           </View>
-        </View>
+        )}
 
-        {/* Start Round Button */}
-        {!isTracking && !showRoundSummary && (
+        {!isTournamentMode && !hasRoundProgress && !showRoundSummary && (
           <View className="mx-5 mb-8">
             <Pressable
               onPress={handleStartRound}
@@ -830,41 +765,33 @@ export default function ScorecardScreen() {
           </View>
         )}
 
-        {/* End Round Button - Shows when tracking and not on hole 18 */}
-        {isTracking && !(currentHole === 18 && scores[17]?.scores.some((s) => s !== null)) && (
-          <View className="mx-5 mb-4">
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                finishRound();
-              }}
-              className="bg-neutral-800 border border-neutral-700 rounded-xl py-3 items-center active:opacity-70"
-            >
-              <Text className="text-neutral-400 font-medium">End Round Early</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Finish Round Button - Shows when hole 18 has scores */}
-        {isTracking && currentHole === 18 && scores[17]?.scores.some((s) => s !== null) && (
-          <View className="mx-5 mb-8">
-            <Pressable
-              onPress={() => {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                finishRound();
-              }}
-              className="bg-lime-400 rounded-xl py-4 items-center active:opacity-80"
-            >
-              <Text className="text-black font-bold text-lg">Finish Round</Text>
-            </Pressable>
-          </View>
-        )}
-
         <View className="h-8" />
       </ScrollView>
 
+      {isTournamentMode ? (
+        <View
+          style={{ paddingBottom: insets.bottom + 12 }}
+          className="absolute bottom-0 left-0 right-0 bg-[#141414] border-t border-neutral-800 px-5 pt-4"
+        >
+          <Pressable
+            onPress={handleTournamentSync}
+            disabled={tournamentSession.isSyncing}
+            className="flex-row items-center justify-center bg-lime-600 rounded-xl py-4 active:opacity-80"
+          >
+            {tournamentSession.isSyncing ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Save size={18} color="#fff" />
+                <Text className="text-white font-bold text-base ml-2">Sync to Supabase</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      ) : null}
+
       {/* Round Summary Modal */}
-      {showRoundSummary && (
+      {!isTournamentMode && showRoundSummary && (
         <Animated.View
           entering={FadeIn.duration(300)}
           style={{ paddingTop: insets.top }}
@@ -1025,23 +952,11 @@ export default function ScorecardScreen() {
                 </Pressable>
 
                 <Pressable
-                  onPress={async () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    await resetRound();
-                  }}
-                  className="bg-neutral-800 rounded-xl py-4 items-center mb-3 active:opacity-80"
+                  onPress={handleDeleteRound}
+                  className="flex-row items-center justify-center bg-neutral-800 rounded-xl py-4 mb-3 active:opacity-80"
                 >
-                  <Text className="text-neutral-300 font-medium">Start New Round</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={async () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    await resetRound();
-                  }}
-                  className="py-3 items-center active:opacity-50"
-                >
-                  <Text className="text-red-400 text-sm">Discard Round</Text>
+                  <Trash2 size={18} color="#f87171" />
+                  <Text className="text-red-400 font-medium ml-2">Delete Round & Return to Scorecard</Text>
                 </Pressable>
               </Animated.View>
             </View>
@@ -1051,35 +966,6 @@ export default function ScorecardScreen() {
         </Animated.View>
       )}
 
-      {/* Player Name Edit Modal */}
-      {editingPlayer !== null && (
-        <Pressable
-          onPress={handlePlayerNameSave}
-          className="absolute inset-0 bg-black/80 items-center justify-center"
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            className="bg-[#1a1a1a] rounded-2xl p-6 mx-8 w-full max-w-sm border border-neutral-800"
-          >
-            <Text className="text-white text-lg font-bold mb-4">Edit Player Name</Text>
-            <TextInput
-              value={playerNameInput}
-              onChangeText={setPlayerNameInput}
-              placeholder="Enter name"
-              placeholderTextColor="#525252"
-              autoFocus
-              className="bg-neutral-900 text-white px-4 py-3 rounded-xl border border-neutral-700 mb-4"
-              onSubmitEditing={handlePlayerNameSave}
-            />
-            <Pressable
-              onPress={handlePlayerNameSave}
-              className="bg-lime-400 rounded-xl py-3 items-center active:opacity-80"
-            >
-              <Text className="text-black font-bold">Save</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      )}
     </View>
   );
 }

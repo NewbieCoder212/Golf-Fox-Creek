@@ -649,7 +649,7 @@ export default function TournamentDetailScreen() {
       >
         <View className="flex-row gap-3">
           <Pressable
-            onPress={() => router.push(`/tournament/scorecard?id=${id}`)}
+            onPress={() => router.push(`/(tabs)/scorecard?id=${id}`)}
             disabled={!canEnterScores}
             className={cn(
               'flex-1 flex-row items-center justify-center rounded-xl py-3.5',

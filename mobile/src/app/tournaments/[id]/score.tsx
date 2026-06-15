@@ -1,3 +1,3 @@
-import TournamentDigitalScorecardScreen from '@/components/TournamentDigitalScorecardScreen';
+import TournamentScorecardRedirect from '@/app/tournament/scorecard';
 
-export default TournamentDigitalScorecardScreen;
+export default TournamentScorecardRedirect;

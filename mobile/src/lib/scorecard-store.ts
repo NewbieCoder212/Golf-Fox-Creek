@@ -93,9 +93,12 @@ interface ScorecardState {
   dismissRoundSummary: () => void;
   saveRound: () => Promise<void>;
   loadSavedRound: () => Promise<void>;
-  resumeRound: () => void;
+    resumeRound: () => Promise<void>;
   discardSavedRound: () => Promise<void>;
   resetRound: () => Promise<void>;
+  hasRoundProgress: () => boolean;
+  leaveForMainMenu: () => Promise<void>;
+  refreshUnfinishedRoundStatus: () => Promise<void>;
 
   // Geofence actions
   setCheckedIn: (checkedIn: boolean) => void;
@@ -103,7 +106,11 @@ interface ScorecardState {
 
   // Auto-start and complete round (geofence triggered)
   autoStartRound: () => void;
-  completeRound: (userId: string, teePlayed: TeeName) => Promise<{
+  completeRound: (
+    userId: string,
+    teePlayed: TeeName,
+    ratingTeeName?: string
+  ) => Promise<{
     success: boolean;
     roundId?: string;
     pointsEarned?: number;
@@ -148,6 +155,16 @@ const createInitialScores = (): HoleScore[] => {
     scores: [null, null, null, null],
   }));
 };
+
+function savedDataHasProgress(parsed: SavedRoundData): boolean {
+  if (parsed.isTracking || parsed.isTurnPaused) return true;
+  const hasScores = parsed.scores.some((hole) => hole.scores.some((score) => score !== null));
+  if (hasScores) return true;
+  const namesChanged = parsed.players.some(
+    (p, i) => p.name !== DEFAULT_PLAYERS[i]?.name
+  );
+  return namesChanged;
+}
 
 export const useScorecardStore = create<ScorecardState>((set, get) => ({
   players: DEFAULT_PLAYERS,
@@ -423,10 +440,19 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
 
   saveRound: async () => {
     try {
-      const { players, scores, currentHole, holeStartTime, elapsedSeconds, isTracking, isTurnPaused, turnTimeRemaining, roundStartTime } = get();
+      if (!get().hasRoundProgress()) return;
 
-      // Only save if tracking is active (round in progress)
-      if (!isTracking && !isTurnPaused) return;
+      const {
+        players,
+        scores,
+        currentHole,
+        holeStartTime,
+        elapsedSeconds,
+        isTracking,
+        isTurnPaused,
+        turnTimeRemaining,
+        roundStartTime,
+      } = get();
 
       const dataToSave: SavedRoundData = {
         players,
@@ -442,24 +468,56 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
       };
 
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+      set({ hasUnfinishedRound: true });
     } catch (error) {
       console.log('Error saving round:', error);
     }
   },
 
+  hasRoundProgress: () => {
+    const { scores, isTracking, isTurnPaused, players } = get();
+    if (isTracking || isTurnPaused) return true;
+    const hasScores = scores.some((hole) => hole.scores.some((score) => score !== null));
+    if (hasScores) return true;
+    return players.some((p, i) => p.name !== DEFAULT_PLAYERS[i]?.name);
+  },
+
+  leaveForMainMenu: async () => {
+    if (!get().hasRoundProgress()) return;
+    await get().saveRound();
+    set({ showResumePrompt: false });
+  },
+
+  refreshUnfinishedRoundStatus: async () => {
+    try {
+      if (get().hasRoundProgress()) {
+        set({ hasUnfinishedRound: true });
+        return;
+      }
+      const savedData = await AsyncStorage.getItem(STORAGE_KEY);
+      if (!savedData) {
+        set({ hasUnfinishedRound: false });
+        return;
+      }
+      const parsed: SavedRoundData = JSON.parse(savedData);
+      set({ hasUnfinishedRound: savedDataHasProgress(parsed) });
+    } catch (error) {
+      console.log('Error refreshing unfinished round status:', error);
+    }
+  },
+
   loadSavedRound: async () => {
     try {
+      if (get().hasRoundProgress()) {
+        set({ hasUnfinishedRound: true, showResumePrompt: false });
+        return;
+      }
+
       const savedData = await AsyncStorage.getItem(STORAGE_KEY);
       if (savedData) {
         const parsed: SavedRoundData = JSON.parse(savedData);
 
-        // Check if round has any scores entered (not just started)
-        const hasScores = parsed.scores.some(hole =>
-          hole.scores.some(score => score !== null)
-        );
-
-        // Only show resume prompt if round was in progress with scores
-        if ((parsed.isTracking || parsed.isTurnPaused) || hasScores) {
+        if (savedDataHasProgress(parsed)) {
           set({
             hasUnfinishedRound: true,
             showResumePrompt: true,
@@ -575,7 +633,7 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
   },
 
   // Complete round and save to database
-  completeRound: async (userId: string, teePlayed: TeeName) => {
+  completeRound: async (userId: string, teePlayed: TeeName, ratingTeeName?: string) => {
     const { scores, roundStartTime } = get();
     const coursePar = get().getCoursePar();
     const totalTime = get().getTotalRoundTime();
@@ -599,6 +657,7 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
         userId,
         scores: holeScores,
         teePlayed,
+        ratingTeeName,
         durationSeconds: totalTime,
       });
 

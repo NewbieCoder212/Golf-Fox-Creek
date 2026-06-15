@@ -10,7 +10,7 @@ import type {
   TournamentFormat,
   TournamentScore,
 } from '@/types';
-import { computeMatchHoleResults } from './tournament-match-scoring';
+import { computeMatchHoleResults, computeMatchPoints } from './tournament-match-scoring';
 import { useAdminAuthStore } from './admin-auth-store';
 import { useMemberAuthStore } from './member-auth-store';
 
@@ -197,7 +197,51 @@ export async function syncMatchHoleResults(params: {
     body: rows as unknown as Record<string, unknown>[],
   });
 
-  return saved ?? [];
+  const holeResults = saved ?? [];
+  await computeAndSaveMatchResults({
+    matchGroup: params.matchGroup,
+    format: params.format,
+    scores: params.scores,
+    holeResults,
+  });
+
+  return holeResults;
+}
+
+export async function computeAndSaveMatchResults(params: {
+  matchGroup: TournamentMatchGroup;
+  format: TournamentFormat;
+  scores: TournamentScore[];
+  holeResults: TournamentMatchHoleResult[];
+}): Promise<TournamentMatchGroup | null> {
+  const points = computeMatchPoints(params);
+
+  const result = await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+    method: 'PATCH',
+    query: { id: `eq.${params.matchGroup.id}` },
+    body: {
+      match_winner: points.match_winner,
+      match_points_a: points.match_points_a,
+      match_points_b: points.match_points_b,
+    },
+  });
+
+  return result?.[0] ?? null;
+}
+
+export function getAssignedPlayerIdsForRound(
+  groups: TournamentMatchGroup[],
+  roundNumber: number,
+  excludeGroupId?: string
+): Set<string> {
+  const assigned = new Set<string>();
+  for (const group of groups) {
+    if (group.round_number !== roundNumber) continue;
+    if (excludeGroupId && group.id === excludeGroupId) continue;
+    group.side_a_player_ids.forEach((id) => assigned.add(id));
+    group.side_b_player_ids.forEach((id) => assigned.add(id));
+  }
+  return assigned;
 }
 
 export function resolveHoleWinner(
@@ -207,11 +251,6 @@ export function resolveHoleWinner(
   if (sideANet < sideBNet) return 'side_a';
   if (sideBNet < sideANet) return 'side_b';
   return 'tie';
-}
-
-/** Team formats: one net score per side wins the hole. Singles: compare best net per side (2v2). */
-export function isTeamHoleWinFormat(format: TournamentFormat): boolean {
-  return format !== 'singles';
 }
 
 export function countMatchHoleWins(results: TournamentMatchHoleResult[]): {

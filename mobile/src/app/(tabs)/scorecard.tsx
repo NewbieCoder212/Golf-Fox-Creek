@@ -171,7 +171,11 @@ export default function ScorecardScreen() {
   const handleGoToMainMenu = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (isTournamentMode) {
-      await tournamentSession.persistSession();
+      if (tournamentSession.isDirty) {
+        await tournamentSession.handleSync();
+      } else {
+        await tournamentSession.persistSession();
+      }
     } else {
       await leaveForMainMenu();
     }
@@ -658,6 +662,7 @@ export default function ScorecardScreen() {
             tournament={tournamentSession.tournament}
             roundNumber={tournamentSession.roundNumber}
             isDirty={tournamentSession.isDirty}
+            teeTimeLabel={tournamentSession.matchTeeTimeLabel}
             onRoundChange={tournamentSession.handleRoundChange}
           />
         ) : null}

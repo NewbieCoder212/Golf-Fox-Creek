@@ -84,7 +84,9 @@ export function scheduleNeedsTeams(schedule: TournamentDaySchedule[]): boolean {
 }
 
 export function scheduleHasSinglesRound(schedule: TournamentDaySchedule[]): boolean {
-  return flattenRoundFormats(schedule).includes('singles');
+  return flattenRoundFormats(schedule).some(
+    (format) => format === 'singles' || format === 'match_play'
+  );
 }
 
 export function createDefaultSchedule(): TournamentDaySchedule[] {

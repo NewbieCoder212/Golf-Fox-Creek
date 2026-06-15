@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HubHeroWelcome } from '@/components/hub/HubHeroWelcome';
 import { HubContextCard } from '@/components/hub/HubContextCard';
 import { HubMyEventsStrip } from '@/components/hub/HubMyEventsStrip';
+import { TournamentLeaderboardCard } from '@/components/TournamentLeaderboardCard';
 import { HubWeatherStrip } from '@/components/hub/HubWeatherStrip';
 import { HubQuickActions } from '@/components/hub/HubQuickActions';
 import { HubPromoBanner } from '@/components/hub/HubPromoBanner';
@@ -25,6 +26,7 @@ import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 import { getGMAnnouncement, getUserProfile, isSupabaseConfigured, signOut } from '@/lib/supabase';
 import { useTranslations } from '@/lib/language-store';
 import { useScorecardStore } from '@/lib/scorecard-store';
+import { getTournamentsForUserList } from '@/lib/tournament-service';
 import type { GMAnnouncement } from '@/types';
 
 const FALLBACK_WEATHER = {
@@ -76,6 +78,15 @@ export default function HomeScreen() {
   const userId = authUser?.id;
 
   const refreshUnfinishedRoundStatus = useScorecardStore((s) => s.refreshUnfinishedRoundStatus);
+
+  const { data: activeTournaments = [] } = useQuery({
+    queryKey: ['hubLeaderboardTournament', userId],
+    queryFn: () => getTournamentsForUserList(userId!, { limit: 1 }),
+    enabled: Boolean(userId),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const leaderboardTournamentId = activeTournaments[0]?.id;
 
   useFocusEffect(
     useCallback(() => {
@@ -190,6 +201,12 @@ export default function HomeScreen() {
         >
           <HubMyEventsStrip userId={userId} embedded />
         </HubSection>
+
+        {leaderboardTournamentId ? (
+          <HubSection title="Tournament Standings">
+            <TournamentLeaderboardCard tournamentId={leaderboardTournamentId} compact />
+          </HubSection>
+        ) : null}
 
         <HubSection title={t.practiceMode}>
           <TeeTimeInput embedded />

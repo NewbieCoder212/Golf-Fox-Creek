@@ -663,7 +663,7 @@ export function getPasswordResetRedirectUrl(): string {
 }
 
 /**
- * Parse a Supabase recovery link for the access token (hash or query params).
+ * Parse a Supabase recovery or invite link for the access token (hash or query params).
  */
 export function parseRecoveryTokenFromUrl(url: string): string | null {
   try {
@@ -673,17 +673,21 @@ export function parseRecoveryTokenFromUrl(url: string): string | null {
       const hashParams = new URLSearchParams(parsed.hash.substring(1));
       const token = hashParams.get('access_token');
       const type = hashParams.get('type');
-      if (token && type === 'recovery') return token;
+      if (token && (type === 'recovery' || type === 'invite' || type === 'signup')) return token;
     }
 
     const token = parsed.searchParams.get('access_token');
     const type = parsed.searchParams.get('type');
-    if (token && type === 'recovery') return token;
+    if (token && (type === 'recovery' || type === 'invite' || type === 'signup')) return token;
   } catch {
     // Invalid URL
   }
 
   return null;
+}
+
+export function parseInviteTokenFromUrl(url: string): string | null {
+  return parseRecoveryTokenFromUrl(url);
 }
 
 /**
@@ -729,7 +733,7 @@ export async function requestPasswordReset(
 }
 
 /**
- * Set a new password using a recovery access token from the reset email link.
+ * Set a new password using a recovery or invite access token from the email link.
  */
 export async function updatePasswordWithRecoveryToken(
   accessToken: string,

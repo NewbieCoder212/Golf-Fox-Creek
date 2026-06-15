@@ -11,11 +11,16 @@ export interface Coordinates {
 
 export type UserRole = 'member' | 'manager' | 'super_admin';
 
+export type InviteStatus = 'pending' | 'active';
+
 export interface UserProfile {
   id: string;
   full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   email: string | null;
   role: UserRole;
+  invite_status: InviteStatus;
   club_id: string | null;
   location_tracking_enabled: boolean;
   handicap_index: number | null;
@@ -429,7 +434,7 @@ export interface CourseReportInsert {
 // TOURNAMENTS
 // ============================================
 
-export type TournamentFormat = 'scramble' | 'best_ball' | 'alternate_shot' | 'singles';
+export type TournamentFormat = string;
 
 /** One calendar day; may include multiple rounds (e.g. AM scramble + PM singles). */
 export interface TournamentDaySchedule {
@@ -539,6 +544,9 @@ export interface TournamentMatchGroup {
   starting_hole: number;
   group_number: number;
   notes: string | null;
+  match_winner: 'side_a' | 'side_b' | 'tie' | null;
+  match_points_a: number;
+  match_points_b: number;
   created_at: string;
 }
 

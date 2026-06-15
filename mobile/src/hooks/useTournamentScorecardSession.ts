@@ -14,7 +14,7 @@ import {
   getTournamentPlayers,
   resolveRosterEntries,
 } from '@/lib/tournament-player-service';
-import { getMatchGroupFormat, getRoundFormat } from '@/lib/tournament-labels';
+import { getMatchGroupFormat, getRoundFormat, isTeamScorecardFormat } from '@/lib/tournament-labels';
 import { buildSinglesHoleScores } from '@/lib/tournament-scoring';
 import { flattenRoundFormats } from '@/lib/tournament-schedule';
 import { FOX_CREEK_DATA } from '@/lib/course-data';
@@ -125,16 +125,36 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
       group: typeof activeMatchGroup = null
     ) => {
       if (group && group.round_number === roundNum) {
+        const interleaveSinglesPlayers = () => {
+          const ids: string[] = [];
+          const maxLen = Math.max(
+            group.side_a_player_ids.length,
+            group.side_b_player_ids.length
+          );
+          for (let i = 0; i < maxLen; i++) {
+            const aId = group.side_a_player_ids[i];
+            const bId = group.side_b_player_ids[i];
+            if (aId) ids.push(aId);
+            if (bId) ids.push(bId);
+          }
+          return ids;
+        };
+
+        const teamGroupedPlayers = () => [
+          ...group.side_a_player_ids,
+          ...group.side_b_player_ids,
+        ];
+
         const playerIds =
           side === 'side_b'
             ? group.side_b_player_ids
             : side === 'side_a'
               ? group.side_a_player_ids
-              : roundFormat === 'singles'
-                ? [...group.side_a_player_ids, ...group.side_b_player_ids]
-                : [];
+              : roundFormat === 'singles' || roundFormat === 'match_play'
+                ? interleaveSinglesPlayers()
+                : teamGroupedPlayers();
 
-        if (roundFormat !== 'singles' && !side) return null;
+        if (roundFormat !== 'singles' && roundFormat !== 'match_play' && !side) return null;
 
         const teamId =
           side === 'side_b'
@@ -281,7 +301,15 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     return map;
   }, [players, grossScores, format, getPlayerHoleDetails]);
 
-  const isTeamFormat = format === 'scramble' || format === 'alternate_shot';
+  const isTeamFormat = format ? isTeamScorecardFormat(format) : false;
+
+  const matchTeeTimeLabel = useMemo(() => {
+    if (!activeMatchGroup?.tee_time) return null;
+    return new Date(activeMatchGroup.tee_time).toLocaleTimeString('en-CA', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }, [activeMatchGroup?.tee_time]);
 
   const paperScores = useMemo(() => {
     const map: Record<string, Record<number, number | null>> = {};
@@ -441,5 +469,6 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     isDirty,
     activeMatchGroup,
     teamName,
+    matchTeeTimeLabel,
   };
 }

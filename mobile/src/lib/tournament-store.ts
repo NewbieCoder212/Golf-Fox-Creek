@@ -358,7 +358,20 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
         if (state.format === 'best_ball') {
           const grossScores = { ...state.grossScores };
           for (const player of state.players) {
-            grossScores[player.id] = buildInitialGrossMap();
+            const card = scores.find(
+              (s) =>
+                s.tournament_player_id === (player.tournamentPlayerId ?? player.id) ||
+                s.user_id === player.id
+            );
+            if (!card?.hole_scores?.length) {
+              grossScores[player.id] = buildInitialGrossMap();
+              continue;
+            }
+            const map = buildInitialGrossMap();
+            card.hole_scores.forEach((h) => {
+              map[h.hole] = h.gross;
+            });
+            grossScores[player.id] = map;
           }
           set({ grossScores, isDirty: false });
           return;
@@ -395,9 +408,7 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       );
     }
 
-    if (!existing?.hole_scores?.length) return;
-
-    if (state.format === 'best_ball') {
+    if (state.format === 'best_ball' && state.players.length > 1) {
       const grossScores = { ...state.grossScores };
       for (const player of state.players) {
         grossScores[player.id] = buildInitialGrossMap();
@@ -405,6 +416,8 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       set({ grossScores, isDirty: false });
       return;
     }
+
+    if (!existing?.hole_scores?.length) return;
 
     const teamGross = buildInitialGrossMap();
     existing.hole_scores.forEach((h) => {
@@ -503,6 +516,31 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
             user_id: player.tournamentPlayerId ? null : player.id,
             tournament_player_id: player.tournamentPlayerId ?? null,
             team_id: null,
+            match_group_id: matchGroupId,
+          });
+          if (!saved) {
+            return { success: false, error: 'Failed to save player scores' };
+          }
+        }
+      } else if (state.format === 'best_ball' && state.players.length > 1) {
+        for (const player of state.players) {
+          const holeScores = buildTournamentHoleScores({
+            format: 'singles',
+            grossByHole: Object.entries(state.grossScores[player.id] ?? {}).map(
+              ([hole, gross]) => ({ hole: Number(hole), gross })
+            ),
+            handicapIndex: player.handicapIndex,
+            teePlayed: state.teePlayed,
+          });
+          const totals = sumHoleScores(holeScores);
+          const saved = await saveTournamentScore({
+            tournament_id: state.tournamentId,
+            round_number: state.roundNumber,
+            hole_scores: holeScores,
+            ...totals,
+            user_id: player.tournamentPlayerId ? null : player.id,
+            tournament_player_id: player.tournamentPlayerId ?? null,
+            team_id: state.teamId,
             match_group_id: matchGroupId,
           });
           if (!saved) {

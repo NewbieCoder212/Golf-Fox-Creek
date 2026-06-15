@@ -38,6 +38,8 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 
 import { useAdminAuthStore } from '@/lib/admin-auth-store';
+import { getTournamentsResult } from '@/lib/tournament-service';
+import { TournamentLeaderboardCard } from '@/components/TournamentLeaderboardCard';
 import {
   getGeofenceSettings,
   updateGeofenceSettingsAuth,
@@ -55,7 +57,7 @@ type AdminSection = 'main' | 'geofencing' | 'announcements' | 'notifications' | 
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const { profile, accessToken, clearAuth, isSuperAdmin } = useAdminAuthStore();
+  const { profile, accessToken, clearAuth, isSuperAdmin, isManager } = useAdminAuthStore();
 
   const [section, setSection] = useState<AdminSection>('main');
   const [openAdsFormOnMount, setOpenAdsFormOnMount] = useState(false);
@@ -94,6 +96,17 @@ export default function AdminDashboardScreen() {
   });
 
   const pendingReportsCount = courseReports?.filter((r) => r.status === 'pending').length ?? 0;
+
+  const { data: adminTournaments = [] } = useQuery({
+    queryKey: ['adminLeaderboardTournament'],
+    queryFn: async () => {
+      const result = await getTournamentsResult({ limit: 1 });
+      return result.data ?? [];
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const adminLeaderboardTournamentId = adminTournaments[0]?.id;
 
   // Bridge member login into admin session (manager / super_admin)
   useEffect(() => {
@@ -361,6 +374,12 @@ export default function AdminDashboardScreen() {
         </Pressable>
 
         {/* Tournaments */}
+        {adminLeaderboardTournamentId ? (
+          <View className="mb-3">
+            <TournamentLeaderboardCard tournamentId={adminLeaderboardTournamentId} compact />
+          </View>
+        ) : null}
+
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -378,8 +397,8 @@ export default function AdminDashboardScreen() {
           <ChevronRight size={20} color="#525252" />
         </Pressable>
 
-        {/* Members (Super Admin only) */}
-        {isSuperAdmin() && (
+        {/* Members (managers and super admin) */}
+        {(isSuperAdmin() || isManager()) && (
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -392,7 +411,7 @@ export default function AdminDashboardScreen() {
             </View>
             <View className="flex-1 ml-4">
               <Text className="text-white font-medium">Members</Text>
-              <Text className="text-neutral-500 text-sm">View and manage members</Text>
+              <Text className="text-neutral-500 text-sm">Invite and manage members</Text>
             </View>
             <ChevronRight size={20} color="#525252" />
           </Pressable>

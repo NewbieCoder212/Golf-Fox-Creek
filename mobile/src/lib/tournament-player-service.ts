@@ -21,6 +21,14 @@ export async function getTournamentPlayers(tournamentId: string): Promise<Tourna
   return unwrapList(result);
 }
 
+export async function getTournamentRosterPlayerIdsForUser(
+  tournamentId: string,
+  userId: string
+): Promise<string[]> {
+  const players = await getTournamentPlayers(tournamentId);
+  return players.filter((player) => player.user_id === userId).map((player) => player.id);
+}
+
 export async function createTournamentPlayer(
   player: TournamentPlayerInsert
 ): Promise<TournamentServiceResult<TournamentPlayer>> {

@@ -506,6 +506,64 @@ export function buildTournamentLeaderboard(
     );
 }
 
+export interface MatchPointsStanding {
+  teamId: string;
+  teamName: string;
+  side: 'side_a' | 'side_b';
+  matchPoints: number;
+  matchesWon: number;
+  matchesPlayed: number;
+}
+
+export function buildMatchPointsLeaderboard(
+  teams: { id: string; team_name: string; side: string | null }[],
+  matchGroups: {
+    side_a_team_id: string;
+    side_b_team_id: string;
+    match_points_a?: number;
+    match_points_b?: number;
+    match_winner?: string | null;
+  }[]
+): MatchPointsStanding[] {
+  const byTeamId = new Map<string, MatchPointsStanding>();
+
+  for (const team of teams) {
+    if (!team.side) continue;
+    byTeamId.set(team.id, {
+      teamId: team.id,
+      teamName: team.team_name,
+      side: team.side as 'side_a' | 'side_b',
+      matchPoints: 0,
+      matchesWon: 0,
+      matchesPlayed: 0,
+    });
+  }
+
+  for (const group of matchGroups) {
+    const pointsA = Number(group.match_points_a ?? 0);
+    const pointsB = Number(group.match_points_b ?? 0);
+
+    const teamA = byTeamId.get(group.side_a_team_id);
+    const teamB = byTeamId.get(group.side_b_team_id);
+
+    if (teamA) {
+      teamA.matchPoints += pointsA;
+      teamA.matchesPlayed += 1;
+      if (group.match_winner === 'side_a') teamA.matchesWon += 1;
+    }
+    if (teamB) {
+      teamB.matchPoints += pointsB;
+      teamB.matchesPlayed += 1;
+      if (group.match_winner === 'side_b') teamB.matchesWon += 1;
+    }
+  }
+
+  return Array.from(byTeamId.values()).sort((a, b) => {
+    if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
+    return b.matchesWon - a.matchesWon;
+  });
+}
+
 export function isTournamentServiceConfigured(): boolean {
   return isConfigured();
 }

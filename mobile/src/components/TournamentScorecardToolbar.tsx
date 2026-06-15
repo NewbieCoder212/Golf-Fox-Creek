@@ -8,6 +8,7 @@ interface TournamentScorecardToolbarProps {
   tournament: Tournament;
   roundNumber: number;
   isDirty: boolean;
+  teeTimeLabel?: string | null;
   onRoundChange: (round: number) => void;
 }
 
@@ -15,6 +16,7 @@ export function TournamentScorecardToolbar({
   tournament,
   roundNumber,
   isDirty,
+  teeTimeLabel,
   onRoundChange,
 }: TournamentScorecardToolbarProps) {
   return (
@@ -26,6 +28,7 @@ export function TournamentScorecardToolbar({
           </Text>
           <Text className="text-neutral-500 text-xs">
             {formatRoundPickerLabel(tournament, roundNumber)} · Tournament
+            {teeTimeLabel ? ` · Tee ${teeTimeLabel}` : ''}
           </Text>
         </View>
         {isDirty ? (

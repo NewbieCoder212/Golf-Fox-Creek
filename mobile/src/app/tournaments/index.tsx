@@ -24,7 +24,7 @@ import {
   getTournamentsForUserList,
   getTournamentsResult,
 } from '@/lib/tournament-service';
-import { FORMAT_LABELS, formatTournamentDates } from '@/lib/tournament-labels';
+import { formatLabel, formatTournamentDates, PRESET_TOURNAMENT_FORMATS } from '@/lib/tournament-labels';
 import {
   buildSchedulePayload,
   createDefaultSchedule,
@@ -35,7 +35,7 @@ import {
 import type { TournamentDaySchedule, TournamentFormat } from '@/types';
 import { cn } from '@/lib/cn';
 
-const FORMATS: TournamentFormat[] = ['scramble', 'best_ball', 'alternate_shot', 'singles'];
+const FORMATS = PRESET_TOURNAMENT_FORMATS;
 
 export default function TournamentsListScreen() {
   const insets = useSafeAreaInsets();
@@ -55,6 +55,7 @@ export default function TournamentsListScreen() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [schedule, setSchedule] = useState<TournamentDaySchedule[]>(createDefaultSchedule);
+  const [customFormatByKey, setCustomFormatByKey] = useState<Record<string, string>>({});
 
   const {
     data: tournaments = [],
@@ -164,6 +165,18 @@ export default function TournamentsListScreen() {
     );
   };
 
+  const scheduleKey = (dayIndex: number, roundIndex: number) => `${dayIndex}-${roundIndex}`;
+
+  const addCustomFormat = (dayIndex: number, roundIndex: number) => {
+    const key = scheduleKey(dayIndex, roundIndex);
+    const label = customFormatByKey[key]?.trim();
+    if (!label) return;
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    if (!slug) return;
+    setRoundFormat(dayIndex, roundIndex, slug);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   return (
     <View className="flex-1 bg-[#0c0c0c]">
       <View style={{ paddingTop: insets.top }} className="bg-[#141414] border-b border-neutral-800">
@@ -268,7 +281,7 @@ export default function TournamentsListScreen() {
                     >
                       <Text className="text-lime-400 text-xs font-semibold">
                         Day {dayIndex + 1}:{' '}
-                        {day.formats.map((format) => FORMAT_LABELS[format]).join(', ')}
+                        {day.formats.map((format) => formatLabel(format)).join(', ')}
                       </Text>
                     </View>
                   ))}
@@ -386,11 +399,36 @@ export default function TournamentsListScreen() {
                               roundFormat === f ? 'text-lime-400' : 'text-neutral-500'
                             )}
                           >
-                            {FORMAT_LABELS[f]}
+                            {formatLabel(f)}
                           </Text>
                         </Pressable>
                       ))}
                     </View>
+                    <View className="flex-row gap-2 mt-2">
+                      <TextInput
+                        value={customFormatByKey[scheduleKey(dayIndex, roundIndex)] ?? ''}
+                        onChangeText={(text) =>
+                          setCustomFormatByKey((prev) => ({
+                            ...prev,
+                            [scheduleKey(dayIndex, roundIndex)]: text,
+                          }))
+                        }
+                        placeholder="Custom format name"
+                        placeholderTextColor="#525252"
+                        className="flex-1 bg-[#141414] border border-neutral-800 rounded-lg px-3 py-2 text-white text-xs"
+                      />
+                      <Pressable
+                        onPress={() => addCustomFormat(dayIndex, roundIndex)}
+                        className="px-3 py-2 rounded-lg border border-lime-700/50 bg-lime-900/20 active:opacity-80"
+                      >
+                        <Text className="text-lime-400 text-xs font-semibold">+ Add</Text>
+                      </Pressable>
+                    </View>
+                    {!FORMATS.includes(roundFormat as (typeof FORMATS)[number]) && (
+                      <Text className="text-lime-400 text-xs mt-1">
+                        Selected: {formatLabel(roundFormat)}
+                      </Text>
+                    )}
                   </View>
                 ))}
 

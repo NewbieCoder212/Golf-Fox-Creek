@@ -55,8 +55,9 @@ function useProtectedRoute() {
     const inAdminGroup = segments[0] === 'admin';
     const inResetPassword = segments[0] === 'reset-password';
     const inForgotPassword = segments[0] === 'forgot-password';
+    const inAcceptInvite = segments[0] === 'accept-invite';
     const isPublicAuthRoute =
-      inAuthGroup || inAdminGroup || inResetPassword || inForgotPassword;
+      inAuthGroup || inAdminGroup || inResetPassword || inForgotPassword || inAcceptInvite;
 
     // If not authenticated and not on a public auth route, redirect to login
     // (Admin has its own auth system via Supabase)
@@ -97,6 +98,7 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="report-condition" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+        <Stack.Screen name="accept-invite" options={{ headerShown: false }} />
         <Stack.Screen name="tournaments" options={{ headerShown: false }} />
         <Stack.Screen name="tournament" options={{ headerShown: false }} />
         <Stack.Screen name="wagering/[sessionId]" options={{ headerShown: false }} />

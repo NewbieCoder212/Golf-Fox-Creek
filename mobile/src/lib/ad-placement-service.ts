@@ -2,7 +2,7 @@
  * Ad placement service — curated local sponsor banners from Supabase.
  */
 
-import type { AdPlacement, AdPlacementType } from '@/types';
+import type { AdPlacement, AdDisplayPosition, AdPlacementType } from '@/types';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -32,6 +32,7 @@ export type AdPlacementInsert = {
   image_url: string;
   banner_text: string;
   action_url?: string | null;
+  display_position?: AdDisplayPosition | null;
   is_active?: boolean;
 };
 
@@ -123,31 +124,43 @@ async function authRequest<T>(
   }
 }
 
-export async function getActiveAdPlacement(
+export async function getActiveAdPlacements(
   placementType: AdPlacementType | string,
-  holeNumber?: number
-): Promise<AdPlacement | null> {
+  options?: { holeNumber?: number; displayPosition?: AdDisplayPosition; limit?: number }
+): Promise<AdPlacement[]> {
   if (!isAdPlacementServiceConfigured()) {
-    return null;
+    return [];
   }
 
-  if (placementType === 'hole_sponsor' && holeNumber == null) {
-    return null;
+  if (placementType === 'hole_sponsor' && options?.holeNumber == null) {
+    return [];
   }
 
   const query: Record<string, string> = {
     placement_type: `eq.${placementType}`,
     is_active: 'eq.true',
     order: 'created_at.desc',
-    limit: '1',
+    limit: String(options?.limit ?? 10),
   };
 
-  if (placementType === 'hole_sponsor' && holeNumber != null) {
-    query.hole_number = `eq.${holeNumber}`;
+  if (placementType === 'hole_sponsor' && options?.holeNumber != null) {
+    query.hole_number = `eq.${options.holeNumber}`;
+  }
+
+  if (options?.displayPosition) {
+    query.display_position = `eq.${options.displayPosition}`;
   }
 
   const data = await publicRequest<AdPlacement[]>(query);
-  return data?.[0] ?? null;
+  return data ?? [];
+}
+
+export async function getActiveAdPlacement(
+  placementType: AdPlacementType | string,
+  holeNumber?: number
+): Promise<AdPlacement | null> {
+  const rows = await getActiveAdPlacements(placementType, { holeNumber, limit: 1 });
+  return rows[0] ?? null;
 }
 
 export async function getAllAdPlacements(): Promise<AdPlacement[]> {
@@ -171,6 +184,8 @@ export async function createAdPlacementAuth(
     hole_number:
       payload.placement_type === 'hole_sponsor' ? payload.hole_number : null,
     action_url: payload.action_url?.trim() || null,
+    display_position:
+      payload.placement_type === 'leaderboard' ? payload.display_position ?? 'sidebar' : null,
   };
 
   return authRequest<AdPlacement[]>(accessToken, {
@@ -197,8 +212,14 @@ export async function updateAdPlacementAuth(
     body.placement_type = payload.placement_type;
     body.hole_number =
       payload.placement_type === 'hole_sponsor' ? payload.hole_number ?? null : null;
+    body.display_position =
+      payload.placement_type === 'leaderboard' ? payload.display_position ?? null : null;
   } else if (payload.hole_number !== undefined) {
     body.hole_number = payload.hole_number;
+  }
+
+  if (payload.display_position !== undefined && payload.placement_type === undefined) {
+    body.display_position = payload.display_position;
   }
 
   return authRequest<AdPlacement[]>(accessToken, {
@@ -222,5 +243,11 @@ export const PLACEMENT_TYPE_LABELS: Record<AdPlacementType, string> = {
   scorecard_header: 'Tournament Scorecard Header',
   hole_sponsor: 'Hole Sponsor (casual scorecard)',
   the_turn: 'The Turn (mid-round F&B)',
-  leaderboard: 'Leaderboard',
+  leaderboard: 'Leaderboard / TV Display',
+};
+
+export const DISPLAY_POSITION_LABELS: Record<AdDisplayPosition, string> = {
+  header_left: 'Header (left)',
+  sidebar: 'Sidebar / carousel',
+  footer: 'Footer strip',
 };

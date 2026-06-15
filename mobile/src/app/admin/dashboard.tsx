@@ -40,6 +40,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAdminAuthStore } from '@/lib/admin-auth-store';
 import { getTournamentsResult } from '@/lib/tournament-service';
 import { TournamentLeaderboardCard } from '@/components/TournamentLeaderboardCard';
+import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
 import {
   getGeofenceSettings,
   updateGeofenceSettingsAuth,
@@ -377,6 +378,15 @@ export default function AdminDashboardScreen() {
         {adminLeaderboardTournamentId ? (
           <View className="mb-3">
             <TournamentLeaderboardCard tournamentId={adminLeaderboardTournamentId} compact />
+            {adminTournaments[0]?.display_token ? (
+              <View className="mt-2">
+                <TournamentCopyTvLinkButton
+                  tournamentId={adminLeaderboardTournamentId}
+                  displayToken={adminTournaments[0].display_token}
+                  compact
+                />
+              </View>
+            ) : null}
           </View>
         ) : null}
 

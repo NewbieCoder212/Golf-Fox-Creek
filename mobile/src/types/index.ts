@@ -78,6 +78,8 @@ export type AdPlacementType =
   | 'the_turn'
   | 'leaderboard';
 
+export type AdDisplayPosition = 'header_left' | 'sidebar' | 'footer';
+
 export interface AdPlacement {
   id: string;
   sponsor_name: string;
@@ -86,8 +88,61 @@ export interface AdPlacement {
   image_url: string;
   banner_text: string;
   action_url: string | null;
+  display_position: AdDisplayPosition | null;
   is_active: boolean;
   created_at: string;
+  updated_at: string;
+}
+
+export interface DisplaySponsor {
+  id: string;
+  sponsor_name: string;
+  image_url: string;
+  banner_text: string;
+  action_url: string | null;
+  display_position: AdDisplayPosition | null;
+}
+
+export interface DisplayStandingRow {
+  rank: number;
+  name: string;
+  score: number;
+  detail: string;
+}
+
+export interface DisplayMatchPointsRow {
+  rank: number;
+  teamName: string;
+  matchPoints: number;
+  matchesWon: number;
+  matchesPlayed: number;
+}
+
+export interface DisplayMatchPlaySummary {
+  sideAName: string;
+  sideBName: string;
+  sideAHoles: number;
+  sideBHoles: number;
+  ties: number;
+}
+
+export interface TournamentDisplayPayload {
+  tournament: {
+    id: string;
+    name: string;
+    start_date: string;
+    end_date: string;
+  };
+  grossStandings: DisplayStandingRow[];
+  netStandings: DisplayStandingRow[];
+  matchPoints: DisplayMatchPointsRow[];
+  matchPlay: DisplayMatchPlaySummary | null;
+  sponsors: {
+    header_left: DisplaySponsor[];
+    sidebar: DisplaySponsor[];
+    footer: DisplaySponsor[];
+  };
+  mobileTournamentPath: string;
   updated_at: string;
 }
 
@@ -454,6 +509,7 @@ export interface Tournament {
   rounds_count: number;
   /** Players from each team in a foursome (default 2 = 2v2). */
   players_per_match: number;
+  display_token?: string;
   created_at: string;
 }
 

@@ -78,6 +78,8 @@ import {
   useTournamentStore,
 } from '@/lib/tournament-store';
 import { cn } from '@/lib/cn';
+import { SponsorBanner } from '@/components/SponsorBanner';
+import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
 
 type DetailTab = 'leaderboard' | 'teams' | 'matches' | 'teeTimes';
 
@@ -467,6 +469,14 @@ export default function TournamentDetailScreen() {
               </Text>
             </View>
           </View>
+          {isManager && tournament.display_token ? (
+            <View className="mt-4">
+              <TournamentCopyTvLinkButton
+                tournamentId={tournament.id}
+                displayToken={tournament.display_token}
+              />
+            </View>
+          ) : null}
         </View>
 
         <ScrollView
@@ -517,6 +527,13 @@ export default function TournamentDetailScreen() {
       >
         {tab === 'leaderboard' ? (
           <View className="mx-5">
+            <SponsorBanner
+              placementType="leaderboard"
+              displayPosition="footer"
+              className="mt-2 mb-1"
+              compact
+            />
+
             {hasMatchPoints && sideATeam && sideBTeam && (
               <View className="bg-[#141414] rounded-2xl border border-lime-700/40 p-4 mt-2 mb-3">
                 <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-3">

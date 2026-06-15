@@ -5,6 +5,7 @@ import "./env";
 import { sampleRouter } from "./routes/sample";
 import { devAuthRouter } from "./routes/dev-auth";
 import { membersRouter } from "./routes/members";
+import { displayRouter } from "./routes/display";
 import { logger } from "hono/logger";
 
 const app = new Hono();
@@ -15,6 +16,8 @@ const allowed = [
   /^http:\/\/127\.0\.0\.1(:\d+)?$/,
   /^https:\/\/[a-z0-9-]+\.dev\.vibecode\.run$/,
   /^https:\/\/[a-z0-9-]+\.vibecode\.run$/,
+  /^https:\/\/(www\.)?foxcreek\.golf$/,
+  /^https:\/\/[a-z0-9-]+\.foxcreek\.golf$/,
 ];
 
 app.use(
@@ -35,6 +38,7 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 app.route("/api/sample", sampleRouter);
 app.route("/api/dev", devAuthRouter);
 app.route("/api/members", membersRouter);
+app.route("/api/display", displayRouter);
 
 const port = Number(process.env.PORT) || 3000;
 

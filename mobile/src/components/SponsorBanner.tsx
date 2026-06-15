@@ -7,13 +7,15 @@ import * as Haptics from 'expo-haptics';
 import { cn } from '@/lib/cn';
 import {
   getActiveAdPlacement,
+  getActiveAdPlacements,
   isAdPlacementServiceConfigured,
 } from '@/lib/ad-placement-service';
-import type { AdPlacementType } from '@/types';
+import type { AdDisplayPosition, AdPlacementType } from '@/types';
 
 interface SponsorBannerProps {
   placementType: AdPlacementType | string;
   holeNumber?: number;
+  displayPosition?: AdDisplayPosition;
   className?: string;
   compact?: boolean;
 }
@@ -29,15 +31,24 @@ function openActionUrl(url: string) {
 export function SponsorBanner({
   placementType,
   holeNumber,
+  displayPosition,
   className,
   compact = false,
 }: SponsorBannerProps) {
-  const { data: ad } = useQuery({
-    queryKey: ['adPlacement', placementType, holeNumber ?? null],
-    queryFn: () => getActiveAdPlacement(placementType, holeNumber),
+  const useMulti =
+    placementType === 'leaderboard' && displayPosition != null;
+
+  const { data: ads = [] } = useQuery({
+    queryKey: ['adPlacement', placementType, holeNumber ?? null, displayPosition ?? null, useMulti],
+    queryFn: () =>
+      useMulti
+        ? getActiveAdPlacements(placementType, { displayPosition, limit: 1 })
+        : getActiveAdPlacement(placementType, holeNumber).then((ad) => (ad ? [ad] : [])),
     enabled: isAdPlacementServiceConfigured(),
     staleTime: 1000 * 60 * 5,
   });
+
+  const ad = ads[0];
 
   if (!ad) {
     return null;

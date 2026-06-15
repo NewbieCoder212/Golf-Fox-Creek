@@ -20,10 +20,11 @@ import {
   deleteAdPlacementAuth,
   getAllAdPlacements,
   PLACEMENT_TYPE_LABELS,
+  DISPLAY_POSITION_LABELS,
   updateAdPlacementAuth,
   type AdPlacementInsert,
 } from '@/lib/ad-placement-service';
-import type { AdPlacement, AdPlacementType } from '@/types';
+import type { AdPlacement, AdDisplayPosition, AdPlacementType } from '@/types';
 
 const PLACEMENT_TYPES: AdPlacementType[] = [
   'scorecard_header',
@@ -32,6 +33,8 @@ const PLACEMENT_TYPES: AdPlacementType[] = [
   'leaderboard',
 ];
 
+const DISPLAY_POSITIONS: AdDisplayPosition[] = ['header_left', 'sidebar', 'footer'];
+
 const EMPTY_FORM: AdPlacementInsert = {
   sponsor_name: '',
   placement_type: 'scorecard_header',
@@ -39,6 +42,7 @@ const EMPTY_FORM: AdPlacementInsert = {
   image_url: '',
   banner_text: '',
   action_url: '',
+  display_position: 'sidebar',
   is_active: true,
 };
 
@@ -156,6 +160,7 @@ export function AdminAdPlacementsSection({
       image_url: ad.image_url,
       banner_text: ad.banner_text,
       action_url: ad.action_url ?? '',
+      display_position: ad.display_position ?? 'sidebar',
       is_active: ad.is_active,
     });
     setShowForm(true);
@@ -190,7 +195,7 @@ export function AdminAdPlacementsSection({
       <Animated.View entering={FadeInDown.delay(100).duration(500)}>
         <Text className="text-white text-xl font-bold mb-2">Sponsor Ads</Text>
         <Text className="text-neutral-500 text-sm mb-4">
-          Manage banners shown on scorecards, holes, and The Turn
+          Manage banners on scorecards, The Turn, and TV leaderboard displays
         </Text>
 
         <Pressable
@@ -219,6 +224,7 @@ export function AdminAdPlacementsSection({
                       ...f,
                       placement_type: type,
                       hole_number: type === 'hole_sponsor' ? f.hole_number ?? 1 : null,
+                      display_position: type === 'leaderboard' ? f.display_position ?? 'sidebar' : null,
                     }))
                   }
                   className={cn(
@@ -264,6 +270,37 @@ export function AdminAdPlacementsSection({
                         )}
                       >
                         {hole}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {form.placement_type === 'leaderboard' && (
+              <View className="mb-4">
+                <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
+                  TV Display Position
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {DISPLAY_POSITIONS.map((position) => (
+                    <Pressable
+                      key={position}
+                      onPress={() => setForm((f) => ({ ...f, display_position: position }))}
+                      className={cn(
+                        'px-3 py-2 rounded-lg border',
+                        form.display_position === position
+                          ? 'bg-lime-900/40 border-lime-600'
+                          : 'bg-[#0c0c0c] border-neutral-800'
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          'text-xs',
+                          form.display_position === position ? 'text-lime-400' : 'text-neutral-400'
+                        )}
+                      >
+                        {DISPLAY_POSITION_LABELS[position]}
                       </Text>
                     </Pressable>
                   ))}
@@ -344,6 +381,9 @@ export function AdminAdPlacementsSection({
                       <Text className="text-lime-400/80 text-xs mt-0.5">
                         {PLACEMENT_TYPE_LABELS[ad.placement_type]}
                         {ad.hole_number ? ` · Hole ${ad.hole_number}` : ''}
+                        {ad.display_position
+                          ? ` · ${DISPLAY_POSITION_LABELS[ad.display_position]}`
+                          : ''}
                       </Text>
                     </View>
                     <View

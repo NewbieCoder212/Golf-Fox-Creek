@@ -28,7 +28,7 @@ import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { getAuthenticatedUserProfile, signIn } from '@/lib/supabase';
 import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 
-const FC_LOGO = require('@/assets/images/fc-logo.png');
+const GENERATION_CUP_LOGO = require('@/assets/images/generation-cup-logo.png');
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -124,29 +124,25 @@ export default function LoginScreen() {
           className="flex-1 px-6"
           style={{ paddingTop: insets.top, paddingBottom: insets.bottom + 20 }}
         >
-          {/* Hero — logo and event title centered */}
+          {/* Hero — logo and dates */}
           <Animated.View
             entering={FadeInDown.delay(100).duration(800).springify()}
-            className="flex-1 items-center justify-center w-full"
+            className="items-center w-full pt-10"
           >
             <Image
-              source={FC_LOGO}
-              style={{ width: 160, height: 160 }}
+              source={GENERATION_CUP_LOGO}
+              style={{ width: 360, height: 360, alignSelf: 'center' }}
               resizeMode="contain"
             />
 
-            <View className="items-center w-full mt-6">
-              <Text className="text-white text-3xl font-light tracking-widest text-center w-full">
-                Generation Cup
-              </Text>
-              <Text className="text-lime-400/90 text-xl font-light tracking-[0.15em] text-center w-full uppercase mt-1">
-                Weekend
-              </Text>
-              <Text className="text-neutral-400 text-sm text-center mt-3 w-full">
+            <View className="items-center w-full mt-4">
+              <Text className="text-neutral-400 text-sm text-center w-full">
                 June 19 – June 20, 2026
               </Text>
             </View>
           </Animated.View>
+
+          <View className="flex-1" />
 
           {/* Sign In Card */}
           <Animated.View
@@ -253,7 +249,7 @@ export default function LoginScreen() {
           {/* Footer */}
           <Animated.View
             entering={FadeIn.delay(600).duration(800)}
-            className="mt-8 items-center"
+            className="mt-4 items-center"
           >
             <Text className="text-neutral-600 text-xs text-center">
               Product of Acadia Venture Studio

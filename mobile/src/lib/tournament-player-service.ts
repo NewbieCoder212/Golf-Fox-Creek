@@ -9,7 +9,9 @@ import {
   unwrapList,
   type TournamentServiceResult,
 } from './tournament-supabase';
-import { createTournamentTeam, updateTournamentTeam } from './tournament-service';(tournamentId: string): Promise<TournamentPlayer[]> {
+import { createTournamentTeam, updateTournamentTeam } from './tournament-service';
+
+export async function getTournamentPlayers(tournamentId: string): Promise<TournamentPlayer[]> {
   const result = await tournamentSupabaseRequest<TournamentPlayer[]>('tournament_players', {
     query: {
       tournament_id: `eq.${tournamentId}`,

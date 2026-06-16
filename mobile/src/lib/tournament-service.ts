@@ -83,7 +83,7 @@ export async function getMyTournamentIds(userId: string): Promise<string[]> {
     );
   }
 
-  const [scoreByUser, scoreByRosterPlayer, teeRows, legacyTeamRows] = await Promise.all([
+  const [scoreByUser, scoreByRosterPlayer, teeRows, legacyTeamRows, captainTeamRows] = await Promise.all([
     scoreQueries[0],
     scoreQueries[1] ?? Promise.resolve({ data: [] as Array<{ tournament_id: string }>, error: null }),
     tournamentSupabaseRequest<Array<{ tournament_id: string }>>('tournament_tee_assignments', {
@@ -91,6 +91,9 @@ export async function getMyTournamentIds(userId: string): Promise<string[]> {
     }),
     tournamentSupabaseRequest<Array<{ tournament_id: string }>>('tournament_teams', {
       query: { player_ids: `cs.{${userId}}`, select: 'tournament_id' },
+    }),
+    tournamentSupabaseRequest<Array<{ tournament_id: string }>>('tournament_teams', {
+      query: { captain_user_id: `eq.${userId}`, select: 'tournament_id' },
     }),
   ]);
 
@@ -101,6 +104,7 @@ export async function getMyTournamentIds(userId: string): Promise<string[]> {
   for (const row of unwrapList(scoreByRosterPlayer)) ids.add(row.tournament_id);
   for (const row of unwrapList(teeRows)) ids.add(row.tournament_id);
   for (const row of unwrapList(legacyTeamRows)) ids.add(row.tournament_id);
+  for (const row of unwrapList(captainTeamRows)) ids.add(row.tournament_id);
 
   return Array.from(ids);
 }
@@ -231,7 +235,14 @@ export async function getTournamentTeams(tournamentId: string): Promise<Tourname
     },
   });
 
-  return unwrapList(result);
+  return unwrapList(result).map((team) => ({
+    ...team,
+    captain_user_id: team.captain_user_id ?? null,
+    roster_status: team.roster_status ?? 'draft',
+    roster_ready_at: team.roster_ready_at ?? null,
+    roster_ready_by: team.roster_ready_by ?? null,
+    onboard_email_sent_at: team.onboard_email_sent_at ?? null,
+  }));
 }
 
 export async function getTournamentTeamById(teamId: string): Promise<TournamentTeam | null> {
@@ -303,7 +314,13 @@ export async function createTournamentTeam(
 
 export async function updateTournamentTeam(
   teamId: string,
-  updates: Partial<TournamentTeamInsert>
+  updates: Partial<
+    TournamentTeamInsert &
+      Pick<
+        TournamentTeam,
+        'roster_status' | 'roster_ready_at' | 'roster_ready_by' | 'onboard_email_sent_at'
+      >
+  >
 ): Promise<TournamentServiceResult<TournamentTeam>> {
   if (!isConfigured()) {
     return { data: null, error: 'Supabase is not configured' };

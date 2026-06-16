@@ -37,6 +37,30 @@ export interface GeofenceSettings {
   turn_prompt_enabled: boolean;
 }
 
+/** How hole winners and scorecards are computed for a tournament format. */
+export type TournamentScoringMode =
+  | 'team_single_score'
+  | 'team_best_ball'
+  | 'head_to_head_match_play';
+
+export interface TournamentFormatDefinition {
+  id: string;
+  label: string;
+  scoring_hint: string;
+  how_it_works: string;
+  the_score: string;
+  scoring_mode: TournamentScoringMode;
+  enabled: boolean;
+  default_players_per_match: number;
+  team_scorecard: boolean;
+}
+
+export interface TournamentFormatsSettings {
+  formats: TournamentFormatDefinition[];
+  /** Format ids shown in schedule and match pickers (e.g. scramble, best_ball, singles). */
+  active_format_ids: string[];
+}
+
 export interface AppSetting {
   id: string;
   setting_key: string;

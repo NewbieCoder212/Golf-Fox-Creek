@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchTournamentDisplay, buildQrCodeUrl, buildTournamentMobileUrl } from '@/lib/display-service';
 import { useTournamentDisplayRealtime } from '@/hooks/useTournamentDisplayRealtime';
 import { formatTournamentDates } from '@/lib/tournament-labels';
+import { formatClubTime } from '@/lib/club-timezone';
 import { TvSponsorCarousel, TvSponsorSlot } from '@/components/TvSponsorSlot';
 import type { DisplayStandingRow } from '@/types';
 import { cn } from '@/lib/cn';
@@ -118,10 +119,7 @@ export default function TournamentTvDisplayScreen() {
   }
 
   const hasMatchPoints = data.matchPoints.some((row) => row.matchPoints > 0);
-  const lastUpdated = new Date(dataUpdatedAt).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  const lastUpdated = formatClubTime(new Date(dataUpdatedAt).toISOString(), true);
 
   return (
     <View className="flex-1 bg-[#0c0c0c]" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>

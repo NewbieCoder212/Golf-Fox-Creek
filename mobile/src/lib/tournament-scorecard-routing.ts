@@ -111,9 +111,8 @@ export async function resolveTournamentScorecardRoute(
   });
 }
 
+import { formatClubTime } from './club-timezone';
+
 export function formatTeeTimeLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-CA', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return formatClubTime(iso, true);
 }

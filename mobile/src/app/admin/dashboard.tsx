@@ -63,7 +63,7 @@ import type {
   TurnMessagingSettings,
 } from '@/types';
 import { AdminAdPlacementsSection } from '@/components/admin/AdminAdPlacementsSection';
-import { AdminEventTeamsSection } from '@/components/admin/AdminEventTeamsSection';
+import { AdminTournamentManagementSection } from '@/components/admin/AdminTournamentManagementSection';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import { buildMatchPointsLeaderboard, getTournamentTeams } from '@/lib/tournament-service';
 import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
@@ -76,7 +76,7 @@ type AdminSection =
   | 'notifications'
   | 'reports'
   | 'ads'
-  | 'teams';
+  | 'tournaments';
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
@@ -493,24 +493,7 @@ export default function AdminDashboardScreen() {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setSection('teams');
-          }}
-          className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-3 flex-row items-center active:opacity-80"
-        >
-          <View className="w-10 h-10 bg-lime-900/30 rounded-full items-center justify-center">
-            <Users size={20} color="#a3e635" />
-          </View>
-          <View className="flex-1 ml-4">
-            <Text className="text-white font-medium">Event Teams</Text>
-            <Text className="text-neutral-500 text-sm">Upload team logos & manage matchup</Text>
-          </View>
-          <ChevronRight size={20} color="#525252" />
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push('/tournaments');
+            setSection('tournaments');
           }}
           className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-3 flex-row items-center active:opacity-80"
         >
@@ -518,8 +501,10 @@ export default function AdminDashboardScreen() {
             <Trophy size={20} color="#a3e635" />
           </View>
           <View className="flex-1 ml-4">
-            <Text className="text-white font-medium">Tournaments</Text>
-            <Text className="text-neutral-500 text-sm">Create events, teams, tee times</Text>
+            <Text className="text-white font-medium">Tournaments & Matches</Text>
+            <Text className="text-neutral-500 text-sm">
+              Edit events, formats, teams & matchups
+            </Text>
           </View>
           <ChevronRight size={20} color="#525252" />
         </Pressable>
@@ -1323,16 +1308,16 @@ export default function AdminDashboardScreen() {
               </View>
             )
           )}
-          {section === 'teams' && (
+          {section === 'tournaments' && (
             accessToken ? (
-              <AdminEventTeamsSection
+              <AdminTournamentManagementSection
                 accessToken={accessToken}
                 onBack={() => setSection('main')}
               />
             ) : (
               <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
                 <Text className="text-red-200 text-sm">
-                  Admin session expired. Log out and sign in again to manage event teams.
+                  Admin session expired. Log out and sign in again to manage tournaments.
                 </Text>
               </View>
             )

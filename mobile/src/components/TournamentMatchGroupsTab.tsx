@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -23,18 +23,24 @@ import {
   getTournamentMatchGroups,
   saveTournamentMatchGroup,
 } from '@/lib/tournament-match-service';
+import { buildClubTeeTimeIso } from '@/lib/club-timezone';
 import { appendPlayersToTeam, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { formatTeeAssignmentTime } from '@/lib/tournament-tee-service';
 import { getDayNumberForRound } from '@/lib/tournament-schedule';
+import { TournamentFormatRulesCard } from '@/components/TournamentFormatRulesCard';
 import {
-  formatLabel,
-  formatScoringHint,
+  formatLabelFromSettings,
+  formatScoringHintFromSettings,
+  getScoringModeForFormat,
+  resolveFormatDefinition,
+} from '@/lib/tournament-format-settings';
+import { useTournamentFormatsSettings } from '@/lib/useTournamentFormatsSettings';
+import {
   getMatchGroupFormat,
   getRoundFormat,
   isSinglesFormat,
-  MATCH_FORMATS,
 } from '@/lib/tournament-labels';
-import type { Tournament, TournamentFormat, TournamentTeam, TournamentTeamSide } from '@/types';
+import type { Tournament, TournamentTeam, TournamentTeamSide } from '@/types';
 import { cn } from '@/lib/cn';
 
 interface MemberOption {
@@ -49,18 +55,6 @@ interface TournamentMatchGroupsTabProps {
   members: MemberOption[];
   playerNameById: Record<string, string>;
   isManager: boolean;
-}
-
-function buildTeeTimeIso(tournamentStartDate: string, dayNumber: number, timeHm: string): string {
-  const base = new Date(tournamentStartDate);
-  base.setDate(base.getDate() + (dayNumber - 1));
-  const parts = timeHm.trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!parts) {
-    base.setHours(8, 0, 0, 0);
-    return base.toISOString();
-  }
-  base.setHours(Number(parts[1]), Number(parts[2]), 0, 0);
-  return base.toISOString();
 }
 
 function sideLabel(side: TournamentTeamSide): string {
@@ -101,8 +95,8 @@ export function TournamentMatchGroupsTab({
 }: TournamentMatchGroupsTabProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { data: formatSettings } = useTournamentFormatsSettings();
   const [roundNumber, setRoundNumber] = useState(1);
-  const [matchFormat, setMatchFormat] = useState<TournamentFormat>('scramble');
   const [showCreate, setShowCreate] = useState(false);
   const [teeTime, setTeeTime] = useState('08:00');
   const [startingHole, setStartingHole] = useState('1');
@@ -114,13 +108,11 @@ export function TournamentMatchGroupsTab({
 
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
-  const playersPerMatch = tournament.players_per_match ?? 2;
   const roundFormat = getRoundFormat(tournament, roundNumber);
+  const roundFormatDef = resolveFormatDefinition(roundFormat, formatSettings);
+  const playersPerMatch =
+    roundFormatDef?.default_players_per_match ?? tournament.players_per_match ?? 2;
   const dayNumber = getDayNumberForRound(tournament.round_schedule, roundNumber);
-
-  useEffect(() => {
-    setMatchFormat(roundFormat);
-  }, [roundNumber, roundFormat]);
 
   const { data: tournamentPlayers = [] } = useQuery({
     queryKey: ['tournamentPlayers', tournamentId],
@@ -301,12 +293,12 @@ export function TournamentMatchGroupsTab({
     saveMutation.mutate({
       tournament_id: tournamentId,
       round_number: roundNumber,
-      format: matchFormat,
+      format: roundFormat,
       side_a_team_id: sideATeam.id,
       side_b_team_id: sideBTeam.id,
       side_a_player_ids: selectedSideA,
       side_b_player_ids: selectedSideB,
-      tee_time: buildTeeTimeIso(tournament.start_date, dayNumber, teeTime),
+      tee_time: buildClubTeeTimeIso(tournament.start_date, dayNumber, teeTime),
       starting_hole: Math.min(18, Math.max(1, Number(startingHole) || 1)),
       group_number: matchGroups.length + 1,
     });
@@ -349,11 +341,22 @@ export function TournamentMatchGroupsTab({
 
       <View className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-4">
         <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-1">Round format</Text>
-        <Text className="text-lime-400 font-semibold">{formatLabel(roundFormat)}</Text>
+        <Text className="text-lime-400 font-semibold">
+          {formatLabelFromSettings(roundFormat, formatSettings)}
+        </Text>
         <Text className="text-neutral-400 text-sm mt-1">
-          {playersPerMatch}v{playersPerMatch} foursomes · {formatScoringHint(roundFormat)}
+          {playersPerMatch}v{playersPerMatch} foursomes ·{' '}
+          {formatScoringHintFromSettings(roundFormat, formatSettings)}
         </Text>
       </View>
+
+      <TournamentFormatRulesCard
+        formatId={roundFormat}
+        settings={formatSettings}
+        compact
+      />
+
+      <View className="mb-4" />
 
       {isLoading && matchGroups.length > 0 ? (
         <View className="py-8 items-center">
@@ -386,7 +389,7 @@ export function TournamentMatchGroupsTab({
               </View>
               <View className="bg-lime-900/20 border border-lime-700/30 rounded-lg px-3 py-2 mb-2">
                 <Text className="text-lime-400 text-xs font-bold uppercase">
-                  {formatLabel(groupFormat)}
+                  {formatLabelFromSettings(groupFormat, formatSettings)}
                 </Text>
                 {(group.match_points_a > 0 || group.match_points_b > 0) && (
                   <Text className="text-white text-sm font-semibold mt-1">
@@ -470,31 +473,21 @@ export function TournamentMatchGroupsTab({
             </View>
 
             <ScrollView>
-              <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
-                Match Format
+              <TournamentFormatRulesCard
+                formatId={roundFormat}
+                settings={formatSettings}
+              />
+
+              <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2 mt-4">
+                Locked to round format
               </Text>
-              <View className="flex-row flex-wrap gap-2 mb-3">
-                {MATCH_FORMATS.map((format) => (
-                  <Pressable
-                    key={format}
-                    onPress={() => setMatchFormat(format)}
-                    className={cn(
-                      'px-3 py-2 rounded-lg border',
-                      matchFormat === format
-                        ? 'bg-lime-900/40 border-lime-600'
-                        : 'bg-[#0c0c0c] border-neutral-800'
-                    )}
-                  >
-                    <Text
-                      className={cn(
-                        'text-xs font-medium',
-                        matchFormat === format ? 'text-lime-400' : 'text-neutral-500'
-                      )}
-                    >
-                      {formatLabel(format)}
-                    </Text>
-                  </Pressable>
-                ))}
+              <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-4">
+                <Text className="text-lime-400 font-semibold">
+                  {formatLabelFromSettings(roundFormat, formatSettings)}
+                </Text>
+                <Text className="text-neutral-400 text-xs mt-1">
+                  {getScoringModeForFormat(roundFormat, formatSettings).replace(/_/g, ' ')}
+                </Text>
               </View>
 
               <View className="flex-row gap-2 mb-4">

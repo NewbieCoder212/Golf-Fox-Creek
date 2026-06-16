@@ -13,6 +13,7 @@ import { Clock, ExternalLink, Plus, Save, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { buildClubTeeTimeIso, clubTimeInputValue } from '@/lib/club-timezone';
 import {
   formatTeeAssignmentTime,
   getTournamentTeeAssignments,
@@ -38,23 +39,8 @@ interface TournamentTeeTimesTabProps {
   isManager: boolean;
 }
 
-function buildTeeTimeIso(tournamentStartDate: string, dayNumber: number, timeHm: string): string {
-  const base = new Date(tournamentStartDate);
-  base.setDate(base.getDate() + (dayNumber - 1));
-  const parts = timeHm.trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!parts) {
-    base.setHours(8, 0, 0, 0);
-    return base.toISOString();
-  }
-  base.setHours(Number(parts[1]), Number(parts[2]), 0, 0);
-  return base.toISOString();
-}
-
 function timeFromIso(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getHours().toString().padStart(2, '0');
-  const m = d.getMinutes().toString().padStart(2, '0');
-  return `${h}:${m}`;
+  return clubTimeInputValue(iso);
 }
 
 interface AssigneeRow {
@@ -150,7 +136,7 @@ export function TournamentTeeTimesTab({
       round_number: roundNumber,
       team_id: row.teamId,
       user_id: row.userId,
-      tee_time: buildTeeTimeIso(tournament.start_date, dayNumber, draft.time),
+      tee_time: buildClubTeeTimeIso(tournament.start_date, dayNumber, draft.time),
       starting_hole: hole,
       notes: draft.notes.trim() || null,
     });
@@ -163,7 +149,7 @@ export function TournamentTeeTimesTab({
       round_number: roundNumber,
       user_id: userId,
       team_id: null,
-      tee_time: buildTeeTimeIso(tournament.start_date, dayNumber, '08:00'),
+      tee_time: buildClubTeeTimeIso(tournament.start_date, dayNumber, '08:00'),
       starting_hole: 1,
     });
   };

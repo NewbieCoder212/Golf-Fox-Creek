@@ -9,6 +9,7 @@ import type {
   GeofenceZone,
   GMAnnouncement,
   TurnMessagingSettings,
+  TournamentFormatsSettings,
   LoyaltyConfig,
   LoyaltyTransaction,
   LoyaltyTransactionInsert,
@@ -17,6 +18,10 @@ import type {
   TeeTime,
   UserProfile,
 } from '@/types';
+import {
+  getDefaultTournamentFormatsSettings,
+  mergeTournamentFormatsSettings,
+} from './tournament-format-settings';
 
 // Add your credentials in the ENV tab of the Vibecode app
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -1001,6 +1006,56 @@ export async function updateGMAnnouncementAuth(
     body: {
       setting_value: updated,
       updated_at: new Date().toISOString(),
+    },
+  });
+
+  return result !== null;
+}
+
+// ============================================
+// TOURNAMENT FORMAT RULES
+// ============================================
+
+export async function getTournamentFormatsSettings(): Promise<TournamentFormatsSettings> {
+  if (!isConfigured()) return getDefaultTournamentFormatsSettings();
+
+  const data = await supabaseRequest<AppSetting>('app_settings', {
+    query: { setting_key: 'eq.tournament_formats' },
+    single: true,
+  });
+
+  if (!data) return getDefaultTournamentFormatsSettings();
+
+  return mergeTournamentFormatsSettings(data.setting_value as Partial<TournamentFormatsSettings>);
+}
+
+export async function updateTournamentFormatsSettingsAuth(
+  settings: TournamentFormatsSettings,
+  accessToken: string
+): Promise<boolean> {
+  const existing = await supabaseRequest<AppSetting>('app_settings', {
+    query: { setting_key: 'eq.tournament_formats' },
+    single: true,
+  });
+
+  if (existing) {
+    const result = await authenticatedRequest('app_settings', accessToken, {
+      method: 'PATCH',
+      query: { setting_key: 'eq.tournament_formats' },
+      body: {
+        setting_value: settings,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    return result !== null;
+  }
+
+  const result = await authenticatedRequest('app_settings', accessToken, {
+    method: 'POST',
+    body: {
+      setting_key: 'tournament_formats',
+      setting_value: settings,
+      description: 'Tournament format rules and instructions for match setup and scoring',
     },
   });
 

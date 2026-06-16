@@ -1,5 +1,10 @@
 import type { Tournament, TournamentFormat, TournamentMatchGroup } from '@/types';
 import {
+  clubDateInputToIso,
+  clubDateInputValue,
+  formatTournamentDateRange,
+} from './club-timezone';
+import {
   flattenRoundFormats,
   formatRoundLabel,
   getRoundFormatFromSchedule,
@@ -19,9 +24,9 @@ export type KnownTournamentFormat = (typeof KNOWN_FORMATS)[number];
 
 export const FORMAT_LABELS: Record<string, string> = {
   scramble: 'Scramble',
-  best_ball: 'Best Ball',
+  best_ball: 'Best Ball (Four-Ball)',
   alternate_shot: 'Alternate Shot',
-  singles: 'Singles',
+  singles: 'Head-to-Head Singles (Match Play)',
   match_play: 'Match Play',
 };
 
@@ -120,15 +125,17 @@ export function tournamentHasSinglesRound(tournament: Pick<Tournament, 'round_sc
 }
 
 export function formatTournamentDates(start: string, end: string): string {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const sameDay = startDate.toDateString() === endDate.toDateString();
+  return formatTournamentDateRange(start, end);
+}
 
-  const fmt = (d: Date) =>
-    d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+/** YYYY-MM-DD on the Moncton calendar — use for date inputs. */
+export function toTournamentDateInputValue(iso: string): string {
+  return clubDateInputValue(iso);
+}
 
-  if (sameDay) return fmt(startDate);
-  return `${fmt(startDate)} – ${fmt(endDate)}`;
+/** Parse YYYY-MM-DD as a Moncton calendar day. */
+export function tournamentDateInputToIso(dateStr: string): string {
+  return clubDateInputToIso(dateStr);
 }
 
 export { flattenRoundFormats };

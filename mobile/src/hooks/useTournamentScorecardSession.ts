@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { formatClubTime } from '@/lib/club-timezone';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
@@ -305,10 +306,7 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
 
   const matchTeeTimeLabel = useMemo(() => {
     if (!activeMatchGroup?.tee_time) return null;
-    return new Date(activeMatchGroup.tee_time).toLocaleTimeString('en-CA', {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+    return formatClubTime(activeMatchGroup.tee_time, true);
   }, [activeMatchGroup?.tee_time]);
 
   const paperScores = useMemo(() => {

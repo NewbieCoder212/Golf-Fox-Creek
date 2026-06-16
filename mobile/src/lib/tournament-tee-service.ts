@@ -172,9 +172,8 @@ export async function deleteTournamentTeeAssignment(assignmentId: string): Promi
   return result !== null;
 }
 
+import { formatClubTime } from './club-timezone';
+
 export function formatTeeAssignmentTime(isoTime: string): string {
-  return new Date(isoTime).toLocaleTimeString('en-CA', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return formatClubTime(isoTime, true);
 }

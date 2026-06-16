@@ -23,19 +23,25 @@ export function getErrorMessage(data: Record<string, unknown>): string {
 
 export async function adminFetch<T = Record<string, unknown>>(
   path: string,
-  options: { method?: string; body?: unknown } = {}
+  options: { method?: string; body?: unknown; prefer?: string } = {}
 ): Promise<{ ok: boolean; status: number; data: T }> {
   const { supabaseUrl: url, serviceRoleKey: key } = getSupabaseAdminConfig();
+  const headers: Record<string, string> = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    'Content-Type': 'application/json',
+  };
+  if (options.prefer) {
+    headers.Prefer = options.prefer;
+  }
+
   const response = await fetch(`${url}${path}`, {
     method: options.method ?? 'GET',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  const data = (await response.json()) as T;
+  const text = await response.text();
+  const data = (text ? JSON.parse(text) : null) as T;
   return { ok: response.ok, status: response.status, data };
 }

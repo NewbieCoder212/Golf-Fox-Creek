@@ -1,4 +1,4 @@
-import type { Tournament, TournamentFormat, TournamentMatchGroup } from '@/types';
+import type { Tournament, TournamentFormat, TournamentMatchGroup, TournamentTeamSide } from '@/types';
 import {
   clubDateInputToIso,
   clubDateInputValue,
@@ -136,6 +136,14 @@ export function toTournamentDateInputValue(iso: string): string {
 /** Parse YYYY-MM-DD as a Moncton calendar day. */
 export function tournamentDateInputToIso(dateStr: string): string {
   return clubDateInputToIso(dateStr);
+}
+
+export function getTeamSideDisplayName(
+  side: TournamentTeamSide,
+  teams: Array<{ side: TournamentTeamSide | null; team_name: string }>
+): string {
+  const team = teams.find((entry) => entry.side === side);
+  return team?.team_name ?? (side === 'side_a' ? 'Team A' : 'Team B');
 }
 
 export { flattenRoundFormats };

@@ -536,23 +536,23 @@ export async function submitChallengeScore(
  * Get members for challenge selection
  */
 export async function getMembersForChallenge(): Promise<
-  Array<{ id: string; full_name: string; handicap_index: number | null }>
+  Array<{ id: string; full_name: string; handicap_index: number | null; email: string | null }>
 > {
   if (!isConfigured()) {
     return [
-      { id: '1', full_name: 'Mike Johnson', handicap_index: 8.2 },
-      { id: '2', full_name: 'Sarah Williams', handicap_index: 12.5 },
-      { id: '3', full_name: 'Tom Richards', handicap_index: 5.1 },
-      { id: '4', full_name: 'Lisa Chen', handicap_index: 18.3 },
-      { id: '5', full_name: 'James Brown', handicap_index: 10.7 },
+      { id: '1', full_name: 'Mike Johnson', handicap_index: 8.2, email: 'mike@example.com' },
+      { id: '2', full_name: 'Sarah Williams', handicap_index: 12.5, email: 'sarah@example.com' },
+      { id: '3', full_name: 'Tom Richards', handicap_index: 5.1, email: 'tom@example.com' },
+      { id: '4', full_name: 'Lisa Chen', handicap_index: 18.3, email: 'lisa@example.com' },
+      { id: '5', full_name: 'James Brown', handicap_index: 10.7, email: 'james@example.com' },
     ];
   }
 
   const data = await supabaseRequest<
-    Array<{ id: string; full_name: string; handicap_index: number | null }>
+    Array<{ id: string; full_name: string; handicap_index: number | null; email: string | null }>
   >('user_profiles', {
     query: {
-      'select': 'id,full_name,handicap_index',
+      'select': 'id,full_name,handicap_index,email',
       'order': 'full_name.asc',
     },
   });

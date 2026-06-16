@@ -20,6 +20,28 @@ function getAccessToken(): string {
   );
 }
 
+/** Prefer a manager JWT for tournament writes (admin dashboard or member manager). */
+export function getManagerAccessToken(): string | null {
+  const admin = useAdminAuthStore.getState();
+  const member = useMemberAuthStore.getState();
+
+  if (
+    admin.accessToken &&
+    (admin.profile?.role === 'manager' || admin.profile?.role === 'super_admin')
+  ) {
+    return admin.accessToken;
+  }
+
+  if (
+    member.accessToken &&
+    (member.profile?.role === 'manager' || member.profile?.role === 'super_admin')
+  ) {
+    return member.accessToken;
+  }
+
+  return admin.accessToken ?? member.accessToken ?? null;
+}
+
 export interface TournamentServiceError {
   data: null;
   error: string;
@@ -95,10 +117,13 @@ export async function tournamentSupabaseRequest<T>(
     const primaryToken = getAccessToken();
     let response = await fetchWithToken(url.toString(), init, primaryToken);
 
+    const isMutation = method !== 'GET';
+
     if (
       !response.ok &&
       response.status === 401 &&
-      primaryToken !== supabaseAnonKey
+      primaryToken !== supabaseAnonKey &&
+      !isMutation
     ) {
       console.log('[Tournament] Auth token rejected, retrying with anon key');
       response = await fetchWithToken(url.toString(), init, supabaseAnonKey);
@@ -107,10 +132,17 @@ export async function tournamentSupabaseRequest<T>(
     if (!response.ok) {
       const errorText = await response.text();
       console.log(`[Tournament] ${method} ${table} ${response.status}:`, errorText);
+      if (response.status === 401 && isMutation) {
+        return {
+          data: null,
+          error: 'Session expired. Log out and log back in, then try again.',
+        };
+      }
       return { data: null, error: parseSupabaseError(response.status, errorText) };
     }
 
-    const data = (await response.json()) as T;
+    const responseText = await response.text();
+    const data = (responseText ? JSON.parse(responseText) : null) as T;
     return { data, error: null };
   } catch (err) {
     console.log(`[Tournament] ${method} ${table} network error:`, err);

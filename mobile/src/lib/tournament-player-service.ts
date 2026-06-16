@@ -10,6 +10,10 @@ import {
   type TournamentServiceResult,
 } from './tournament-supabase';
 import { createTournamentTeam, updateTournamentTeam } from './tournament-service';
+import {
+  deleteTournamentParticipantViaBackend,
+  updateTournamentParticipantViaBackend,
+} from './tournament-team-service';
 
 export async function getTournamentPlayers(tournamentId: string): Promise<TournamentPlayer[]> {
   const result = await tournamentSupabaseRequest<TournamentPlayer[]>('tournament_players', {
@@ -58,6 +62,7 @@ export async function createTournamentPlayers(
     display_name: player.display_name.trim(),
     handicap_index: player.handicap_index ?? null,
     user_id: player.user_id ?? null,
+    email: player.email?.trim().toLowerCase() ?? null,
   }));
 
   const result = await tournamentSupabaseRequest<TournamentPlayer[]>('tournament_players', {
@@ -74,8 +79,23 @@ export async function createTournamentPlayers(
 }
 
 export async function deleteTournamentPlayer(
-  playerId: string
+  playerId: string,
+  context?: { tournamentId?: string; accessToken?: string | null }
 ): Promise<TournamentServiceResult<boolean>> {
+  if (context?.tournamentId && context.accessToken) {
+    const backendResult = await deleteTournamentParticipantViaBackend({
+      tournamentId: context.tournamentId,
+      playerId,
+      accessToken: context.accessToken,
+    });
+    if (backendResult.success) {
+      return { data: true, error: null };
+    }
+    if (backendResult.error && !backendResult.error.includes('Could not reach')) {
+      return { data: null, error: backendResult.error };
+    }
+  }
+
   const result = await tournamentSupabaseRequest<TournamentPlayer[]>('tournament_players', {
     method: 'DELETE',
     query: { id: `eq.${playerId}` },
@@ -83,6 +103,97 @@ export async function deleteTournamentPlayer(
 
   if (result.error) return { data: null, error: result.error };
   return { data: true, error: null };
+}
+
+export async function updateTournamentPlayer(
+  playerId: string,
+  updates: Partial<Pick<TournamentPlayerInsert, 'display_name' | 'handicap_index' | 'email' | 'user_id'>>,
+  context?: { tournamentId?: string; accessToken?: string | null }
+): Promise<TournamentServiceResult<TournamentPlayer>> {
+  const body: Record<string, unknown> = { ...updates };
+  if (typeof updates.display_name === 'string') {
+    body.display_name = updates.display_name.trim();
+  }
+  if (typeof updates.email === 'string') {
+    body.email = updates.email.trim().toLowerCase();
+  }
+
+  if (context?.tournamentId && context.accessToken) {
+    const backendResult = await updateTournamentParticipantViaBackend({
+      tournamentId: context.tournamentId,
+      playerId,
+      accessToken: context.accessToken,
+      updates: {
+        display_name: typeof body.display_name === 'string' ? body.display_name : undefined,
+        email:
+          updates.email === undefined
+            ? undefined
+            : typeof body.email === 'string'
+              ? body.email
+              : null,
+        handicap_index: updates.handicap_index,
+      },
+    });
+    if (backendResult.data) {
+      return { data: backendResult.data, error: null };
+    }
+    if (backendResult.error && !backendResult.error.includes('Could not reach')) {
+      return { data: null, error: backendResult.error };
+    }
+  }
+
+  const result = await tournamentSupabaseRequest<TournamentPlayer[]>('tournament_players', {
+    method: 'PATCH',
+    query: { id: `eq.${playerId}` },
+    body,
+  });
+
+  if (result.error) return result;
+  const updated = result.data?.[0] ?? null;
+  if (!updated) {
+    return { data: null, error: 'Participant was not updated' };
+  }
+  return { data: updated, error: null };
+}
+
+export async function assignPlayersToTeam(
+  team: TournamentTeam,
+  playerIds: string[]
+): Promise<TournamentServiceResult<TournamentTeam>> {
+  const uniqueIds = playerIds.filter((id) => !team.player_ids.includes(id));
+  if (uniqueIds.length === 0) {
+    return { data: team, error: null };
+  }
+
+  const updates: Partial<TournamentTeamInsert> & {
+    roster_status?: TournamentTeam['roster_status'];
+    onboard_email_sent_at?: string | null;
+  } = {
+    player_ids: [...team.player_ids, ...uniqueIds],
+  };
+  if ((team.roster_status ?? 'draft') === 'ready') {
+    updates.roster_status = 'draft';
+    updates.onboard_email_sent_at = null;
+  }
+  return updateTournamentTeam(team.id, updates, {
+    tournamentId: team.tournament_id,
+  });
+}
+
+export async function createEmptyTournamentTeam(params: {
+  tournament_id: string;
+  team_name: string;
+  side: TournamentTeamInsert['side'];
+  captain_user_id?: string | null;
+}): Promise<TournamentServiceResult<TournamentTeam>> {
+  return createTournamentTeam({
+    tournament_id: params.tournament_id,
+    team_name: params.team_name,
+    side: params.side,
+    player_ids: [],
+    captain_user_id: params.captain_user_id ?? null,
+    roster_status: 'draft',
+  });
 }
 
 export async function appendPlayersToTeam(
@@ -108,12 +219,12 @@ export async function appendPlayersToTeam(
 
 export async function removePlayerFromTeam(
   team: TournamentTeam,
-  playerId: string
+  playerId: string,
+  participant?: Pick<TournamentPlayer, 'user_id'>
 ): Promise<TournamentServiceResult<TournamentTeam>> {
-  const nextIds = team.player_ids.filter((id) => id !== playerId);
-  if (nextIds.length === 0) {
-    return { data: null, error: 'A team must have at least one player' };
-  }
+  const nextIds = team.player_ids.filter(
+    (id) => id !== playerId && (participant?.user_id == null || id !== participant.user_id)
+  );
 
   const updates: Partial<TournamentTeamInsert> & {
     roster_status?: TournamentTeam['roster_status'];

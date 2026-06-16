@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,9 @@ import {
   TextInput,
   ActivityIndicator,
   ScrollView,
-  Modal,
   Alert,
 } from 'react-native';
-import { ClipboardList, Plus, Save, Trash2, X, Users } from 'lucide-react-native';
+import { ClipboardList, Save, Trash2, Users } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -17,13 +16,10 @@ import { useRouter } from 'expo-router';
 import {
   countMatchHoleWins,
   deleteTournamentMatchGroup,
-  getAssignedPlayerIdsForRound,
   getMatchHoleResultsForGroups,
   getTeamBySide,
   getTournamentMatchGroups,
-  saveTournamentMatchGroup,
 } from '@/lib/tournament-match-service';
-import { buildClubTeeTimeIso } from '@/lib/club-timezone';
 import { appendPlayersToTeam, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { formatTeeAssignmentTime } from '@/lib/tournament-tee-service';
 import { getDayNumberForRound } from '@/lib/tournament-schedule';
@@ -31,15 +27,24 @@ import { TournamentFormatRulesCard } from '@/components/TournamentFormatRulesCar
 import {
   formatLabelFromSettings,
   formatScoringHintFromSettings,
-  getScoringModeForFormat,
   resolveFormatDefinition,
 } from '@/lib/tournament-format-settings';
 import { useTournamentFormatsSettings } from '@/lib/useTournamentFormatsSettings';
 import {
   getMatchGroupFormat,
   getRoundFormat,
+  getTeamSideDisplayName,
   isSinglesFormat,
 } from '@/lib/tournament-labels';
+import {
+  createEmptyPairingRow,
+  formatPairingRowTeeLabel,
+  getAssignedPlayerIdsInDraftRows,
+  incrementTeeTimeHm,
+  matchGroupsToPairingRows,
+  savePairingRowsBatch,
+  type PairingRowDraft,
+} from '@/lib/tournament-pairings-board';
 import type { Tournament, TournamentTeam, TournamentTeamSide } from '@/types';
 import { cn } from '@/lib/cn';
 
@@ -57,28 +62,82 @@ interface TournamentMatchGroupsTabProps {
   isManager: boolean;
 }
 
-function sideLabel(side: TournamentTeamSide): string {
-  return side === 'side_a' ? 'Team A' : 'Team B';
+type ActiveSlot = {
+  rowKey: string;
+  side: 'a' | 'b';
+  slotIndex: number;
+};
+
+function PlayerBadge({
+  label,
+  assigned,
+  active,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  assigned?: boolean;
+  active?: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      className={cn(
+        'px-3 py-2 rounded-full border mb-2',
+        active
+          ? 'bg-lime-900/60 border-lime-400'
+          : assigned
+            ? 'bg-neutral-900 border-neutral-700 opacity-40'
+            : 'bg-[#0c0c0c] border-neutral-700 active:opacity-80'
+      )}
+    >
+      <Text
+        className={cn(
+          'text-xs font-medium',
+          active ? 'text-lime-200' : assigned ? 'text-neutral-500' : 'text-neutral-200'
+        )}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 function SlotBadge({
   label,
   filled,
+  active,
   onPress,
+  disabled,
 }: {
   label: string;
   filled: boolean;
+  active?: boolean;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       className={cn(
-        'px-3 py-2 rounded-full border min-w-[88px] items-center',
-        filled ? 'bg-lime-900/40 border-lime-600' : 'bg-[#0c0c0c] border-dashed border-neutral-700'
+        'px-2.5 py-2 rounded-full border min-w-[72px] items-center mb-1',
+        active
+          ? 'bg-lime-900/60 border-lime-400'
+          : filled
+            ? 'bg-lime-900/40 border-lime-600'
+            : 'bg-[#0c0c0c] border-dashed border-neutral-700'
       )}
     >
-      <Text className={cn('text-xs font-semibold', filled ? 'text-lime-300' : 'text-neutral-600')}>
+      <Text
+        className={cn(
+          'text-[11px] font-semibold text-center',
+          active ? 'text-lime-200' : filled ? 'text-lime-300' : 'text-neutral-600'
+        )}
+      >
         {label}
       </Text>
     </Pressable>
@@ -97,27 +156,22 @@ export function TournamentMatchGroupsTab({
   const queryClient = useQueryClient();
   const { data: formatSettings } = useTournamentFormatsSettings();
   const [roundNumber, setRoundNumber] = useState(1);
-  const [showCreate, setShowCreate] = useState(false);
-  const [teeTime, setTeeTime] = useState('08:00');
-  const [startingHole, setStartingHole] = useState('1');
-  const [selectedSideA, setSelectedSideA] = useState<string[]>([]);
-  const [selectedSideB, setSelectedSideB] = useState<string[]>([]);
-  const [activeSide, setActiveSide] = useState<'a' | 'b'>('a');
+  const [draftRows, setDraftRows] = useState<PairingRowDraft[]>([]);
+  const [activeSlot, setActiveSlot] = useState<ActiveSlot | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [guestSide, setGuestSide] = useState<'a' | 'b'>('a');
   const [guestName, setGuestName] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
+  const sideAName = getTeamSideDisplayName('side_a', teams);
+  const sideBName = getTeamSideDisplayName('side_b', teams);
   const roundFormat = getRoundFormat(tournament, roundNumber);
   const roundFormatDef = resolveFormatDefinition(roundFormat, formatSettings);
   const playersPerMatch =
     roundFormatDef?.default_players_per_match ?? tournament.players_per_match ?? 2;
   const dayNumber = getDayNumberForRound(tournament.round_schedule, roundNumber);
-
-  const { data: tournamentPlayers = [] } = useQuery({
-    queryKey: ['tournamentPlayers', tournamentId],
-    queryFn: () => getTournamentPlayers(tournamentId),
-  });
 
   const memberNameById = useMemo(
     () => ({ ...playerNameById, ...Object.fromEntries(members.map((m) => [m.id, m.full_name])) }),
@@ -130,71 +184,74 @@ export function TournamentMatchGroupsTab({
   });
 
   const matchGroups = useMemo(
-    () => allMatchGroups.filter((g) => g.round_number === roundNumber),
+    () => allMatchGroups.filter((group) => group.round_number === roundNumber),
     [allMatchGroups, roundNumber]
   );
 
-  const assignedPlayerIds = useMemo(
-    () => getAssignedPlayerIdsForRound(allMatchGroups, roundNumber),
-    [allMatchGroups, roundNumber]
+  useEffect(() => {
+    setDraftRows(matchGroupsToPairingRows(matchGroups));
+    setActiveSlot(null);
+    setIsDirty(false);
+    setSaveError(null);
+  }, [roundNumber]);
+
+  useEffect(() => {
+    if (!isDirty) {
+      setDraftRows(matchGroupsToPairingRows(matchGroups));
+    }
+  }, [matchGroups, isDirty]);
+
+  const assignedInDraft = useMemo(
+    () => getAssignedPlayerIdsInDraftRows(draftRows),
+    [draftRows]
   );
 
-  const rosterPool = useMemo(() => {
-    const ids = new Set<string>();
-    sideATeam?.player_ids.forEach((id) => ids.add(id));
-    sideBTeam?.player_ids.forEach((id) => ids.add(id));
-    return Array.from(ids).map((id) => ({
-      id,
-      name: memberNameById[id] ?? 'Player',
-      assigned: assignedPlayerIds.has(id),
-      inSlots: selectedSideA.includes(id) || selectedSideB.includes(id),
-    }));
-  }, [
-    sideATeam,
-    sideBTeam,
-    memberNameById,
-    assignedPlayerIds,
-    selectedSideA,
-    selectedSideB,
-  ]);
-
-  const matchGroupIds = useMemo(() => matchGroups.map((g) => g.id), [matchGroups]);
+  const savedGroupIds = useMemo(
+    () => draftRows.map((row) => row.groupId).filter(Boolean) as string[],
+    [draftRows]
+  );
 
   const { data: holeResults = [], isLoading } = useQuery({
-    queryKey: ['matchHoleResults', tournamentId, roundNumber, matchGroupIds.join(',')],
-    queryFn: () => getMatchHoleResultsForGroups(matchGroupIds, roundNumber),
-    enabled: matchGroupIds.length > 0,
+    queryKey: ['matchHoleResults', tournamentId, roundNumber, savedGroupIds.join(',')],
+    queryFn: () => getMatchHoleResultsForGroups(savedGroupIds, roundNumber),
+    enabled: savedGroupIds.length > 0,
   });
 
   const holeWinsByGroupId = useMemo(() => {
     const map: Record<string, ReturnType<typeof countMatchHoleWins>> = {};
-    for (const group of matchGroups) {
-      const groupResults = holeResults.filter((r) => r.match_group_id === group.id);
-      map[group.id] = countMatchHoleWins(groupResults);
+    for (const groupId of savedGroupIds) {
+      const groupResults = holeResults.filter((row) => row.match_group_id === groupId);
+      map[groupId] = countMatchHoleWins(groupResults);
     }
     return map;
-  }, [matchGroups, holeResults]);
+  }, [holeResults, savedGroupIds]);
 
-  const openScorecard = (groupId: string, side?: 'side_a' | 'side_b') => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const params = new URLSearchParams({
-      id: tournamentId,
-      matchGroupId: groupId,
-      round: String(roundNumber),
-    });
-    if (side) params.set('side', side);
-    router.push(`/(tabs)/scorecard?${params.toString()}`);
-  };
+  const savedGroupById = useMemo(
+    () => Object.fromEntries(matchGroups.map((group) => [group.id, group])),
+    [matchGroups]
+  );
 
   const saveMutation = useMutation({
-    mutationFn: saveTournamentMatchGroup,
+    mutationFn: () => {
+      if (!sideATeam || !sideBTeam) {
+        throw new Error('Both teams must exist before saving pairings.');
+      }
+      return savePairingRowsBatch({
+        tournament,
+        roundNumber,
+        roundFormat,
+        sideATeam,
+        sideBTeam,
+        rows: draftRows,
+        dayNumber,
+        playersPerMatch,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournamentMatchGroups', tournamentId] });
-      setShowCreate(false);
-      setSelectedSideA([]);
-      setSelectedSideB([]);
-      setGuestName('');
+      setIsDirty(false);
       setSaveError(null);
+      setActiveSlot(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: Error) => {
@@ -210,48 +267,169 @@ export function TournamentMatchGroupsTab({
     },
   });
 
-  const assignPlayerToSide = (side: 'a' | 'b', playerId: string) => {
+  const openScorecard = (groupId: string, side?: TournamentTeamSide) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const params = new URLSearchParams({
+      id: tournamentId,
+      matchGroupId: groupId,
+      round: String(roundNumber),
+    });
+    if (side) params.set('side', side);
+    router.push(`/(tabs)/scorecard?${params.toString()}`);
+  };
+
+  const markDirty = () => setIsDirty(true);
+
+  const updateRow = (rowKey: string, updater: (row: PairingRowDraft) => PairingRowDraft) => {
+    markDirty();
+    setDraftRows((prev) => prev.map((row) => (row.clientKey === rowKey ? updater(row) : row)));
+  };
+
+  const addRows = (count: number) => {
+    markDirty();
+    setDraftRows((prev) => {
+      const next = [...prev];
+      let nextGroupNumber =
+        prev.length > 0 ? Math.max(...prev.map((row) => row.groupNumber)) + 1 : 1;
+      let nextTime =
+        prev.length > 0 ? incrementTeeTimeHm(prev[prev.length - 1].teeTime, 10) : '08:00';
+
+      for (let i = 0; i < count; i += 1) {
+        next.push(createEmptyPairingRow(nextGroupNumber, nextTime));
+        nextGroupNumber += 1;
+        nextTime = incrementTeeTimeHm(nextTime, 10);
+      }
+      return next;
+    });
+  };
+
+  const removeRow = (row: PairingRowDraft) => {
+    if (row.groupId) {
+      deleteMutation.mutate(row.groupId, {
+        onSuccess: () => {
+          setDraftRows((prev) => prev.filter((entry) => entry.clientKey !== row.clientKey));
+        },
+      });
+      return;
+    }
+    markDirty();
+    setDraftRows((prev) => prev.filter((entry) => entry.clientKey !== row.clientKey));
+  };
+
+  const assignPlayerToSlot = (
+    rowKey: string,
+    side: 'a' | 'b',
+    slotIndex: number,
+    playerId: string
+  ) => {
     const roster = side === 'a' ? sideATeam?.player_ids ?? [] : sideBTeam?.player_ids ?? [];
     if (!roster.includes(playerId)) return;
 
-    const selected = side === 'a' ? selectedSideA : selectedSideB;
-    const setter = side === 'a' ? setSelectedSideA : setSelectedSideB;
+    const row = draftRows.find((entry) => entry.clientKey === rowKey);
+    if (!row) return;
 
-    if (selected.includes(playerId)) {
-      setter(selected.filter((id) => id !== playerId));
+    const assignedElsewhere = getAssignedPlayerIdsInDraftRows(draftRows, rowKey);
+    if (assignedElsewhere.has(playerId)) {
+      Alert.alert('Already assigned', 'This player is already in another tee time this round.');
       return;
     }
 
-    if (selected.length >= playersPerMatch) {
-      Alert.alert('Slots full', `Remove a player from ${sideLabel(side === 'a' ? 'side_a' : 'side_b')} first.`);
-      return;
-    }
+    updateRow(rowKey, (entry) => {
+      const sideAIds = Array.from(
+        { length: playersPerMatch },
+        (_, index) => entry.sideAPlayerIds[index] ?? ''
+      );
+      const sideBIds = Array.from(
+        { length: playersPerMatch },
+        (_, index) => entry.sideBPlayerIds[index] ?? ''
+      );
+      const target = side === 'a' ? sideAIds : sideBIds;
+      const other = side === 'a' ? sideBIds : sideAIds;
 
-    if (assignedPlayerIds.has(playerId)) {
-      Alert.alert('Already assigned', 'This player is already in another foursome this round.');
-      return;
-    }
+      if (other.includes(playerId)) {
+        Alert.alert('Wrong side', 'Player is already on the other side in this tee time.');
+        return entry;
+      }
 
-    const otherSide = side === 'a' ? selectedSideB : selectedSideA;
-    if (otherSide.includes(playerId)) {
-      Alert.alert('Wrong side', 'Player is already on the other side for this match.');
-      return;
-    }
+      target[slotIndex] = playerId;
+      for (let index = 0; index < target.length; index += 1) {
+        if (index !== slotIndex && target[index] === playerId) {
+          target[index] = '';
+        }
+      }
 
-    setter([...selected, playerId]);
+      return {
+        ...entry,
+        sideAPlayerIds: sideAIds,
+        sideBPlayerIds: sideBIds,
+      };
+    });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const removeFromSlot = (side: 'a' | 'b', index: number) => {
-    const setter = side === 'a' ? setSelectedSideA : setSelectedSideB;
-    setter((prev) => prev.filter((_, i) => i !== index));
+  const clearSlot = (rowKey: string, side: 'a' | 'b', slotIndex: number) => {
+    updateRow(rowKey, (entry) => {
+      const sideAIds = Array.from(
+        { length: playersPerMatch },
+        (_, index) => entry.sideAPlayerIds[index] ?? ''
+      );
+      const sideBIds = Array.from(
+        { length: playersPerMatch },
+        (_, index) => entry.sideBPlayerIds[index] ?? ''
+      );
+      const target = side === 'a' ? sideAIds : sideBIds;
+      target[slotIndex] = '';
+      return {
+        ...entry,
+        sideAPlayerIds: sideAIds,
+        sideBPlayerIds: sideBIds,
+      };
+    });
+    setActiveSlot(null);
+  };
+
+  const handlePoolPlayerTap = (side: 'a' | 'b', playerId: string) => {
+    if (!isManager) return;
+
+    if (activeSlot && activeSlot.side === side) {
+      assignPlayerToSlot(activeSlot.rowKey, side, activeSlot.slotIndex, playerId);
+      setActiveSlot(null);
+      return;
+    }
+
+    const targetRow = draftRows.find((row) => {
+      const ids = side === 'a' ? row.sideAPlayerIds : row.sideBPlayerIds;
+      const padded = Array.from({ length: playersPerMatch }, (_, index) => ids[index] ?? '');
+      return padded.some((id) => !id);
+    });
+
+    if (!targetRow) {
+      Alert.alert('No open slots', 'Add a tee time row or clear a slot first.');
+      return;
+    }
+
+    const ids = side === 'a' ? targetRow.sideAPlayerIds : targetRow.sideBPlayerIds;
+    const padded = Array.from({ length: playersPerMatch }, (_, index) => ids[index] ?? '');
+    const slotIndex = padded.findIndex((id) => !id);
+    if (slotIndex < 0) return;
+    assignPlayerToSlot(targetRow.clientKey, side, slotIndex, playerId);
+  };
+
+  const handleSlotPress = (rowKey: string, side: 'a' | 'b', slotIndex: number, playerId?: string) => {
+    if (!isManager) return;
+    if (playerId) {
+      clearSlot(rowKey, side, slotIndex);
+      return;
+    }
+    setActiveSlot({ rowKey, side, slotIndex });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const addGuestPlayer = async () => {
     const name = guestName.trim();
-    if (!name) return;
+    if (!name || !isManager) return;
 
-    const rosterSide = activeSide === 'a' ? sideATeam : sideBTeam;
+    const rosterSide = guestSide === 'a' ? sideATeam : sideBTeam;
     if (!rosterSide) return;
 
     const teamResult = await appendPlayersToTeam(rosterSide, [
@@ -271,37 +449,57 @@ export function TournamentMatchGroupsTab({
     queryClient.invalidateQueries({ queryKey: ['tournamentTeams', tournamentId] });
     setGuestName('');
     if (newPlayerId) {
-      assignPlayerToSide(activeSide, newPlayerId);
+      handlePoolPlayerTap(guestSide, newPlayerId);
     }
   };
 
-  const handleCreate = () => {
-    if (!sideATeam || !sideBTeam) return;
-    setSaveError(null);
+  const renderPoolColumn = (side: 'a' | 'b', team: TournamentTeam | undefined, title: string) => {
+    const rosterIds = team?.player_ids ?? [];
+    const availableIds = rosterIds.filter((id) => !assignedInDraft.has(id));
 
-    if (selectedSideA.length !== playersPerMatch || selectedSideB.length !== playersPerMatch) {
-      setSaveError(`Select ${playersPerMatch} players per side.`);
-      return;
-    }
-
-    const conflict = [...selectedSideA, ...selectedSideB].find((id) => assignedPlayerIds.has(id));
-    if (conflict) {
-      setSaveError('A selected player is already assigned to another match this round.');
-      return;
-    }
-
-    saveMutation.mutate({
-      tournament_id: tournamentId,
-      round_number: roundNumber,
-      format: roundFormat,
-      side_a_team_id: sideATeam.id,
-      side_b_team_id: sideBTeam.id,
-      side_a_player_ids: selectedSideA,
-      side_b_player_ids: selectedSideB,
-      tee_time: buildClubTeeTimeIso(tournament.start_date, dayNumber, teeTime),
-      starting_hole: Math.min(18, Math.max(1, Number(startingHole) || 1)),
-      group_number: matchGroups.length + 1,
-    });
+    return (
+      <View className="flex-1 bg-[#141414] border border-neutral-800 rounded-xl p-3">
+        <Text className="text-lime-400 font-bold text-sm mb-2">{title}</Text>
+        <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-2">
+          {availableIds.length} available
+        </Text>
+        {availableIds.length === 0 ? (
+          <Text className="text-neutral-600 text-xs">All players assigned</Text>
+        ) : (
+          availableIds.map((playerId) => (
+            <PlayerBadge
+              key={playerId}
+              label={memberNameById[playerId] ?? 'Player'}
+              onPress={() => handlePoolPlayerTap(side, playerId)}
+              disabled={!isManager}
+            />
+          ))
+        )}
+        {isManager && (
+          <View className="mt-2 pt-2 border-t border-neutral-800">
+            <TextInput
+              value={guestSide === side ? guestName : ''}
+              onChangeText={(value) => {
+                setGuestSide(side);
+                setGuestName(value);
+              }}
+              placeholder="Add guest"
+              placeholderTextColor="#525252"
+              className="bg-[#0c0c0c] border border-neutral-800 rounded-lg px-3 py-2 text-white text-xs mb-2"
+            />
+            <Pressable
+              onPress={() => {
+                setGuestSide(side);
+                void addGuestPlayer();
+              }}
+              className="self-start px-3 py-1.5 rounded-lg bg-lime-900/30 border border-lime-700/50 active:opacity-80"
+            >
+              <Text className="text-lime-400 text-[10px] font-bold">Add guest</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    );
   };
 
   if (!sideATeam || !sideBTeam) {
@@ -309,7 +507,7 @@ export function TournamentMatchGroupsTab({
       <View className="mx-5 mt-4 py-10 items-center bg-[#141414] rounded-2xl border border-neutral-800">
         <Users size={32} color="#525252" />
         <Text className="text-neutral-300 font-medium mt-3 text-center px-6">
-          Create Team A and Team B on the Teams tab before setting up foursome matches.
+          Create both teams on the Teams tab before setting up pairings.
         </Text>
       </View>
     );
@@ -350,299 +548,242 @@ export function TournamentMatchGroupsTab({
         </Text>
       </View>
 
-      <TournamentFormatRulesCard
-        formatId={roundFormat}
-        settings={formatSettings}
-        compact
-      />
+      <TournamentFormatRulesCard formatId={roundFormat} settings={formatSettings} compact />
 
-      <View className="mb-4" />
+      <Text className="text-neutral-500 text-xs uppercase tracking-widest mt-5 mb-2">
+        Roster pools
+      </Text>
+      <View className="flex-row gap-3 mb-4">
+        {renderPoolColumn('a', sideATeam, sideAName)}
+        {renderPoolColumn('b', sideBTeam, sideBName)}
+      </View>
 
-      {isLoading && matchGroups.length > 0 ? (
-        <View className="py-8 items-center">
+      {isManager && activeSlot ? (
+        <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-3 py-2 mb-3">
+          <Text className="text-lime-400 text-xs font-semibold">
+            Tap a player in {activeSlot.side === 'a' ? sideAName : sideBName} to fill the selected
+            slot
+          </Text>
+        </View>
+      ) : null}
+
+      <View className="flex-row items-center justify-between mb-2">
+        <Text className="text-neutral-500 text-xs uppercase tracking-widest">Pairings board</Text>
+        {isManager ? (
+          <View className="flex-row gap-2">
+            <Pressable
+              onPress={() => addRows(1)}
+              className="px-3 py-1.5 rounded-lg bg-neutral-800 active:opacity-80"
+            >
+              <Text className="text-lime-400 text-xs font-semibold">Add row</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => addRows(5)}
+              className="px-3 py-1.5 rounded-lg bg-neutral-800 active:opacity-80"
+            >
+              <Text className="text-lime-400 text-xs font-semibold">Add 5 rows</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+
+      {isLoading && savedGroupIds.length > 0 ? (
+        <View className="py-6 items-center">
           <ActivityIndicator color="#a3e635" />
         </View>
       ) : null}
 
-      {matchGroups.length === 0 ? (
+      {draftRows.length === 0 ? (
         <View className="py-10 items-center bg-[#141414] rounded-2xl border border-neutral-800 mb-4">
-          <Text className="text-neutral-400">No matches scheduled for this round</Text>
+          <Text className="text-neutral-400">No tee times for this round yet</Text>
         </View>
       ) : (
-        matchGroups.map((group) => {
-          const groupFormat = getMatchGroupFormat(group, tournament);
-          const wins = holeWinsByGroupId[group.id];
+        draftRows.map((row) => {
+          const savedGroup = row.groupId ? savedGroupById[row.groupId] : undefined;
+          const groupFormat = savedGroup
+            ? getMatchGroupFormat(savedGroup, tournament)
+            : roundFormat;
+          const wins = row.groupId ? holeWinsByGroupId[row.groupId] : undefined;
+
           return (
             <View
-              key={group.id}
+              key={row.clientKey}
               className="bg-[#141414] border border-neutral-800 rounded-xl p-4 mb-3"
             >
-              <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-lime-400 font-bold">
-                  {formatTeeAssignmentTime(group.tee_time)} · Hole {group.starting_hole}
-                </Text>
-                {isManager && (
-                  <Pressable onPress={() => deleteMutation.mutate(group.id)} className="p-1">
-                    <Trash2 size={16} color="#737373" />
-                  </Pressable>
-                )}
-              </View>
-              <View className="bg-lime-900/20 border border-lime-700/30 rounded-lg px-3 py-2 mb-2">
-                <Text className="text-lime-400 text-xs font-bold uppercase">
-                  {formatLabelFromSettings(groupFormat, formatSettings)}
-                </Text>
-                {(group.match_points_a > 0 || group.match_points_b > 0) && (
-                  <Text className="text-white text-sm font-semibold mt-1">
-                    Match points: {sideLabel('side_a')} {group.match_points_a} – {group.match_points_b}{' '}
-                    {sideLabel('side_b')}
+              <View className="flex-row items-center gap-2 mb-3">
+                {isManager ? (
+                  <>
+                    <TextInput
+                      value={row.teeTime}
+                      onChangeText={(value) =>
+                        updateRow(row.clientKey, (entry) => ({ ...entry, teeTime: value }))
+                      }
+                      placeholder="08:00"
+                      placeholderTextColor="#525252"
+                      className="flex-1 bg-[#0c0c0c] border border-neutral-800 rounded-lg px-3 py-2 text-white"
+                    />
+                    <TextInput
+                      value={row.startingHole}
+                      onChangeText={(value) =>
+                        updateRow(row.clientKey, (entry) => ({ ...entry, startingHole: value }))
+                      }
+                      keyboardType="number-pad"
+                      placeholder="Hole"
+                      placeholderTextColor="#525252"
+                      className="w-16 bg-[#0c0c0c] border border-neutral-800 rounded-lg px-2 py-2 text-white text-center"
+                    />
+                  </>
+                ) : (
+                  <Text className="text-lime-400 font-bold flex-1">
+                    {savedGroup
+                      ? formatTeeAssignmentTime(savedGroup.tee_time)
+                      : formatPairingRowTeeLabel(row.teeTime)}{' '}
+                    · Hole {row.startingHole}
                   </Text>
                 )}
+                {isManager ? (
+                  <Pressable onPress={() => removeRow(row)} className="p-1">
+                    <Trash2 size={16} color="#737373" />
+                  </Pressable>
+                ) : null}
               </View>
-              <Text className="text-white text-sm">
-                {sideLabel('side_a')}:{' '}
-                {group.side_a_player_ids
-                  .map((id) => memberNameById[id]?.split(' ')[0] ?? '?')
-                  .join(' & ')}
-              </Text>
-              <Text className="text-neutral-500 text-xs my-1">vs</Text>
-              <Text className="text-white text-sm">
-                {sideLabel('side_b')}:{' '}
-                {group.side_b_player_ids
-                  .map((id) => memberNameById[id]?.split(' ')[0] ?? '?')
-                  .join(' & ')}
-              </Text>
 
-              {wins && wins.side_a + wins.side_b + wins.ties > 0 && (
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-1">
+                    {sideAName}
+                  </Text>
+                  <View className="flex-row flex-wrap gap-1">
+                    {Array.from({ length: playersPerMatch }, (_, index) => {
+                      const playerId = row.sideAPlayerIds[index] || undefined;
+                      const isActive =
+                        activeSlot?.rowKey === row.clientKey &&
+                        activeSlot.side === 'a' &&
+                        activeSlot.slotIndex === index;
+                      return (
+                        <SlotBadge
+                          key={`${row.clientKey}-a-${index}`}
+                          label={
+                            playerId
+                              ? memberNameById[playerId]?.split(' ')[0] ?? 'Player'
+                              : `Slot ${index + 1}`
+                          }
+                          filled={Boolean(playerId)}
+                          active={isActive}
+                          onPress={() =>
+                            handleSlotPress(row.clientKey, 'a', index, playerId)
+                          }
+                          disabled={!isManager}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-1">
+                    {sideBName}
+                  </Text>
+                  <View className="flex-row flex-wrap gap-1">
+                    {Array.from({ length: playersPerMatch }, (_, index) => {
+                      const playerId = row.sideBPlayerIds[index] || undefined;
+                      const isActive =
+                        activeSlot?.rowKey === row.clientKey &&
+                        activeSlot.side === 'b' &&
+                        activeSlot.slotIndex === index;
+                      return (
+                        <SlotBadge
+                          key={`${row.clientKey}-b-${index}`}
+                          label={
+                            playerId
+                              ? memberNameById[playerId]?.split(' ')[0] ?? 'Player'
+                              : `Slot ${index + 1}`
+                          }
+                          filled={Boolean(playerId)}
+                          active={isActive}
+                          onPress={() =>
+                            handleSlotPress(row.clientKey, 'b', index, playerId)
+                          }
+                          disabled={!isManager}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+
+              {savedGroup && (savedGroup.match_points_a > 0 || savedGroup.match_points_b > 0) ? (
+                <View className="mt-3 bg-lime-900/20 border border-lime-700/30 rounded-lg px-3 py-2">
+                  <Text className="text-white text-sm font-semibold">
+                    Match points: {sideAName} {savedGroup.match_points_a} –{' '}
+                    {savedGroup.match_points_b} {sideBName}
+                  </Text>
+                </View>
+              ) : null}
+
+              {wins && wins.side_a + wins.side_b + wins.ties > 0 ? (
                 <View className="mt-3 pt-3 border-t border-neutral-800">
                   <Text className="text-neutral-400 text-xs uppercase tracking-widest mb-1">
                     Holes won
                   </Text>
                   <Text className="text-white font-semibold">
-                    {sideLabel('side_a')} {wins.side_a} – {wins.side_b} {sideLabel('side_b')}
+                    {sideAName} {wins.side_a} – {wins.side_b} {sideBName}
                   </Text>
                 </View>
-              )}
+              ) : null}
 
-              <View className="flex-row gap-2 mt-3">
-                {isSinglesFormat(groupFormat) ? (
-                  <Pressable
-                    onPress={() => openScorecard(group.id)}
-                    className="flex-1 flex-row items-center justify-center bg-lime-600 rounded-lg py-2.5 active:opacity-80"
-                  >
-                    <ClipboardList size={14} color="#fff" />
-                    <Text className="text-white font-semibold text-xs ml-1.5">Enter Scores</Text>
-                  </Pressable>
-                ) : (
-                  (['side_a', 'side_b'] as const).map((matchSide) => (
+              {row.groupId ? (
+                <View className="flex-row gap-2 mt-3">
+                  {isSinglesFormat(groupFormat) ? (
                     <Pressable
-                      key={matchSide}
-                      onPress={() => openScorecard(group.id, matchSide)}
-                      className="flex-1 flex-row items-center justify-center bg-lime-900/40 border border-lime-700/50 rounded-lg py-2.5 active:opacity-80"
+                      onPress={() => openScorecard(row.groupId!)}
+                      className="flex-1 flex-row items-center justify-center bg-lime-600 rounded-lg py-2.5 active:opacity-80"
                     >
-                      <ClipboardList size={14} color="#a3e635" />
-                      <Text className="text-lime-400 font-semibold text-xs ml-1.5">
-                        {sideLabel(matchSide)}
-                      </Text>
+                      <ClipboardList size={14} color="#fff" />
+                      <Text className="text-white font-semibold text-xs ml-1.5">Enter Scores</Text>
                     </Pressable>
-                  ))
-                )}
-              </View>
+                  ) : (
+                    (['side_a', 'side_b'] as const).map((matchSide) => (
+                      <Pressable
+                        key={matchSide}
+                        onPress={() => openScorecard(row.groupId!, matchSide)}
+                        className="flex-1 flex-row items-center justify-center bg-lime-900/40 border border-lime-700/50 rounded-lg py-2.5 active:opacity-80"
+                      >
+                        <ClipboardList size={14} color="#a3e635" />
+                        <Text className="text-lime-400 font-semibold text-xs ml-1.5">
+                          {getTeamSideDisplayName(matchSide, teams)}
+                        </Text>
+                      </Pressable>
+                    ))
+                  )}
+                </View>
+              ) : null}
             </View>
           );
         })
       )}
 
-      {isManager && (
-        <Pressable
-          onPress={() => setShowCreate(true)}
-          className="flex-row items-center justify-center border border-dashed border-neutral-700 rounded-xl py-3 active:opacity-80"
-        >
-          <Plus size={16} color="#a3e635" />
-          <Text className="text-lime-400 font-semibold ml-2">Add Foursome Match</Text>
-        </Pressable>
-      )}
-
-      <Modal visible={showCreate} animationType="slide" transparent>
-        <View className="flex-1 bg-black/70 justify-end">
-          <View className="bg-[#141414] rounded-t-3xl border-t border-neutral-800 px-5 pt-5 pb-10 max-h-[90%]">
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-white text-lg font-bold">New Foursome</Text>
-              <Pressable onPress={() => setShowCreate(false)}>
-                <X size={22} color="#737373" />
-              </Pressable>
-            </View>
-
-            <ScrollView>
-              <TournamentFormatRulesCard
-                formatId={roundFormat}
-                settings={formatSettings}
-              />
-
-              <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2 mt-4">
-                Locked to round format
-              </Text>
-              <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-4">
-                <Text className="text-lime-400 font-semibold">
-                  {formatLabelFromSettings(roundFormat, formatSettings)}
-                </Text>
-                <Text className="text-neutral-400 text-xs mt-1">
-                  {getScoringModeForFormat(roundFormat, formatSettings).replace(/_/g, ' ')}
-                </Text>
-              </View>
-
-              <View className="flex-row gap-2 mb-4">
-                <View className="flex-1">
-                  <Text className="text-neutral-500 text-xs mb-1">Tee Time</Text>
-                  <TextInput
-                    value={teeTime}
-                    onChangeText={setTeeTime}
-                    placeholder="08:30"
-                    placeholderTextColor="#525252"
-                    className="bg-[#0c0c0c] border border-neutral-800 rounded-lg px-3 py-2 text-white"
-                  />
-                </View>
-                <View className="w-20">
-                  <Text className="text-neutral-500 text-xs mb-1">Hole</Text>
-                  <TextInput
-                    value={startingHole}
-                    onChangeText={setStartingHole}
-                    keyboardType="number-pad"
-                    className="bg-[#0c0c0c] border border-neutral-800 rounded-lg px-3 py-2 text-white text-center"
-                  />
-                </View>
-              </View>
-
-              <View className="flex-row gap-2 mb-3">
-                {(['a', 'b'] as const).map((side) => (
-                  <Pressable
-                    key={side}
-                    onPress={() => setActiveSide(side)}
-                    className={cn(
-                      'flex-1 py-2 rounded-lg border items-center',
-                      activeSide === side
-                        ? 'bg-lime-900/40 border-lime-600'
-                        : 'bg-[#0c0c0c] border-neutral-800'
-                    )}
-                  >
-                    <Text
-                      className={cn(
-                        'text-xs font-bold',
-                        activeSide === side ? 'text-lime-400' : 'text-neutral-500'
-                      )}
-                    >
-                      Fill {sideLabel(side === 'a' ? 'side_a' : 'side_b')}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text className="text-lime-400 text-xs uppercase tracking-widest mb-2">
-                {sideLabel('side_a')} slots
-              </Text>
-              <View className="flex-row flex-wrap gap-2 mb-4">
-                {Array.from({ length: playersPerMatch }, (_, index) => {
-                  const playerId = selectedSideA[index];
-                  return (
-                    <SlotBadge
-                      key={`a-${index}`}
-                      label={playerId ? memberNameById[playerId]?.split(' ')[0] ?? 'Player' : `Slot ${index + 1}`}
-                      filled={Boolean(playerId)}
-                      onPress={() => playerId && removeFromSlot('a', index)}
-                    />
-                  );
-                })}
-              </View>
-
-              <Text className="text-lime-400 text-xs uppercase tracking-widest mb-2">
-                {sideLabel('side_b')} slots
-              </Text>
-              <View className="flex-row flex-wrap gap-2 mb-4">
-                {Array.from({ length: playersPerMatch }, (_, index) => {
-                  const playerId = selectedSideB[index];
-                  return (
-                    <SlotBadge
-                      key={`b-${index}`}
-                      label={playerId ? memberNameById[playerId]?.split(' ')[0] ?? 'Player' : `Slot ${index + 1}`}
-                      filled={Boolean(playerId)}
-                      onPress={() => playerId && removeFromSlot('b', index)}
-                    />
-                  );
-                })}
-              </View>
-
-              <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
-                Roster — tap to assign to {sideLabel(activeSide === 'a' ? 'side_a' : 'side_b')}
-              </Text>
-              <View className="flex-row flex-wrap gap-2 mb-3">
-                {rosterPool.map((player) => (
-                  <Pressable
-                    key={player.id}
-                    onPress={() => assignPlayerToSide(activeSide, player.id)}
-                    disabled={player.assigned && !player.inSlots}
-                    className={cn(
-                      'px-3 py-2 rounded-full border',
-                      player.inSlots
-                        ? 'bg-lime-900/50 border-lime-500'
-                        : player.assigned
-                          ? 'bg-neutral-900 border-neutral-700 opacity-50'
-                          : 'bg-[#0c0c0c] border-neutral-700 active:opacity-80'
-                    )}
-                  >
-                    <Text
-                      className={cn(
-                        'text-xs font-medium',
-                        player.inSlots ? 'text-lime-300' : 'text-neutral-300'
-                      )}
-                    >
-                      {player.name}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text className="text-neutral-500 text-xs mb-1">Add guest by name</Text>
-              <View className="flex-row gap-2 mb-4">
-                <TextInput
-                  value={guestName}
-                  onChangeText={setGuestName}
-                  placeholder="Guest name"
-                  placeholderTextColor="#525252"
-                  className="flex-1 bg-[#0c0c0c] border border-neutral-800 rounded-lg px-3 py-2 text-white"
-                />
-                <Pressable
-                  onPress={addGuestPlayer}
-                  className="px-4 py-2 rounded-lg bg-lime-900/30 border border-lime-700/50 active:opacity-80"
-                >
-                  <Text className="text-lime-400 text-xs font-bold">Add</Text>
-                </Pressable>
-              </View>
-
-              {saveError ? (
-                <Text className="text-red-400 text-sm mb-3">{saveError}</Text>
-              ) : null}
-            </ScrollView>
-
-            <Pressable
-              onPress={handleCreate}
-              disabled={
-                saveMutation.isPending ||
-                selectedSideA.length !== playersPerMatch ||
-                selectedSideB.length !== playersPerMatch
-              }
-              className="mt-4 flex-row items-center justify-center bg-lime-600 rounded-xl py-3.5 active:opacity-80"
-            >
-              {saveMutation.isPending ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Save size={16} color="#fff" />
-                  <Text className="text-white font-bold ml-2">Save Match</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      {isManager ? (
+        <>
+          {saveError ? <Text className="text-red-400 text-sm mb-3">{saveError}</Text> : null}
+          <Pressable
+            onPress={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || !isDirty}
+            className={cn(
+              'flex-row items-center justify-center rounded-xl py-3.5 mb-4 active:opacity-80',
+              isDirty ? 'bg-lime-600' : 'bg-neutral-800 opacity-60'
+            )}
+          >
+            {saveMutation.isPending ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Save size={16} color="#fff" />
+                <Text className="text-white font-bold ml-2">Save pairings</Text>
+              </>
+            )}
+          </Pressable>
+        </>
+      ) : null}
     </View>
   );
 }

@@ -19,6 +19,7 @@ type TournamentRow = {
   name: string;
   start_date: string;
   end_date: string;
+  participant_invites_sent_at?: string | null;
 };
 
 type TeamRow = {
@@ -36,6 +37,8 @@ type TournamentPlayerRow = {
   id: string;
   display_name: string;
   user_id: string | null;
+  email?: string | null;
+  invite_email_sent_at?: string | null;
 };
 
 type UserProfileRow = {
@@ -99,6 +102,444 @@ tournamentTeamsRouter.use('*', async (c, next) => {
   }
   await next();
 });
+
+tournamentTeamsRouter.patch(
+  '/:tournamentId/teams/:teamId',
+  requireManagerAuth,
+  async (c) => {
+    const tournamentId = c.req.param('tournamentId');
+    const teamId = c.req.param('teamId');
+
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid request body' }, 400);
+    }
+
+    const updates: Record<string, unknown> = {};
+
+    if (typeof body.team_name === 'string') {
+      const teamName = body.team_name.trim();
+      if (!teamName) {
+        return c.json({ error: 'Team name is required' }, 400);
+      }
+      updates.team_name = teamName;
+    }
+
+    if ('captain_user_id' in body) {
+      updates.captain_user_id =
+        typeof body.captain_user_id === 'string' ? body.captain_user_id : null;
+    }
+
+    if ('player_ids' in body) {
+      if (!Array.isArray(body.player_ids)) {
+        return c.json({ error: 'player_ids must be an array' }, 400);
+      }
+      updates.player_ids = body.player_ids.filter((id): id is string => typeof id === 'string');
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: 'No valid updates provided' }, 400);
+    }
+
+    const patchResult = await adminFetch<TeamRow[]>(
+      `/rest/v1/tournament_teams?id=eq.${teamId}&tournament_id=eq.${tournamentId}&select=*`,
+      {
+        method: 'PATCH',
+        body: updates,
+        prefer: 'return=representation',
+      }
+    );
+
+    if (!patchResult.ok) {
+      return c.json({ error: 'Team was not updated' }, 500);
+    }
+
+    const updated = Array.isArray(patchResult.data) ? patchResult.data[0] : null;
+    if (!updated) {
+      return c.json({ error: 'Team not found' }, 404);
+    }
+
+    return c.json(updated);
+  }
+);
+
+function splitDisplayName(displayName: string): { firstName: string; lastName: string } {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: 'Member', lastName: '' };
+  if (parts.length === 1) return { firstName: parts[0]!, lastName: '' };
+  return { firstName: parts[0]!, lastName: parts.slice(1).join(' ') };
+}
+
+async function inviteUserByEmail(params: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  redirectTo: string;
+}): Promise<{ userId: string }> {
+  const fullName = buildFullName(params.firstName, params.lastName);
+
+  const { ok, data } = await adminFetch<Record<string, unknown>>('/auth/v1/invite', {
+    method: 'POST',
+    body: {
+      email: params.email.trim().toLowerCase(),
+      data: {
+        first_name: params.firstName.trim(),
+        last_name: params.lastName.trim(),
+        full_name: fullName,
+      },
+      redirect_to: params.redirectTo,
+    },
+  });
+
+  if (!ok) {
+    throw new Error(getErrorMessage(data));
+  }
+
+  const user = data.user as { id?: string } | undefined;
+  const userId = user?.id ?? (typeof data.id === 'string' ? data.id : null);
+
+  if (!userId) {
+    throw new Error('Invite succeeded but no user id returned');
+  }
+
+  return { userId };
+}
+
+tournamentTeamsRouter.patch(
+  '/:tournamentId/participants/:playerId',
+  requireManagerAuth,
+  async (c) => {
+    const tournamentId = c.req.param('tournamentId');
+    const playerId = c.req.param('playerId');
+    const body = await c.req.json<{
+      display_name?: string;
+      email?: string | null;
+      handicap_index?: number | null;
+    }>();
+
+    const playerResult = await adminFetch<TournamentPlayerRow[]>(
+      `/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id`
+    );
+    if (!playerResult.ok || !playerResult.data?.[0]) {
+      return c.json({ error: 'Participant not found' }, 404);
+    }
+
+    const updates: Record<string, unknown> = {};
+    if (typeof body.display_name === 'string') {
+      const trimmed = body.display_name.trim();
+      if (!trimmed) {
+        return c.json({ error: 'Name is required' }, 400);
+      }
+      updates.display_name = trimmed;
+    }
+    if (body.email !== undefined) {
+      if (body.email === null || body.email === '') {
+        updates.email = null;
+      } else if (typeof body.email === 'string') {
+        updates.email = body.email.trim().toLowerCase();
+      }
+    }
+    if (body.handicap_index !== undefined) {
+      updates.handicap_index = body.handicap_index;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: 'No updates provided' }, 400);
+    }
+
+    const patchResult = await adminFetch<TournamentPlayerRow[]>(
+      `/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}`,
+      {
+        method: 'PATCH',
+        body: updates,
+        prefer: 'return=representation',
+      }
+    );
+
+    if (!patchResult.ok) {
+      return c.json({ error: 'Could not update participant' }, 500);
+    }
+
+    const updated = Array.isArray(patchResult.data) ? patchResult.data[0] : null;
+    if (!updated) {
+      return c.json({ error: 'Participant was not updated' }, 500);
+    }
+
+    return c.json(updated);
+  }
+);
+
+tournamentTeamsRouter.delete(
+  '/:tournamentId/participants/:playerId',
+  requireManagerAuth,
+  async (c) => {
+    const tournamentId = c.req.param('tournamentId');
+    const playerId = c.req.param('playerId');
+
+    const playerResult = await adminFetch<TournamentPlayerRow[]>(
+      `/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id`
+    );
+    if (!playerResult.ok || !playerResult.data?.[0]) {
+      return c.json({ error: 'Participant not found' }, 404);
+    }
+
+    const teamsResult = await adminFetch<TeamRow[]>(
+      `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,player_ids`
+    );
+    if (teamsResult.ok && teamsResult.data) {
+      for (const team of teamsResult.data) {
+        if (!team.player_ids?.includes(playerId)) continue;
+        const nextIds = team.player_ids.filter((id) => id !== playerId);
+        await adminFetch(`/rest/v1/tournament_teams?id=eq.${team.id}`, {
+          method: 'PATCH',
+          body: { player_ids: nextIds },
+        });
+      }
+    }
+
+    type MatchGroupRow = {
+      id: string;
+      side_a_player_ids: string[];
+      side_b_player_ids: string[];
+    };
+
+    const matchGroupsResult = await adminFetch<MatchGroupRow[]>(
+      `/rest/v1/tournament_match_groups?tournament_id=eq.${tournamentId}&select=id,side_a_player_ids,side_b_player_ids`
+    );
+    if (matchGroupsResult.ok && matchGroupsResult.data) {
+      for (const group of matchGroupsResult.data) {
+        const nextA = group.side_a_player_ids.filter((id) => id !== playerId);
+        const nextB = group.side_b_player_ids.filter((id) => id !== playerId);
+        if (
+          nextA.length !== group.side_a_player_ids.length ||
+          nextB.length !== group.side_b_player_ids.length
+        ) {
+          await adminFetch(`/rest/v1/tournament_match_groups?id=eq.${group.id}`, {
+            method: 'PATCH',
+            body: {
+              side_a_player_ids: nextA,
+              side_b_player_ids: nextB,
+            },
+          });
+        }
+      }
+    }
+
+    const deleteResult = await adminFetch<TournamentPlayerRow[]>(
+      `/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}`,
+      { method: 'DELETE' }
+    );
+
+    if (!deleteResult.ok) {
+      return c.json({ error: 'Could not delete participant' }, 500);
+    }
+
+    return c.json({ success: true });
+  }
+);
+
+tournamentTeamsRouter.post(
+  '/:tournamentId/send-participant-invites',
+  requireManagerAuth,
+  async (c) => {
+    const tournamentId = c.req.param('tournamentId');
+    const inviteRedirect =
+      process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? 'http://localhost:8081/accept-invite';
+    const tournamentUrl = buildTournamentDeepLink(tournamentId);
+
+    const tournamentResult = await adminFetch<TournamentRow[]>(
+      `/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`
+    );
+    if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
+      return c.json({ error: 'Tournament not found' }, 404);
+    }
+    const tournament = tournamentResult.data[0];
+    const tournamentDates = formatTournamentDates(tournament.start_date, tournament.end_date);
+
+    const playersResult = await adminFetch<TournamentPlayerRow[]>(
+      `/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`
+    );
+    if (!playersResult.ok || !playersResult.data) {
+      return c.json({ error: 'Could not load participants' }, 500);
+    }
+
+    const teamsResult = await adminFetch<TeamRow[]>(
+      `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`
+    );
+    if (!teamsResult.ok || !teamsResult.data) {
+      return c.json({ error: 'Could not load teams' }, 500);
+    }
+
+    const teams = teamsResult.data;
+    const teamByPlayerId = new Map<string, TeamRow>();
+    for (const team of teams) {
+      for (const playerId of team.player_ids ?? []) {
+        teamByPlayerId.set(playerId, team);
+      }
+    }
+
+    const userIds = playersResult.data
+      .map((player) => player.user_id)
+      .filter((id): id is string => Boolean(id));
+
+    let profiles: UserProfileRow[] = [];
+    if (userIds.length > 0) {
+      const profilesResult = await adminFetch<UserProfileRow[]>(
+        `/rest/v1/user_profiles?id=in.(${userIds.join(',')})&select=id,email,full_name,first_name,last_name,invite_status`
+      );
+      if (profilesResult.ok && profilesResult.data) {
+        profiles = profilesResult.data;
+      }
+    }
+
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+    const emailsToLookup = playersResult.data
+      .filter((player) => !player.user_id && player.email?.trim())
+      .map((player) => player.email!.trim().toLowerCase());
+
+    let profilesByEmail = new Map<string, UserProfileRow>();
+    if (emailsToLookup.length > 0) {
+      const inList = emailsToLookup.map((email) => `"${email.replace(/"/g, '')}"`).join(',');
+      const byEmailResult = await adminFetch<UserProfileRow[]>(
+        `/rest/v1/user_profiles?email=in.(${inList})&select=id,email,full_name,first_name,last_name,invite_status`
+      );
+      if (byEmailResult.ok && byEmailResult.data) {
+        profilesByEmail = new Map(
+          byEmailResult.data.map((profile) => [profile.email?.toLowerCase() ?? '', profile])
+        );
+      }
+    }
+
+    let emailed = 0;
+    let invitesSent = 0;
+    let skippedNoEmail = 0;
+    let skippedAlreadySent = 0;
+    const errors: string[] = [];
+    const now = new Date().toISOString();
+
+    for (const player of playersResult.data) {
+      if (player.invite_email_sent_at) {
+        skippedAlreadySent += 1;
+        continue;
+      }
+
+      let profile = player.user_id ? profileById.get(player.user_id) : null;
+      let email = profile?.email?.trim() ?? player.email?.trim() ?? null;
+
+      if (!email && player.email?.trim()) {
+        const byEmail = profilesByEmail.get(player.email.trim().toLowerCase());
+        if (byEmail) {
+          profile = byEmail;
+          email = byEmail.email?.trim() ?? player.email.trim();
+        }
+      }
+
+      if (!email) {
+        skippedNoEmail += 1;
+        continue;
+      }
+
+      const team = teamByPlayerId.get(player.id);
+      const rosterNames = team
+        ? playersResult.data
+            .filter((entry) => team.player_ids.includes(entry.id))
+            .map((entry) => entry.display_name)
+        : [];
+
+      const recipientName =
+        profile?.full_name?.trim() ||
+        buildFullName(profile?.first_name ?? '', profile?.last_name ?? '') ||
+        player.display_name;
+
+      let isPendingMember = profile?.invite_status === 'pending';
+      let linkedUserId = player.user_id ?? profile?.id ?? null;
+
+      try {
+        if (!linkedUserId) {
+          const { firstName, lastName } = splitDisplayName(player.display_name);
+          const invited = await inviteUserByEmail({
+            email,
+            firstName,
+            lastName,
+            redirectTo: inviteRedirect,
+          });
+          linkedUserId = invited.userId;
+          invitesSent += 1;
+          isPendingMember = true;
+        } else if (profile?.invite_status === 'pending') {
+          const { firstName, lastName } = splitDisplayName(recipientName);
+          await generateInviteLink({
+            email,
+            firstName,
+            lastName,
+            redirectTo: inviteRedirect,
+          });
+          invitesSent += 1;
+        }
+
+        if (!player.user_id && linkedUserId) {
+          await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
+            method: 'PATCH',
+            body: { user_id: linkedUserId },
+          });
+        }
+
+        const emailResult = await sendTournamentOnboardEmail({
+          to: email,
+          recipientName,
+          tournamentName: tournament.name,
+          tournamentDates,
+          teamName: team?.team_name ?? null,
+          teamSideLabel: team?.side === 'side_b' ? 'Team B' : team?.side === 'side_a' ? 'Team A' : null,
+          rosterNames,
+          tournamentUrl: isPendingMember ? inviteRedirect : tournamentUrl,
+          isPendingMember,
+        });
+
+        if (emailResult.sent) {
+          emailed += 1;
+          await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
+            method: 'PATCH',
+            body: { invite_email_sent_at: now },
+          });
+        } else if (emailResult.error) {
+          errors.push(`${email}: ${emailResult.error}`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Email failed';
+        errors.push(`${email}: ${message}`);
+      }
+    }
+
+    await adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}`, {
+      method: 'PATCH',
+      body: { participant_invites_sent_at: now },
+    });
+
+    for (const team of teams) {
+      if ((team.player_ids?.length ?? 0) > 0) {
+        await adminFetch(`/rest/v1/tournament_teams?id=eq.${team.id}`, {
+          method: 'PATCH',
+          body: {
+            roster_status: 'ready',
+            onboard_email_sent_at: now,
+          },
+        });
+      }
+    }
+
+    return c.json({
+      emailed,
+      invitesSent,
+      skippedNoEmail,
+      skippedAlreadySent,
+      errors,
+    });
+  }
+);
 
 tournamentTeamsRouter.post(
   '/:tournamentId/teams/:teamId/mark-ready-and-notify',
@@ -235,6 +676,7 @@ tournamentTeamsRouter.post(
         roster_ready_by: authUser.id,
         onboard_email_sent_at: now,
       },
+      prefer: 'return=representation',
     });
 
     if (!patchResult.ok) {

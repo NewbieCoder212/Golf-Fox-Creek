@@ -11,6 +11,7 @@ import type {
   TournamentTeamInsert,
 } from '@/types';
 import {
+  getManagerAccessToken,
   isTournamentSupabaseConfigured,
   tournamentSupabaseRequest,
   unwrapList,
@@ -18,6 +19,7 @@ import {
   unwrapSingle,
   type TournamentServiceResult,
 } from './tournament-supabase';
+import { updateTournamentTeamViaBackend } from './tournament-team-service';
 
 export type { TournamentServiceError, TournamentServiceResult } from './tournament-supabase';
 
@@ -320,10 +322,43 @@ export async function updateTournamentTeam(
         TournamentTeam,
         'roster_status' | 'roster_ready_at' | 'roster_ready_by' | 'onboard_email_sent_at'
       >
-  >
+  >,
+  context?: { tournamentId?: string; accessToken?: string }
 ): Promise<TournamentServiceResult<TournamentTeam>> {
   if (!isConfigured()) {
     return { data: null, error: 'Supabase is not configured' };
+  }
+
+  const managerToken = context?.accessToken ?? getManagerAccessToken();
+  const canUseBackend =
+    Boolean(context?.tournamentId && managerToken) &&
+    !('roster_status' in updates) &&
+    !('roster_ready_at' in updates) &&
+    !('roster_ready_by' in updates) &&
+    !('onboard_email_sent_at' in updates) &&
+    ('team_name' in updates || 'captain_user_id' in updates || 'player_ids' in updates);
+
+  if (canUseBackend && context?.tournamentId && managerToken) {
+    const backendResult = await updateTournamentTeamViaBackend({
+      tournamentId: context.tournamentId,
+      teamId,
+      accessToken: managerToken,
+      updates: {
+        ...(typeof updates.team_name === 'string' ? { team_name: updates.team_name } : {}),
+        ...('captain_user_id' in updates ? { captain_user_id: updates.captain_user_id ?? null } : {}),
+        ...('player_ids' in updates && Array.isArray(updates.player_ids)
+          ? { player_ids: updates.player_ids }
+          : {}),
+      },
+    });
+
+    if (backendResult.data) {
+      return { data: backendResult.data, error: null };
+    }
+
+    if (backendResult.error && !backendResult.error.includes('Could not reach')) {
+      return { data: null, error: backendResult.error };
+    }
   }
 
   const result = await tournamentSupabaseRequest<TournamentTeam[]>('tournament_teams', {
@@ -333,10 +368,16 @@ export async function updateTournamentTeam(
   });
 
   if (result.error) return result;
-  const updated = result.data?.[0] ?? null;
+
+  let updated = result.data?.[0] ?? null;
   if (!updated) {
-    return { data: null, error: 'Team was not updated' };
+    updated = await getTournamentTeamById(teamId);
   }
+
+  if (!updated) {
+    return { data: null, error: 'Team was not updated. Check your login session and try again.' };
+  }
+
   return { data: updated, error: null };
 }
 

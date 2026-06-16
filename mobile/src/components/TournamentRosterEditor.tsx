@@ -2,11 +2,13 @@ import { View, Text, Pressable, TextInput } from 'react-native';
 import { UserPlus, Trash2 } from 'lucide-react-native';
 
 import { cn } from '@/lib/cn';
+import { webPressHandler } from '@/lib/web-press';
 
 export interface RosterMemberOption {
   id: string;
   full_name: string;
   handicap_index: number | null;
+  email?: string | null;
 }
 
 export interface RosterDraftEntry {
@@ -76,7 +78,9 @@ export function TournamentRosterEditor({
           onChangeText={onNewPlayerNameChange}
           placeholder="Player name"
           placeholderTextColor="#525252"
-          className="flex-1 bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 text-white"
+          autoCorrect={false}
+          className="flex-1 bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 text-white text-base"
+          style={{ color: '#ffffff' }}
         />
         <TextInput
           value={newPlayerHandicap}
@@ -84,11 +88,12 @@ export function TournamentRosterEditor({
           placeholder="HI"
           placeholderTextColor="#525252"
           keyboardType="decimal-pad"
-          className="w-16 bg-[#0c0c0c] border border-neutral-800 rounded-xl px-3 py-3 text-white text-center"
+          className="w-16 bg-[#0c0c0c] border border-neutral-800 rounded-xl px-3 py-3 text-white text-center text-base"
+          style={{ color: '#ffffff' }}
         />
       </View>
       <Pressable
-        onPress={onAddPlayerByName}
+        onPress={webPressHandler(onAddPlayerByName)}
         disabled={!newPlayerName.trim() || isAddingPlayer}
         className="flex-row items-center justify-center bg-neutral-800 rounded-xl py-3 mb-4 active:opacity-80"
       >
@@ -116,7 +121,11 @@ export function TournamentRosterEditor({
             >
               <Text className="text-white font-medium">{member.full_name}</Text>
               <Text className="text-neutral-500 text-sm">
-                {onRoster ? 'Added' : `${member.handicap_index?.toFixed(1) ?? '--'} HI`}
+                {onRoster
+                  ? 'Added'
+                  : member.email
+                    ? member.email
+                    : `${member.handicap_index?.toFixed(1) ?? '--'} HI`}
               </Text>
             </Pressable>
           );
@@ -142,7 +151,7 @@ export function TournamentRosterEditor({
                   {entry.user_id ? ' · Member' : ' · Guest'}
                 </Text>
               </View>
-              <Pressable onPress={() => onRemoveDraftPlayer?.(entry.key)}>
+              <Pressable onPress={webPressHandler(() => onRemoveDraftPlayer?.(entry.key))}>
                 <Trash2 size={16} color="#737373" />
               </Pressable>
             </View>
@@ -165,7 +174,7 @@ export function TournamentRosterEditor({
             </View>
             {canRemoveEditingPlayers && editingRoster.length > 1 ? (
               <Pressable
-                onPress={() => onRemoveEditingPlayer?.(entry.id)}
+                onPress={webPressHandler(() => onRemoveEditingPlayer?.(entry.id))}
                 disabled={isRemovingPlayer}
               >
                 <Trash2 size={16} color="#737373" />

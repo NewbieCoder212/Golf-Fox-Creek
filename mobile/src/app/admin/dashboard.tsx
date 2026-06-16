@@ -151,17 +151,27 @@ export default function AdminDashboardScreen() {
     matchesWon: row.matchesWon,
   }));
 
-  // Bridge member login into admin session (manager / super_admin)
+  // Verify admin access once on mount (do not re-run on router changes — that was kicking users out).
   useEffect(() => {
-    const ensureAdminAccess = async () => {
+    let mounted = true;
+
+    const initAdminAccess = async () => {
+      await useAdminAuthStore.getState().loadStoredAuth();
       await bridgeMemberAuthToAdmin();
+      if (!mounted) return;
+
       const adminState = useAdminAuthStore.getState();
       if (!adminState.canAccessAdmin()) {
         router.replace('/admin');
       }
     };
-    ensureAdminAccess();
-  }, [router]);
+
+    void initAdminAccess();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Load settings on mount
   useEffect(() => {
@@ -1263,6 +1273,62 @@ export default function AdminDashboardScreen() {
     );
   }
 
+  const isFullScreenSection = section === 'tournaments' || section === 'ads';
+
+  const dashboardHeader = (
+    <View className="py-4 mb-2">
+      <Text className="text-neutral-500 text-xs uppercase tracking-[0.15em]">
+        Fox Creek Golf Club
+      </Text>
+      <Text className="text-white text-2xl font-bold mt-1">Admin Dashboard</Text>
+    </View>
+  );
+
+  if (isFullScreenSection) {
+    return (
+      <View className="flex-1 bg-[#0c0c0c]">
+        <SafeAreaView className="flex-1">
+          <View className="flex-1 px-5">
+            {dashboardHeader}
+            {section === 'ads' &&
+              (accessToken ? (
+                <AdminAdPlacementsSection
+                  accessToken={accessToken}
+                  onBack={() => {
+                    setOpenAdsFormOnMount(false);
+                    setSection('main');
+                  }}
+                  initialOpenForm={openAdsFormOnMount}
+                  onFormOpened={() => setOpenAdsFormOnMount(false)}
+                />
+              ) : (
+                <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
+                  <Text className="text-red-200 text-sm">
+                    Admin session expired. Log out and sign in again to manage sponsor ads.
+                  </Text>
+                </View>
+              ))}
+            {section === 'tournaments' &&
+              (accessToken ? (
+                <View className="flex-1">
+                  <AdminTournamentManagementSection
+                    accessToken={accessToken}
+                    onBack={() => setSection('main')}
+                  />
+                </View>
+              ) : (
+                <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
+                  <Text className="text-red-200 text-sm">
+                    Admin session expired. Log out and sign in again to manage tournaments.
+                  </Text>
+                </View>
+              ))}
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-[#0c0c0c]">
       <SafeAreaView className="flex-1">
@@ -1275,12 +1341,7 @@ export default function AdminDashboardScreen() {
           }
         >
           {/* Header */}
-          <View className="py-4 mb-2">
-            <Text className="text-neutral-500 text-xs uppercase tracking-[0.15em]">
-              Fox Creek Golf Club
-            </Text>
-            <Text className="text-white text-2xl font-bold mt-1">Admin Dashboard</Text>
-          </View>
+          {dashboardHeader}
 
           {/* Content based on section */}
           {section === 'main' && renderMainSection()}
@@ -1289,39 +1350,6 @@ export default function AdminDashboardScreen() {
           {section === 'turnMessaging' && renderTurnMessagingSection()}
           {section === 'notifications' && renderNotificationsSection()}
           {section === 'reports' && renderReportsSection()}
-          {section === 'ads' && (
-            accessToken ? (
-              <AdminAdPlacementsSection
-                accessToken={accessToken}
-                onBack={() => {
-                  setOpenAdsFormOnMount(false);
-                  setSection('main');
-                }}
-                initialOpenForm={openAdsFormOnMount}
-                onFormOpened={() => setOpenAdsFormOnMount(false)}
-              />
-            ) : (
-              <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
-                <Text className="text-red-200 text-sm">
-                  Admin session expired. Log out and sign in again to manage sponsor ads.
-                </Text>
-              </View>
-            )
-          )}
-          {section === 'tournaments' && (
-            accessToken ? (
-              <AdminTournamentManagementSection
-                accessToken={accessToken}
-                onBack={() => setSection('main')}
-              />
-            ) : (
-              <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
-                <Text className="text-red-200 text-sm">
-                  Admin session expired. Log out and sign in again to manage tournaments.
-                </Text>
-              </View>
-            )
-          )}
 
           <View className="h-8" />
         </ScrollView>

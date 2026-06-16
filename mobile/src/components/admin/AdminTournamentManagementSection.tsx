@@ -23,9 +23,14 @@ import {
   Users,
   Swords,
   BookOpen,
+  UserRound,
+  Mail,
 } from 'lucide-react-native';
 
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import { TournamentParticipantsTab } from '@/components/TournamentParticipantsTab';
+import { TournamentTeamsAssignTab } from '@/components/TournamentTeamsAssignTab';
+import { TournamentPublishTab } from '@/components/TournamentPublishTab';
 import { AdminTournamentFormatsTab } from '@/components/admin/AdminTournamentFormatsTab';
 import { TournamentMatchGroupsTab } from '@/components/TournamentMatchGroupsTab';
 import {
@@ -37,7 +42,6 @@ import {
   buildMatchPointsLeaderboard,
   createTournament,
   deleteTournament,
-  deleteTournamentTeam,
   getTournamentById,
   getTournamentsResult,
   getTournamentTeams,
@@ -55,7 +59,7 @@ import type { Tournament, TournamentDaySchedule, TournamentTeam } from '@/types'
 import { useRouter } from 'expo-router';
 import { cn } from '@/lib/cn';
 
-type ManagementTab = 'event' | 'teams' | 'matches' | 'formats';
+type ManagementTab = 'event' | 'participants' | 'teams' | 'matches' | 'publish' | 'formats';
 
 interface AdminTournamentManagementSectionProps {
   accessToken: string;
@@ -160,7 +164,6 @@ export function AdminTournamentManagementSection({
   const [endDate, setEndDate] = useState('');
   const [schedule, setSchedule] = useState<TournamentDaySchedule[]>(createEmptySchedule);
   const [customFormatByKey, setCustomFormatByKey] = useState<Record<string, string>>({});
-  const [teamNameEdits, setTeamNameEdits] = useState<Record<string, string>>({});
 
   const { data: tournaments = [], isLoading: tournamentsLoading } = useQuery({
     queryKey: ['adminTournaments'],
@@ -197,14 +200,6 @@ export function AdminTournamentManagementSection({
     queryFn: () => getTournamentTeams(tournamentId!),
     enabled: Boolean(tournamentId),
   });
-
-  useEffect(() => {
-    const edits: Record<string, string> = {};
-    teams.forEach((team) => {
-      edits[team.id] = team.team_name;
-    });
-    setTeamNameEdits(edits);
-  }, [teams]);
 
   const { data: matchGroups = [] } = useQuery({
     queryKey: ['tournamentMatchGroups', tournamentId],
@@ -308,40 +303,6 @@ export function AdminTournamentManagementSection({
     },
   });
 
-  const saveTeamMutation = useMutation({
-    mutationFn: async (team: TournamentTeam) => {
-      const editedName = teamNameEdits[team.id]?.trim();
-      if (!editedName) throw new Error('Team name is required');
-      const result = await updateTournamentTeam(team.id, { team_name: editedName });
-      if (result.error || !result.data) {
-        throw new Error(result.error ?? 'Could not save team');
-      }
-      return result.data;
-    },
-    onSuccess: () => {
-      invalidateTournamentQueries(tournamentId);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    },
-    onError: (error: Error) => {
-      Alert.alert('Save failed', error.message);
-    },
-  });
-
-  const deleteTeamMutation = useMutation({
-    mutationFn: async (teamId: string) => {
-      const ok = await deleteTournamentTeam(teamId);
-      if (!ok) throw new Error('Could not delete team');
-      return teamId;
-    },
-    onSuccess: () => {
-      invalidateTournamentQueries(tournamentId);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    },
-    onError: (error: Error) => {
-      Alert.alert('Delete failed', error.message);
-    },
-  });
-
   const confirmDeleteTournament = (tournament: Tournament) => {
     Alert.alert(
       'Delete tournament?',
@@ -352,21 +313,6 @@ export function AdminTournamentManagementSection({
           text: 'Delete',
           style: 'destructive',
           onPress: () => deleteTournamentMutation.mutate(tournament.id),
-        },
-      ]
-    );
-  };
-
-  const confirmDeleteTeam = (team: TournamentTeam) => {
-    Alert.alert(
-      'Delete team?',
-      `Remove "${team.team_name}" from this event? Players stay in the roster but won't be on this team.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteTeamMutation.mutate(team.id),
         },
       ]
     );
@@ -389,14 +335,17 @@ export function AdminTournamentManagementSection({
     setSelectedTournamentId(id);
   };
 
-  const isLoading = tournamentsLoading || (Boolean(tournamentId) && tournamentLoading);
+  const isLoading = tournamentsLoading || (Boolean(tournamentId) && tournamentLoading && !selectedTournament);
+  const isTeamsInitialLoading = teamsLoading && teams.length === 0;
   const activeTournament = isCreating ? null : selectedTournament;
 
   const tabs: { key: ManagementTab; label: string; Icon: typeof Trophy }[] = [
     { key: 'event', label: 'Event', Icon: Trophy },
-    { key: 'formats', label: 'Formats', Icon: BookOpen },
+    { key: 'participants', label: 'Participants', Icon: UserRound },
     { key: 'teams', label: 'Teams', Icon: Users },
     { key: 'matches', label: 'Matches', Icon: Swords },
+    { key: 'publish', label: 'Send Invites', Icon: Mail },
+    { key: 'formats', label: 'Formats', Icon: BookOpen },
   ];
 
   return (
@@ -418,19 +367,13 @@ export function AdminTournamentManagementSection({
         </Pressable>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="mb-4"
-        style={{ flexGrow: 0 }}
-        contentContainerStyle={{ gap: 8, paddingRight: 8 }}
-      >
+      <View className="flex-row flex-wrap mb-4">
         {tournaments.map((tournament) => (
           <Pressable
             key={tournament.id}
             onPress={() => selectTournament(tournament.id)}
             className={cn(
-              'px-4 py-2.5 rounded-xl border min-w-[120px]',
+              'px-4 py-2.5 rounded-xl border min-w-[120px] mr-2 mb-2',
               !isCreating && selectedTournamentId === tournament.id
                 ? 'bg-lime-900/40 border-lime-600'
                 : 'bg-[#141414] border-neutral-800'
@@ -447,44 +390,49 @@ export function AdminTournamentManagementSection({
             >
               {tournament.name}
             </Text>
-            <Text className="text-neutral-600 text-[10px] mt-0.5">
+            <Text
+              className={cn(
+                'text-[10px] mt-0.5',
+                !isCreating && selectedTournamentId === tournament.id
+                  ? 'text-neutral-400'
+                  : 'text-neutral-600'
+              )}
+            >
               {formatTournamentDates(tournament.start_date, tournament.end_date)}
             </Text>
           </Pressable>
         ))}
         {isCreating && (
-          <View className="px-4 py-2.5 rounded-xl border bg-lime-900/40 border-lime-600 min-w-[120px]">
+          <View className="px-4 py-2.5 rounded-xl border bg-lime-900/40 border-lime-600 min-w-[120px] mr-2 mb-2">
             <Text className="text-lime-400 text-sm font-semibold">New Event</Text>
           </View>
         )}
-      </ScrollView>
+      </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4" style={{ flexGrow: 0 }}>
-        <View className="flex-row gap-2">
-          {tabs.map(({ key, label, Icon }) => (
-            <Pressable
-              key={key}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setTab(key);
-              }}
-              disabled={isCreating && key !== 'event' && key !== 'formats'}
-              className={cn(
-                'px-4 py-2 rounded-lg border flex-row items-center gap-1.5',
-                tab === key ? 'bg-lime-600 border-lime-600' : 'bg-[#141414] border-neutral-800',
-                isCreating && key !== 'event' && key !== 'formats' && 'opacity-40'
-              )}
+      <View className="flex-row flex-wrap mb-4">
+        {tabs.map(({ key, label, Icon }) => (
+          <Pressable
+            key={key}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setTab(key);
+            }}
+            disabled={isCreating && key !== 'event' && key !== 'formats'}
+            className={cn(
+              'px-4 py-2 rounded-lg border flex-row items-center gap-1.5 mr-2 mb-2',
+              tab === key ? 'bg-lime-600 border-lime-600' : 'bg-[#141414] border-neutral-800',
+              isCreating && key !== 'event' && key !== 'formats' && 'opacity-40'
+            )}
+          >
+            <Icon size={14} color={tab === key ? '#fff' : '#737373'} />
+            <Text
+              className={cn('text-xs font-medium', tab === key ? 'text-white' : 'text-neutral-500')}
             >
-              <Icon size={14} color={tab === key ? '#fff' : '#737373'} />
-              <Text
-                className={cn('text-xs font-medium', tab === key ? 'text-white' : 'text-neutral-500')}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       {tab === 'formats' ? (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
@@ -492,7 +440,12 @@ export function AdminTournamentManagementSection({
         </ScrollView>
       ) : tab === 'matches' ? (
         activeTournament ? (
-          <View className="flex-1">
+          <ScrollView
+            className="flex-1"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 32 }}
+            keyboardShouldPersistTaps="handled"
+          >
             <TournamentMatchGroupsTab
               tournamentId={activeTournament.id}
               tournament={activeTournament}
@@ -501,7 +454,7 @@ export function AdminTournamentManagementSection({
               playerNameById={playerNameById}
               isManager
             />
-          </View>
+          </ScrollView>
         ) : (
           <Text className="text-neutral-500 text-sm text-center px-4 py-8">
             Select or create a tournament first.
@@ -625,17 +578,32 @@ export function AdminTournamentManagementSection({
               No tournaments yet. Tap New to create one.
             </Text>
           )
+        ) : tab === 'participants' ? (
+          !activeTournament ? (
+            <Text className="text-neutral-500 text-sm text-center px-4">
+              Select or create a tournament first.
+            </Text>
+          ) : (
+              <TournamentParticipantsTab
+                tournamentId={activeTournament.id}
+                tournament={activeTournament}
+                participants={tournamentPlayers}
+                teams={teams}
+                members={members}
+                accessToken={accessToken}
+              />
+          )
         ) : tab === 'teams' ? (
           !activeTournament ? (
             <Text className="text-neutral-500 text-sm text-center px-4">
               Select or create a tournament first.
             </Text>
-          ) : teamsLoading ? (
+          ) : isTeamsInitialLoading ? (
             <View className="py-12 items-center">
               <ActivityIndicator color="#a3e635" />
             </View>
           ) : (
-            <Animated.View entering={FadeInDown.duration(400)}>
+            <View>
               <Text className="text-white font-semibold text-lg mb-1">{activeTournament.name}</Text>
               <Text className="text-neutral-500 text-sm mb-4">
                 {formatTournamentDates(activeTournament.start_date, activeTournament.end_date)}
@@ -647,50 +615,26 @@ export function AdminTournamentManagementSection({
                 subtitle="Team matchup preview"
               />
 
-              <Text className="text-neutral-500 text-xs uppercase tracking-[0.15em] mt-5 mb-3">
-                Event Teams
-              </Text>
+              <TournamentTeamsAssignTab
+                tournamentId={activeTournament.id}
+                tournament={activeTournament}
+                teams={teams}
+                participants={tournamentPlayers}
+                members={members}
+                accessToken={accessToken}
+              />
 
-              {teams.length === 0 ? (
-                <Text className="text-neutral-500 text-sm mb-4">
-                  No teams yet. Open the full tournament page to add Team A and Team B with rosters.
-                </Text>
-              ) : (
-                teams.map((team) => {
-                  const sideLabel =
-                    team.side === 'side_a' ? 'Team A' : team.side === 'side_b' ? 'Team B' : 'Team';
-                  return (
+              {teams.length > 0 ? (
+                <>
+                  <Text className="text-neutral-500 text-xs uppercase tracking-[0.15em] mt-5 mb-3">
+                    Team Logos
+                  </Text>
+                  {teams.map((team) => (
                     <View
-                      key={team.id}
+                      key={`logo-${team.id}`}
                       className="bg-[#141414] rounded-2xl border border-neutral-800 p-4 mb-3"
                     >
-                      <Text className="text-lime-400 text-[10px] font-bold uppercase tracking-widest">
-                        {sideLabel}
-                      </Text>
-
-                      <Text className="text-neutral-500 text-xs uppercase tracking-widest mt-3 mb-2">
-                        Team Name
-                      </Text>
-                      <TextInput
-                        value={teamNameEdits[team.id] ?? team.team_name}
-                        onChangeText={(text) =>
-                          setTeamNameEdits((prev) => ({ ...prev, [team.id]: text }))
-                        }
-                        placeholder="Team name"
-                        placeholderTextColor="#525252"
-                        className="bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 text-white"
-                      />
-
-                      <Text className="text-neutral-500 text-xs mt-3 mb-1">
-                        {team.player_ids.length} player{team.player_ids.length !== 1 ? 's' : ''} on
-                        roster
-                      </Text>
-                      {team.player_ids.map((pid) => (
-                        <Text key={pid} className="text-neutral-400 text-sm">
-                          • {playerNameById[pid] ?? 'Player'}
-                        </Text>
-                      ))}
-
+                      <Text className="text-white font-semibold">{team.team_name}</Text>
                       <TeamLogoUploadCard
                         team={team}
                         accessToken={accessToken}
@@ -698,58 +642,37 @@ export function AdminTournamentManagementSection({
                         onUploadStart={setUploadingTeamId}
                         onUploaded={() => invalidateTournamentQueries(tournamentId)}
                       />
-
-                      <View className="flex-row gap-2 mt-4">
-                        <Pressable
-                          onPress={() => saveTeamMutation.mutate(team)}
-                          disabled={
-                            saveTeamMutation.isPending ||
-                            !(teamNameEdits[team.id]?.trim() ?? team.team_name)
-                          }
-                          className="flex-1 flex-row items-center justify-center bg-lime-600 rounded-xl py-3 active:opacity-80"
-                        >
-                          {saveTeamMutation.isPending ? (
-                            <ActivityIndicator color="#fff" />
-                          ) : (
-                            <>
-                              <Save size={14} color="#fff" />
-                              <Text className="text-white font-semibold text-sm ml-1.5">
-                                Save Team
-                              </Text>
-                            </>
-                          )}
-                        </Pressable>
-                        <Pressable
-                          onPress={() => confirmDeleteTeam(team)}
-                          disabled={deleteTeamMutation.isPending}
-                          className="px-4 flex-row items-center justify-center border border-red-800/50 rounded-xl active:opacity-80"
-                        >
-                          <Trash2 size={16} color="#f87171" />
-                        </Pressable>
-                      </View>
                     </View>
-                  );
-                })
-              )}
-
-              {!sideA && (
-                <Text className="text-neutral-500 text-sm">Team A not created yet.</Text>
-              )}
-              {!sideB && sideA && (
-                <Text className="text-neutral-500 text-sm mt-2">Team B not created yet.</Text>
-              )}
+                  ))}
+                </>
+              ) : null}
 
               <Pressable
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(`/tournaments/${activeTournament.id}`);
+                  setTab('matches');
                 }}
-                className="mt-4 flex-row items-center justify-center border border-neutral-700 rounded-xl py-3 active:opacity-80"
+                className="mt-2 flex-row items-center justify-center border border-neutral-700 rounded-xl py-3 active:opacity-80"
               >
-                <Users size={16} color="#a3e635" />
-                <Text className="text-lime-400 font-semibold ml-2">Manage Rosters & Tee Times</Text>
+                <Swords size={16} color="#a3e635" />
+                <Text className="text-lime-400 font-semibold ml-2">Continue to Pairings Board</Text>
               </Pressable>
-            </Animated.View>
+            </View>
+          )
+        ) : tab === 'publish' ? (
+          !activeTournament ? (
+            <Text className="text-neutral-500 text-sm text-center px-4">
+              Select or create a tournament first.
+            </Text>
+          ) : (
+            <TournamentPublishTab
+              tournamentId={activeTournament.id}
+              tournament={activeTournament}
+              participants={tournamentPlayers}
+              teams={teams}
+              members={members}
+              accessToken={accessToken}
+            />
           )
         ) : null}
       </ScrollView>

@@ -547,6 +547,7 @@ export interface Tournament {
   /** Players from each team in a foursome (default 2 = 2v2). */
   players_per_match: number;
   display_token?: string;
+  participant_invites_sent_at?: string | null;
   created_at: string;
 }
 
@@ -591,6 +592,8 @@ export interface TournamentPlayer {
   display_name: string;
   handicap_index: number | null;
   user_id: string | null;
+  email: string | null;
+  invite_email_sent_at: string | null;
   created_at: string;
 }
 
@@ -599,6 +602,7 @@ export interface TournamentPlayerInsert {
   display_name: string;
   handicap_index?: number | null;
   user_id?: string | null;
+  email?: string | null;
 }
 
 export interface TournamentHoleScore {

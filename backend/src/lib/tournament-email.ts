@@ -3,9 +3,9 @@ export interface TournamentOnboardEmailParams {
   recipientName: string;
   tournamentName: string;
   tournamentDates: string;
-  teamName: string;
-  teamSideLabel: string;
-  rosterNames: string[];
+  teamName?: string | null;
+  teamSideLabel?: string | null;
+  rosterNames?: string[];
   tournamentUrl: string;
   isPendingMember: boolean;
 }
@@ -19,11 +19,27 @@ function escapeHtml(value: string): string {
 }
 
 export function buildTournamentOnboardEmailHtml(params: TournamentOnboardEmailParams): string {
-  const rosterList = params.rosterNames
+  const rosterList = (params.rosterNames ?? [])
     .map((name) => `<li style="margin:4px 0;">${escapeHtml(name)}</li>`)
     .join('');
 
   const ctaLabel = params.isPendingMember ? 'Set up your account' : 'View tournament';
+  const hasTeam = Boolean(params.teamName?.trim());
+
+  const teamBlock = hasTeam
+    ? `<div style="background:#0c0c0c; border:1px solid #262626; border-radius:12px; padding:16px; margin:20px 0;">
+        <p style="margin:0 0 4px; color:#a3a3a3; font-size:12px; text-transform:uppercase; letter-spacing:0.08em;">Team</p>
+        <p style="margin:0 0 8px; font-size:18px; font-weight:700;">${escapeHtml(params.teamName ?? '')}</p>
+        ${params.teamSideLabel ? `<p style="margin:0 0 12px; color:#a3a3a3;">${escapeHtml(params.teamSideLabel)}</p>` : ''}
+        ${rosterList ? `<ul style="margin:0; padding-left:18px; color:#e5e5e5;">${rosterList}</ul>` : ''}
+      </div>`
+    : `<p style="color:#d4d4d4; line-height:1.5;">
+        You're on the participant list. Team assignments and pairings may still be finalized — check back in the app for updates.
+      </p>`;
+
+  const introLine = hasTeam
+    ? `Your team roster is set for <strong>${escapeHtml(params.tournamentName)}</strong> (${escapeHtml(params.tournamentDates)}).`
+    : `You're registered for <strong>${escapeHtml(params.tournamentName)}</strong> (${escapeHtml(params.tournamentDates)}).`;
 
   return `<!DOCTYPE html>
 <html>
@@ -35,15 +51,9 @@ export function buildTournamentOnboardEmailHtml(params: TournamentOnboardEmailPa
         Hi ${escapeHtml(params.recipientName)},
       </p>
       <p style="color:#d4d4d4; line-height:1.5;">
-        Your team roster is set for <strong>${escapeHtml(params.tournamentName)}</strong>
-        (${escapeHtml(params.tournamentDates)}).
+        ${introLine}
       </p>
-      <div style="background:#0c0c0c; border:1px solid #262626; border-radius:12px; padding:16px; margin:20px 0;">
-        <p style="margin:0 0 4px; color:#a3a3a3; font-size:12px; text-transform:uppercase; letter-spacing:0.08em;">Team</p>
-        <p style="margin:0 0 8px; font-size:18px; font-weight:700;">${escapeHtml(params.teamName)}</p>
-        <p style="margin:0 0 12px; color:#a3a3a3;">${escapeHtml(params.teamSideLabel)}</p>
-        <ul style="margin:0; padding-left:18px; color:#e5e5e5;">${rosterList}</ul>
-      </div>
+      ${teamBlock}
       <a href="${escapeHtml(params.tournamentUrl)}" style="display:inline-block; background:#65a30d; color:#ffffff; text-decoration:none; font-weight:700; padding:12px 18px; border-radius:12px;">
         ${ctaLabel}
       </a>
@@ -58,19 +68,31 @@ export function buildTournamentOnboardEmailHtml(params: TournamentOnboardEmailPa
 }
 
 export function buildTournamentOnboardEmailText(params: TournamentOnboardEmailParams): string {
-  const rosterLines = params.rosterNames.map((name) => `- ${name}`).join('\n');
-  return [
+  const rosterLines = (params.rosterNames ?? []).map((name) => `- ${name}`).join('\n');
+  const hasTeam = Boolean(params.teamName?.trim());
+  const lines = [
     `Hi ${params.recipientName},`,
     '',
-    `Your team roster is set for ${params.tournamentName} (${params.tournamentDates}).`,
-    '',
-    `Team: ${params.teamName} (${params.teamSideLabel})`,
-    rosterLines,
+    hasTeam
+      ? `Your team roster is set for ${params.tournamentName} (${params.tournamentDates}).`
+      : `You're registered for ${params.tournamentName} (${params.tournamentDates}).`,
+  ];
+
+  if (hasTeam) {
+    lines.push('', `Team: ${params.teamName}${params.teamSideLabel ? ` (${params.teamSideLabel})` : ''}`);
+    if (rosterLines) lines.push(rosterLines);
+  } else {
+    lines.push('', 'Team assignments and pairings may still be finalized.');
+  }
+
+  lines.push(
     '',
     params.isPendingMember
       ? 'Set up your account: ' + params.tournamentUrl
-      : 'View tournament: ' + params.tournamentUrl,
-  ].join('\n');
+      : 'View tournament: ' + params.tournamentUrl
+  );
+
+  return lines.join('\n');
 }
 
 export async function sendTournamentOnboardEmail(

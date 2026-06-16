@@ -1,0 +1,12 @@
+{
+  "buildCommand": "bunx expo export -p web",
+  "outputDirectory": "dist",
+  "installCommand": "bun install",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

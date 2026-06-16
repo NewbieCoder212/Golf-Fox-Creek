@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HubHeroWelcome } from '@/components/hub/HubHeroWelcome';
 import { HubMemberToolbar } from '@/components/hub/HubMemberToolbar';
-import { HubContextCard } from '@/components/hub/HubContextCard';
+import { HubContextCard, useHubRoundContext } from '@/components/hub/HubContextCard';
 import { HubMyEventsStrip } from '@/components/hub/HubMyEventsStrip';
 import { HubAdBanner, HubAdFeedCards } from '@/components/hub/HubAdBanner';
 import { useTopTabBarHeight } from '@/components/navigation/TopTabBar';
@@ -103,15 +103,16 @@ export function MemberHubContent({
   const resolvedProfile = userProfileProp ?? authProfile ?? adminProfile;
 
   const refreshUnfinishedRoundStatus = useScorecardStore((s) => s.refreshUnfinishedRoundStatus);
+  const { hasActiveContext } = useHubRoundContext();
 
-  const { data: activeTournaments = [] } = useQuery({
-    queryKey: ['hubLeaderboardTournament', userId],
-    queryFn: () => getTournamentsForUserList(userId!, { limit: 1 }),
+  const { data: myEvents = [] } = useQuery({
+    queryKey: ['hubMyEvents', userId],
+    queryFn: () => getTournamentsForUserList(userId!, { limit: 3 }),
     enabled: Boolean(userId),
     staleTime: 1000 * 60 * 2,
   });
 
-  const leaderboardTournamentId = activeTournaments[0]?.id;
+  const leaderboardTournamentId = myEvents[0]?.id;
 
   useFocusEffect(
     useCallback(() => {
@@ -228,12 +229,13 @@ export function MemberHubContent({
             loading={weatherLoading}
             unavailable={showWeatherUnavailable}
             embedded
+            showTopDivider={hasActiveContext}
           />
         </HubSection>
 
         <HubSection
           title={t.myEvents}
-          actionLabel={t.viewAll}
+          actionLabel={myEvents.length > 0 ? t.viewAll : t.browseTournaments}
           onActionPress={handleMyEventsAction}
         >
           <HubMyEventsStrip userId={userId} embedded />

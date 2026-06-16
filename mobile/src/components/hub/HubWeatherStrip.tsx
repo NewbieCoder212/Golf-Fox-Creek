@@ -30,6 +30,7 @@ interface HubWeatherStripProps {
   loading?: boolean;
   unavailable?: boolean;
   embedded?: boolean;
+  showTopDivider?: boolean;
 }
 
 function WeatherIcon({ iconCode, size = 24 }: { iconCode?: string; size?: number }) {
@@ -58,6 +59,7 @@ export function HubWeatherStrip({
   loading,
   unavailable,
   embedded = false,
+  showTopDivider = true,
 }: HubWeatherStripProps) {
   const t = useTranslations();
 
@@ -100,7 +102,10 @@ export function HubWeatherStrip({
 
   if (embedded) {
     return (
-      <Animated.View entering={FadeInDown.delay(300).duration(600)} className="mt-4 pt-4 border-t border-fox-border">
+      <Animated.View
+        entering={FadeInDown.delay(300).duration(600)}
+        className={showTopDivider ? 'mt-4 pt-4 border-t border-fox-border' : undefined}
+      >
         {content}
       </Animated.View>
     );

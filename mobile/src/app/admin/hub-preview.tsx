@@ -76,7 +76,6 @@ function HubPreviewScreenContent() {
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: ['gmAnnouncement'] });
     void queryClient.invalidateQueries({ queryKey: ['turnMessaging'] });
-    void queryClient.invalidateQueries({ queryKey: ['hubLeaderboardTournament'] });
     void queryClient.invalidateQueries({ queryKey: ['hubMyEvents'] });
     void queryClient.invalidateQueries({ queryKey: ['adPlacement'] });
   }, [queryClient]);
@@ -86,7 +85,6 @@ function HubPreviewScreenContent() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['gmAnnouncement'] }),
       queryClient.invalidateQueries({ queryKey: ['turnMessaging'] }),
-      queryClient.invalidateQueries({ queryKey: ['hubLeaderboardTournament'] }),
       queryClient.invalidateQueries({ queryKey: ['hubMyEvents'] }),
       queryClient.invalidateQueries({ queryKey: ['adPlacement'] }),
     ]);

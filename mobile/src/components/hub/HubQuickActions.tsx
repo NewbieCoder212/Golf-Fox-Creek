@@ -1,5 +1,5 @@
 import { View } from 'react-native';
-import { ClipboardList, History, Trophy, Shield } from 'lucide-react-native';
+import { History, Trophy, Shield } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInRight } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -11,7 +11,6 @@ import { bridgeMemberAuthToAdmin, canAccessAdminRole } from '@/lib/admin-auth-br
 import type { UserProfile } from '@/types';
 
 const QUICK_ACTIONS = [
-  { titleKey: 'scorecard' as const, icon: ClipboardList, route: '/(tabs)/scorecard' },
   { titleKey: 'tournaments' as const, icon: Trophy, route: '/tournaments' },
   { titleKey: 'history' as const, icon: History, route: '/history' },
 ];

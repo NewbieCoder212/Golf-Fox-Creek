@@ -30,15 +30,13 @@ export function HubMyEventsStrip({ userId, embedded = false }: HubMyEventsStripP
   if (tournaments.length === 0) {
     if (embedded) {
       return (
-        <View className="py-2">
-          <Text className="text-neutral-500 text-sm font-body">{t.noUpcomingEvents}</Text>
-          <Pressable
-            onPress={() => router.push('/tournaments' as never)}
-            hitSlop={8}
-            className="mt-2 active:opacity-70"
-          >
-            <Text className="text-fox-lime text-sm font-body-semibold">{t.browseTournaments}</Text>
-          </Pressable>
+        <View className="py-5 items-center">
+          <View className="w-11 h-11 bg-fox-surface-elevated rounded-full items-center justify-center border border-fox-border">
+            <Trophy size={20} color="#525252" strokeWidth={1.5} />
+          </View>
+          <Text className="text-neutral-500 text-sm font-body mt-3 text-center">
+            {t.noUpcomingEvents}
+          </Text>
         </View>
       );
     }

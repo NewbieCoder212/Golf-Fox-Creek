@@ -5,7 +5,6 @@ import {
   Coffee,
   Bell,
   MapPin,
-  ClipboardList,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -24,29 +23,15 @@ import {
   useHubPreviewContext,
 } from '@/components/hub/HubPreviewContext';
 
-export function HubContextCard() {
-  const router = useRouter();
-  const t = useTranslations();
+export function useHubRoundContext() {
   const previewContext = useHubPreviewContext();
-
-  const { data: turnMessaging = getDefaultTurnMessagingSettings() } = useQuery({
-    queryKey: ['turnMessaging'],
-    queryFn: getTurnMessaging,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const hubTurnTitle = turnMessaging.hub_title || t.theTurn;
-  const hubTurnPrompt = turnMessaging.hub_prompt || t.turnPrompt;
 
   const storeIsCheckedIn = useScorecardStore((s) => s.isCheckedIn);
   const storeIsTracking = useScorecardStore((s) => s.isTracking);
   const storeIsTurnPaused = useScorecardStore((s) => s.isTurnPaused);
   const storeHasUnfinishedRound = useScorecardStore((s) => s.hasUnfinishedRound);
   const storeCurrentHole = useScorecardStore((s) => s.currentHole);
-  const resumeRound = useScorecardStore((s) => s.resumeRound);
-  const hasRoundProgress = useScorecardStore((s) => s.hasRoundProgress);
   const storeShowFnbPrompt = useScorecardStore((s) => s.showFnbPrompt);
-  const setShowFnbPrompt = useScorecardStore((s) => s.setShowFnbPrompt);
 
   const storeTeeTime = useTeeTimeAlertStore((s) => s.teeTime);
   const getMinutesUntilTeeTime = useTeeTimeAlertStore((s) => s.getMinutesUntilTeeTime);
@@ -57,8 +42,6 @@ export function HubContextCard() {
       ? getScenarioOverrides(previewContext.scenario)
       : null;
 
-  const isPreview = previewContext?.previewMode ?? false;
-
   const isCheckedIn = scenarioOverrides?.isCheckedIn ?? storeIsCheckedIn;
   const isTracking = scenarioOverrides?.isTracking ?? storeIsTracking;
   const isTurnPaused = scenarioOverrides?.isTurnPaused ?? storeIsTurnPaused;
@@ -67,6 +50,61 @@ export function HubContextCard() {
   const showFnbPrompt = scenarioOverrides?.showFnbPrompt ?? storeShowFnbPrompt;
   const teeTime = scenarioOverrides?.teeTime ?? storeTeeTime;
   const minutesUntil = scenarioOverrides?.minutesUntil ?? storeMinutesUntil;
+
+  const hasUpcomingTeeTime =
+    teeTime !== null && minutesUntil !== null && minutesUntil > 0 && minutesUntil <= 60;
+
+  const hasActiveContext =
+    isTracking ||
+    hasUnfinishedRound ||
+    isTurnPaused ||
+    showFnbPrompt ||
+    hasUpcomingTeeTime ||
+    (isCheckedIn && !isTracking);
+
+  return {
+    isPreview: previewContext?.previewMode ?? false,
+    isCheckedIn,
+    isTracking,
+    isTurnPaused,
+    hasUnfinishedRound,
+    currentHole,
+    showFnbPrompt,
+    teeTime,
+    minutesUntil,
+    hasActiveContext,
+  };
+}
+
+export function HubContextCard() {
+  const router = useRouter();
+  const t = useTranslations();
+
+  const { data: turnMessaging = getDefaultTurnMessagingSettings() } = useQuery({
+    queryKey: ['turnMessaging'],
+    queryFn: getTurnMessaging,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const hubTurnTitle = turnMessaging.hub_title || t.theTurn;
+  const hubTurnPrompt = turnMessaging.hub_prompt || t.turnPrompt;
+
+  const resumeRound = useScorecardStore((s) => s.resumeRound);
+  const hasRoundProgress = useScorecardStore((s) => s.hasRoundProgress);
+  const setShowFnbPrompt = useScorecardStore((s) => s.setShowFnbPrompt);
+
+  const {
+    isPreview,
+    isCheckedIn,
+    isTracking,
+    isTurnPaused,
+    hasUnfinishedRound,
+    currentHole,
+    showFnbPrompt,
+    teeTime,
+    minutesUntil,
+    hasActiveContext,
+  } = useHubRoundContext();
 
   const goToScorecard = async () => {
     if (isPreview) return;
@@ -88,6 +126,10 @@ export function HubContextCard() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowFnbPrompt(false);
   };
+
+  if (!hasActiveContext) {
+    return null;
+  }
 
   return (
     <Animated.View entering={FadeInDown.delay(200).duration(600)}>
@@ -202,31 +244,7 @@ export function HubContextCard() {
             </View>
           </SurfaceCard>
         </Pressable>
-      ) : (
-        <View>
-          <View className="flex-row items-center">
-            <View className="w-12 h-12 bg-fox-surface-elevated rounded-full items-center justify-center mr-4 border border-fox-border">
-              <ClipboardList size={22} color={foxColors.lime} strokeWidth={1.5} />
-            </View>
-            <View className="flex-1">
-              <Text className="text-white text-lg font-display">{t.readyToScore}</Text>
-              <Text className="text-neutral-500 text-sm mt-0.5 font-body">{t.scorecardHubSubtitle}</Text>
-            </View>
-          </View>
-          <Pressable
-            onPress={() => handleNavigate('/(tabs)/scorecard')}
-            className="mt-4 bg-fox-lime rounded-xl py-3 items-center active:opacity-80"
-          >
-            <Text className="text-black font-body-bold">{t.openScorecard}</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => handleNavigate('/tournaments')}
-            className="mt-3 items-center active:opacity-70"
-          >
-            <Text className="text-fox-lime text-sm font-body-semibold">{t.browseTournaments}</Text>
-          </Pressable>
-        </View>
-      )}
+      ) : null}
     </Animated.View>
   );
 }

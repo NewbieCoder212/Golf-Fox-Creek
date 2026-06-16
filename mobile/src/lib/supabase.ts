@@ -8,6 +8,7 @@ import type {
   GeofenceSettings,
   GeofenceZone,
   GMAnnouncement,
+  TurnMessagingSettings,
   LoyaltyConfig,
   LoyaltyTransaction,
   LoyaltyTransactionInsert,
@@ -296,6 +297,30 @@ export function getDefaultGeofenceSettings(): GeofenceSettings {
   };
 }
 
+export function getDefaultTurnMessagingSettings(): TurnMessagingSettings {
+  return {
+    scorecard_title: 'Enjoy the Turn',
+    scorecard_countdown_label: 'Back 9 starts in...',
+    scorecard_body: 'Grab a snack, refresh your drink, and get ready for the back nine',
+    scorecard_skip_label: 'Skip & Start Hole 10',
+    hub_title: 'The Turn',
+    hub_prompt: 'Stop by the canteen for refreshments?',
+  };
+}
+
+export function getDefaultGMAnnouncementSettings(): GMAnnouncement {
+  return {
+    enabled: false,
+    title: '',
+    message: '',
+    type: 'info',
+    expires_at: null,
+    placeholder_enabled: true,
+    placeholder_title: 'More Information Coming Soon',
+    placeholder_message: "We're preparing club updates. More information to follow.",
+  };
+}
+
 // ============================================
 // HELPER TO CHECK IF SUPABASE IS CONFIGURED
 // ============================================
@@ -522,32 +547,55 @@ export async function getHole1TeeZone(): Promise<GeofenceZone | null> {
 // ============================================
 
 /**
- * Get current GM announcement
+ * Raw GM announcement settings (for admin — includes disabled drafts and placeholder config)
  */
-export async function getGMAnnouncement(): Promise<GMAnnouncement | null> {
-  if (!isConfigured()) return null;
+export async function getGMAnnouncementSettings(): Promise<GMAnnouncement> {
+  const defaults = getDefaultGMAnnouncementSettings();
+  if (!isConfigured()) return defaults;
 
   const data = await supabaseRequest<AppSetting>('app_settings', {
     query: { setting_key: 'eq.gm_announcements' },
     single: true,
   });
 
-  if (!data) return null;
+  if (!data) return defaults;
 
-  const announcement = data.setting_value as unknown as GMAnnouncement;
+  return {
+    ...defaults,
+    ...(data.setting_value as GMAnnouncement),
+  };
+}
 
-  // Check if announcement is enabled and not expired
-  if (!announcement.enabled) return null;
+/**
+ * Get the announcement banner to show members (custom or placeholder)
+ */
+export async function getGMAnnouncement(): Promise<GMAnnouncement | null> {
+  const settings = await getGMAnnouncementSettings();
 
-  if (announcement.expires_at) {
-    const expiresAt = new Date(announcement.expires_at);
-    if (expiresAt < new Date()) return null;
+  if (settings.enabled && settings.message?.trim()) {
+    if (settings.expires_at) {
+      const expiresAt = new Date(settings.expires_at);
+      if (expiresAt < new Date()) {
+        // Fall through to placeholder if custom announcement expired
+      } else {
+        return settings;
+      }
+    } else {
+      return settings;
+    }
   }
 
-  // Only return if there's a message
-  if (!announcement.message || announcement.message.trim() === '') return null;
+  if (settings.placeholder_enabled && settings.placeholder_message?.trim()) {
+    return {
+      enabled: true,
+      title: settings.placeholder_title?.trim() || 'More Information Coming Soon',
+      message: settings.placeholder_message.trim(),
+      type: 'info',
+      expires_at: null,
+    };
+  }
 
-  return announcement;
+  return null;
 }
 
 /**
@@ -558,16 +606,8 @@ export async function updateGMAnnouncement(
 ): Promise<boolean> {
   if (!isConfigured()) return false;
 
-  const current = await getGMAnnouncement();
-  const updated = {
-    enabled: false,
-    title: '',
-    message: '',
-    type: 'info',
-    expires_at: null,
-    ...current,
-    ...announcement,
-  };
+  const current = await getGMAnnouncementSettings();
+  const updated = { ...current, ...announcement };
 
   const result = await supabaseRequest('app_settings', {
     method: 'PATCH',
@@ -575,6 +615,64 @@ export async function updateGMAnnouncement(
     body: {
       setting_value: updated,
       updated_at: new Date().toISOString(),
+    },
+  });
+
+  return result !== null;
+}
+
+/**
+ * Fetch turn break messaging shown on scorecard and home hub
+ */
+export async function getTurnMessaging(): Promise<TurnMessagingSettings> {
+  if (!isConfigured()) return getDefaultTurnMessagingSettings();
+
+  const data = await supabaseRequest<AppSetting>('app_settings', {
+    query: { setting_key: 'eq.turn_messaging' },
+    single: true,
+  });
+
+  if (!data) return getDefaultTurnMessagingSettings();
+
+  return {
+    ...getDefaultTurnMessagingSettings(),
+    ...(data.setting_value as TurnMessagingSettings),
+  };
+}
+
+/**
+ * Update turn messaging with auth
+ */
+export async function updateTurnMessagingAuth(
+  messaging: Partial<TurnMessagingSettings>,
+  accessToken: string
+): Promise<boolean> {
+  const current = await getTurnMessaging();
+  const updated = { ...current, ...messaging };
+
+  const existing = await supabaseRequest<AppSetting>('app_settings', {
+    query: { setting_key: 'eq.turn_messaging' },
+    single: true,
+  });
+
+  if (existing) {
+    const result = await authenticatedRequest('app_settings', accessToken, {
+      method: 'PATCH',
+      query: { setting_key: 'eq.turn_messaging' },
+      body: {
+        setting_value: updated,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    return result !== null;
+  }
+
+  const result = await authenticatedRequest('app_settings', accessToken, {
+    method: 'POST',
+    body: {
+      setting_key: 'turn_messaging',
+      setting_value: updated,
+      description: 'Built-in turn break copy shown on scorecard and home hub',
     },
   });
 
@@ -894,23 +992,8 @@ export async function updateGMAnnouncementAuth(
   announcement: Partial<GMAnnouncement>,
   accessToken: string
 ): Promise<boolean> {
-  // Get current or use defaults
-  const currentData = await supabaseRequest<AppSetting>('app_settings', {
-    query: { setting_key: 'eq.gm_announcements' },
-    single: true,
-  });
-
-  const current = currentData?.setting_value as GMAnnouncement | undefined;
-
-  const updated = {
-    enabled: false,
-    title: '',
-    message: '',
-    type: 'info' as const,
-    expires_at: null,
-    ...current,
-    ...announcement,
-  };
+  const current = await getGMAnnouncementSettings();
+  const updated = { ...current, ...announcement };
 
   const result = await authenticatedRequest('app_settings', accessToken, {
     method: 'PATCH',

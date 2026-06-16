@@ -27,6 +27,7 @@ const HERO_MAX_HEIGHT = 380;
 interface HubHeroWelcomeProps {
   userProfile: UserProfile | null | undefined;
   onLogout: () => void;
+  previewMode?: boolean;
 }
 
 function getHeroHeight(containerWidth: number, windowHeight: number): number {
@@ -38,7 +39,7 @@ function getHeroHeight(containerWidth: number, windowHeight: number): number {
   return Math.min(aspectHeight, heightBased, HERO_MAX_HEIGHT);
 }
 
-export function HubHeroWelcome({ userProfile, onLogout }: HubHeroWelcomeProps) {
+export function HubHeroWelcome({ userProfile, onLogout, previewMode = false }: HubHeroWelcomeProps) {
   const router = useRouter();
   const t = useTranslations();
   const { height: windowHeight } = useWindowDimensions();
@@ -65,6 +66,8 @@ export function HubHeroWelcome({ userProfile, onLogout }: HubHeroWelcomeProps) {
   };
 
   const handleHeaderTap = async () => {
+    if (previewMode) return;
+
     tapCountRef.current += 1;
 
     if (tapTimeoutRef.current) {
@@ -133,14 +136,16 @@ export function HubHeroWelcome({ userProfile, onLogout }: HubHeroWelcomeProps) {
               {language.toUpperCase()}
             </Text>
           </Pressable>
-          <Pressable
-            onPress={onLogout}
-            className="w-9 h-9 bg-black/40 rounded-full items-center justify-center border border-white/10 active:opacity-70"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel="Sign out"
-          >
-            <LogOut size={16} color={foxColors.danger} strokeWidth={2} />
-          </Pressable>
+          {!previewMode ? (
+            <Pressable
+              onPress={onLogout}
+              className="w-9 h-9 bg-black/40 rounded-full items-center justify-center border border-white/10 active:opacity-70"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Sign out"
+            >
+              <LogOut size={16} color={foxColors.danger} strokeWidth={2} />
+            </Pressable>
+          ) : null}
         </View>
 
         <View className="flex-1" />

@@ -9,8 +9,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
+import { useQuery } from '@tanstack/react-query';
 import { useScorecardStore } from '@/lib/scorecard-store';
 import { SponsorBanner } from '@/components/SponsorBanner';
+import { getTurnMessaging, getDefaultTurnMessagingSettings } from '@/lib/supabase';
 import { FoxCreekPaperScorecard } from '@/components/FoxCreekPaperScorecard';
 import { ScorecardAssistPanel } from '@/components/ScorecardAssistPanel';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
@@ -83,6 +85,12 @@ export default function ScorecardScreen() {
     side?: TournamentTeamSide;
   }>();
   const isTournamentMode = Boolean(tournamentId);
+
+  const { data: turnMessaging = getDefaultTurnMessagingSettings() } = useQuery({
+    queryKey: ['turnMessaging'],
+    queryFn: getTurnMessaging,
+    staleTime: 1000 * 60 * 5,
+  });
 
   const tournamentSession = useTournamentScorecardSession(
     tournamentId
@@ -607,10 +615,10 @@ export default function ScorecardScreen() {
               <Coffee size={48} color="#f59e0b" strokeWidth={1.5} />
             </View>
             <Text className="text-white text-3xl font-bold text-center mb-2">
-              Enjoy the Turn
+              {turnMessaging.scorecard_title}
             </Text>
             <Text className="text-neutral-400 text-center mb-2">
-              Back 9 starts in...
+              {turnMessaging.scorecard_countdown_label}
             </Text>
 
             <Text className="text-amber-400 text-6xl font-mono font-bold mb-6">
@@ -619,7 +627,7 @@ export default function ScorecardScreen() {
 
             <View className="bg-[#141414] rounded-2xl border border-neutral-800 p-4 w-full items-center mb-6">
               <Text className="text-neutral-500 text-sm text-center">
-                Grab a snack, refresh your drink, and get ready for the back nine
+                {turnMessaging.scorecard_body}
               </Text>
             </View>
 
@@ -632,7 +640,7 @@ export default function ScorecardScreen() {
               }}
               className="bg-lime-400 rounded-xl py-4 px-8 active:opacity-80"
             >
-              <Text className="text-black font-bold text-lg">Skip & Start Hole 10</Text>
+              <Text className="text-black font-bold text-lg">{turnMessaging.scorecard_skip_label}</Text>
             </Pressable>
           </View>
         </Animated.View>

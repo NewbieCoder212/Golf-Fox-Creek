@@ -1,0 +1,104 @@
+FOX CREEK GOLF CLUB APP — SALES PITCH
+========================================
+
+HEADLINE
+--------
+Turn your club tournament into an event — live on the course, in members' pockets, and on the clubhouse TV.
+
+
+30-SECOND ELEVATOR PITCH
+------------------------
+"We built a golf club app that makes member tournaments feel like the Ryder Cup — team vs. team, match points updating as play happens, and a live leaderboard on the clubhouse TV so everyone can follow the action without refreshing a spreadsheet.
+
+Local businesses get real visibility through curated sponsor placements right where members are looking — on the scorecard, at The Turn, and on the big screen during events.
+
+It's one platform: run the event, score from the phone, and let the whole club watch it unfold live."
+
+
+2-MINUTE PITCH (DEMO / MEETING)
+-------------------------------
+THE PROBLEM
+Club tournaments are fun, but the experience often falls flat. Standings live in a Google Sheet. Nobody knows who's winning until the banquet. Sponsors get a logo on a sign and little else. Members go home and the energy dies at the 18th green.
+
+WHAT WE BUILT
+A member-first golf app with tournament tools built in — not bolted on.
+
+RYDER CUP-STYLE TEAM COMPETITION
+Split the field into two sides. Pair 2v2 match groups across tee times. As scores come in hole by hole, match points update automatically — wins, losses, and ties tracked per match and rolled up to a team leaderboard. Members see it in the app; captains and committees see who's carrying the team. It's the drama of match play, without the manual math.
+
+LIVE CLUBHOUSE TV DISPLAY
+Open one secure link on any TV or tablet in the pro shop or grill. Standings update in real time — net and gross, plus match points when it's a team event. A "Live" indicator and QR code on screen let members jump from the big screen to the full tournament on their phone. No app install required for the display — just a browser and a link from the pro shop.
+
+ADVERTISING THAT REACHES MEMBERS WHERE THEY ALREADY ARE
+Local partners — pro shop, restaurant, real estate, auto dealer — get placement in high-attention moments: tournament scorecard headers, hole sponsors on casual rounds, The Turn prompt at hole 9, and sponsor slots on the TV leaderboard (header, sidebar, footer). Club management controls what's active from an admin dashboard. It's member-relevant advertising, not generic banner ads.
+
+THE RESULT
+More engagement during the event. More reason to stay in the clubhouse after the round. A new revenue line for the club from local sponsors. And a tournament experience members actually talk about.
+
+
+FEATURE HIGHLIGHTS — RYDER CUP-STYLE LEADERBOARDS
+-------------------------------------------------
+- Two-team format with Side A vs. Side B
+- 2v2 match groups across rounds and tee times
+- Hole-by-hole match results → automatic match points
+- Team standings: points, wins, and matches played
+- Supports scramble, best ball, alternate shot, and singles formats
+- Mobile leaderboard card on the home screen during events
+
+
+FEATURE HIGHLIGHTS — LIVE CLUBHOUSE TV
+--------------------------------------
+- Dedicated full-screen display URL (secure token — rotatable by managers)
+- Real-time updates as scores are entered on course
+- Net / gross toggle for standings
+- Match points board for team events
+- Landscape-optimized layout for clubhouse TVs
+- QR code on screen → members open the tournament on their phone
+- "Live" status so everyone knows standings are current
+
+
+FEATURE HIGHLIGHTS — LOCAL MEMBER ADVERTISING
+---------------------------------------------
+- Curated sponsor banners — club-controlled, not random ads
+- Placements: tournament scorecard header, hole sponsor, The Turn (hole 9), TV leaderboard
+- Sponsor name, image, message, and optional link
+- Admin dashboard to add, edit, and activate placements
+- Ideal for local businesses targeting members who are already on the course
+
+
+EMAIL / OUTREACH VERSION
+------------------------
+Subject: Live tournament leaderboards + sponsor visibility for [Club Name]
+
+Hi [Name],
+
+I wanted to share something we're rolling out for member tournaments at [Club Name].
+
+Team events that feel like the Ryder Cup — two sides, 2v2 matches, match points updating automatically as scores come in. No more end-of-day spreadsheet chaos.
+
+A live leaderboard for the clubhouse TV — one link on any screen; standings update in real time as players post scores. Members in the grill can follow every match.
+
+Sponsor placements for local businesses — banners on scorecards, at The Turn, and on the TV display. The club controls what runs and when.
+
+Happy to show you a 10-minute walkthrough before your next member event.
+
+[Your name]
+
+
+ONE-LINERS (SOCIAL / FLYER / PRO SHOP POSTER)
+---------------------------------------------
+Tournament: "Team vs. team. Hole by hole. Live on the TV."
+
+TV display: "Your tournament on the big screen — updated every time someone posts a score."
+
+Sponsors: "Reach members on the scorecard, at The Turn, and on clubhouse TV."
+
+Members: "Follow the cup from your phone or from the clubhouse — same live standings."
+
+
+SUGGESTED DEMO FLOW (LIVE PITCH)
+--------------------------------
+1. Phone: Open an active tournament → show match points leaderboard updating.
+2. TV: Open the display URL → point out live standings, sponsor slots, and QR code.
+3. Admin: Show how a sponsor placement is added (30 seconds).
+4. Close: "Your next member-guest or club championship could run like this — same app members already use for scorecard and tee times."

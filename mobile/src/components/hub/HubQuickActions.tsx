@@ -8,6 +8,7 @@ import { QuickActionTile } from '@/components/ui/QuickActionTile';
 import { useTranslations } from '@/lib/language-store';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { bridgeMemberAuthToAdmin, canAccessAdminRole } from '@/lib/admin-auth-bridge';
+import type { UserProfile } from '@/types';
 
 const QUICK_ACTIONS = [
   { titleKey: 'scorecard' as const, icon: ClipboardList, route: '/(tabs)/scorecard' },
@@ -17,15 +18,29 @@ const QUICK_ACTIONS = [
 
 interface HubQuickActionsProps {
   embedded?: boolean;
+  previewMode?: boolean;
+  userProfile?: UserProfile | null;
 }
 
-export function HubQuickActions({ embedded = false }: HubQuickActionsProps) {
+export function HubQuickActions({
+  embedded = false,
+  previewMode = false,
+  userProfile: userProfileProp,
+}: HubQuickActionsProps) {
   const router = useRouter();
   const t = useTranslations();
-  const profile = useMemberAuthStore((s) => s.profile);
+  const memberProfile = useMemberAuthStore((s) => s.profile);
+  const profile = userProfileProp ?? memberProfile;
   const isAdmin = canAccessAdminRole(profile?.role);
 
+  const handlePress = (route: string) => {
+    if (previewMode) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(route as never);
+  };
+
   const handleAdminPress = async () => {
+    if (previewMode) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await bridgeMemberAuthToAdmin();
     router.push('/admin/dashboard');
@@ -44,13 +59,13 @@ export function HubQuickActions({ embedded = false }: HubQuickActionsProps) {
               <QuickActionTile
                 icon={action.icon}
                 label={t[action.titleKey]}
-                onPress={() => router.push(action.route as never)}
+                onPress={() => handlePress(action.route)}
               />
             </Animated.View>
           ))}
         </View>
 
-        {isAdmin ? (
+        {isAdmin && !previewMode ? (
           <Animated.View entering={FadeInRight.delay(700).duration(500)}>
             <QuickActionTile
               icon={Shield}

@@ -380,6 +380,18 @@ export interface GMAnnouncement {
   message: string;
   type: AnnouncementType;
   expires_at: string | null;
+  placeholder_enabled?: boolean;
+  placeholder_title?: string;
+  placeholder_message?: string;
+}
+
+export interface TurnMessagingSettings {
+  scorecard_title: string;
+  scorecard_countdown_label: string;
+  scorecard_body: string;
+  scorecard_skip_label: string;
+  hub_title: string;
+  hub_prompt: string;
 }
 
 // ============================================

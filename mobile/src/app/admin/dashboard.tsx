@@ -32,6 +32,7 @@ import {
   XCircle,
   Trophy,
   ImageIcon,
+  Eye,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -44,20 +45,38 @@ import {
   getGeofenceSettings,
   updateGeofenceSettingsAuth,
   updateGMAnnouncementAuth,
+  getGMAnnouncementSettings,
+  getDefaultGMAnnouncementSettings,
+  getDefaultTurnMessagingSettings,
+  getTurnMessaging,
+  updateTurnMessagingAuth,
   signOut,
-  getGMAnnouncement,
 } from '@/lib/supabase';
 import { getCourseReports, updateReportStatus } from '@/lib/course-reports';
 import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
-import type { GeofenceSettings, GMAnnouncement, AnnouncementType, CourseReport } from '@/types';
+import type {
+  GeofenceSettings,
+  GMAnnouncement,
+  AnnouncementType,
+  CourseReport,
+  TurnMessagingSettings,
+} from '@/types';
 import { AdminAdPlacementsSection } from '@/components/admin/AdminAdPlacementsSection';
 import { AdminEventTeamsSection } from '@/components/admin/AdminEventTeamsSection';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import { buildMatchPointsLeaderboard, getTournamentTeams } from '@/lib/tournament-service';
 import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
 
-type AdminSection = 'main' | 'geofencing' | 'announcements' | 'notifications' | 'reports' | 'ads' | 'teams';
+type AdminSection =
+  | 'main'
+  | 'geofencing'
+  | 'announcements'
+  | 'turnMessaging'
+  | 'notifications'
+  | 'reports'
+  | 'ads'
+  | 'teams';
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
@@ -85,13 +104,13 @@ export default function AdminDashboardScreen() {
   });
 
   // Announcement state
-  const [announcement, setAnnouncement] = useState<GMAnnouncement>({
-    enabled: false,
-    title: '',
-    message: '',
-    type: 'info',
-    expires_at: null,
-  });
+  const [announcement, setAnnouncement] = useState<GMAnnouncement>(
+    getDefaultGMAnnouncementSettings()
+  );
+
+  const [turnMessaging, setTurnMessaging] = useState<TurnMessagingSettings>(
+    getDefaultTurnMessagingSettings()
+  );
 
   // Course reports query
   const { data: courseReports, refetch: refetchReports } = useQuery({
@@ -162,15 +181,15 @@ export default function AdminDashboardScreen() {
   const loadSettings = async () => {
     setIsLoading(true);
     try {
-      const [geoSettings, currentAnnouncement] = await Promise.all([
+      const [geoSettings, currentAnnouncement, currentTurnMessaging] = await Promise.all([
         getGeofenceSettings(),
-        getGMAnnouncement(),
+        getGMAnnouncementSettings(),
+        getTurnMessaging(),
       ]);
 
       setGeofenceSettings(geoSettings);
-      if (currentAnnouncement) {
-        setAnnouncement(currentAnnouncement);
-      }
+      setAnnouncement(currentAnnouncement);
+      setTurnMessaging(currentTurnMessaging);
     } catch (err) {
       console.log('[AdminDashboard] Error loading settings:', err);
     } finally {
@@ -264,6 +283,23 @@ export default function AdminDashboardScreen() {
     setIsSaving(false);
   };
 
+  const handleSaveTurnMessaging = async () => {
+    if (!accessToken) return;
+
+    setIsSaving(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const success = await updateTurnMessagingAuth(turnMessaging, accessToken);
+
+    if (success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+
+    setIsSaving(false);
+  };
+
   const renderMainSection = () => (
     <>
       {/* User Info */}
@@ -297,6 +333,24 @@ export default function AdminDashboardScreen() {
           Settings
         </Text>
 
+        {/* Member Hub Preview */}
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/admin/hub-preview');
+          }}
+          className="bg-lime-900/20 rounded-xl border border-lime-700/40 p-4 mb-3 flex-row items-center active:opacity-80"
+        >
+          <View className="w-10 h-10 bg-lime-900/40 rounded-full items-center justify-center">
+            <Eye size={20} color="#a3e635" />
+          </View>
+          <View className="flex-1 ml-4">
+            <Text className="text-white font-medium">Member Hub Preview</Text>
+            <Text className="text-neutral-500 text-sm">See the home screen as members see it</Text>
+          </View>
+          <ChevronRight size={20} color="#525252" />
+        </Pressable>
+
         {/* Geofencing */}
         <Pressable
           onPress={() => {
@@ -315,7 +369,7 @@ export default function AdminDashboardScreen() {
           <ChevronRight size={20} color="#525252" />
         </Pressable>
 
-        {/* Announcements */}
+        {/* GM Announcements */}
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -327,8 +381,26 @@ export default function AdminDashboardScreen() {
             <Megaphone size={20} color="#fbbf24" />
           </View>
           <View className="flex-1 ml-4">
-            <Text className="text-white font-medium">GM Announcements</Text>
-            <Text className="text-neutral-500 text-sm">Post messages to members</Text>
+            <Text className="text-white font-medium">Home Screen Banner</Text>
+            <Text className="text-neutral-500 text-sm">Placeholder or custom announcement</Text>
+          </View>
+          <ChevronRight size={20} color="#525252" />
+        </Pressable>
+
+        {/* Turn Messaging */}
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setSection('turnMessaging');
+          }}
+          className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-3 flex-row items-center active:opacity-80"
+        >
+          <View className="w-10 h-10 bg-amber-900/30 rounded-full items-center justify-center">
+            <Coffee size={20} color="#fbbf24" />
+          </View>
+          <View className="flex-1 ml-4">
+            <Text className="text-white font-medium">Turn Messaging</Text>
+            <Text className="text-neutral-500 text-sm">Mid-round break copy for members</Text>
           </View>
           <ChevronRight size={20} color="#525252" />
         </Pressable>
@@ -852,9 +924,11 @@ export default function AdminDashboardScreen() {
       { value: 'alert', label: 'Alert', Icon: AlertCircle, color: '#f87171' },
     ];
 
+    const placeholderPreview = announcement.placeholder_message?.trim();
+    const customPreview = announcement.message.trim();
+
     return (
       <>
-        {/* Back Button */}
         <Pressable
           onPress={() => setSection('main')}
           className="flex-row items-center mb-6"
@@ -863,20 +937,19 @@ export default function AdminDashboardScreen() {
         </Pressable>
 
         <Animated.View entering={FadeInDown.delay(100).duration(500)}>
-          <Text className="text-white text-xl font-bold mb-2">GM Announcements</Text>
+          <Text className="text-white text-xl font-bold mb-2">Home Screen Banner</Text>
           <Text className="text-neutral-500 text-sm mb-6">
-            Post a message visible to all members on the home screen
+            Show a placeholder while announcements are being prepared, or publish a custom message
           </Text>
 
-          {/* Enable Toggle */}
           <View className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-4">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center flex-1">
                 <Megaphone size={20} color={announcement.enabled ? '#a3e635' : '#525252'} />
                 <View className="ml-3 flex-1">
-                  <Text className="text-white font-medium">Show Announcement</Text>
+                  <Text className="text-white font-medium">Custom Announcement</Text>
                   <Text className="text-neutral-500 text-xs mt-0.5">
-                    Display on member home screen
+                    Overrides the placeholder when published
                   </Text>
                 </View>
               </View>
@@ -891,118 +964,201 @@ export default function AdminDashboardScreen() {
             </View>
           </View>
 
-          {/* Type Selection */}
-          <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
-            Type
-          </Text>
-          <View className="flex-row gap-2 mb-4">
-            {typeOptions.map(({ value, label, Icon, color }) => (
-              <Pressable
-                key={value}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setAnnouncement({ ...announcement, type: value });
-                }}
-                className={`flex-1 py-3 rounded-xl border items-center flex-row justify-center gap-2 ${
-                  announcement.type === value
-                    ? 'bg-neutral-800 border-lime-600'
-                    : 'bg-[#141414] border-neutral-800'
-                }`}
-              >
-                <Icon size={16} color={color} />
-                <Text
-                  className={`text-sm font-medium ${
-                    announcement.type === value ? 'text-white' : 'text-neutral-400'
-                  }`}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Title */}
-          <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
-            Title (optional)
-          </Text>
-          <TextInput
-            value={announcement.title}
-            onChangeText={(text) => setAnnouncement({ ...announcement, title: text })}
-            placeholder="e.g., Course Update"
-            placeholderTextColor="#525252"
-            className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-4"
-          />
-
-          {/* Message */}
-          <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
-            Message
-          </Text>
-          <TextInput
-            value={announcement.message}
-            onChangeText={(text) => setAnnouncement({ ...announcement, message: text })}
-            placeholder="Enter your announcement message..."
-            placeholderTextColor="#525252"
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-6 min-h-[120px]"
-          />
-
-          {/* Preview */}
-          {announcement.message.trim() && (
-            <View className="mb-6">
+          {announcement.enabled ? (
+            <>
               <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
-                Preview
+                Type
               </Text>
-              <View
-                className={`rounded-xl p-4 border ${
-                  announcement.type === 'warning'
-                    ? 'bg-amber-900/40 border-amber-700/50'
-                    : announcement.type === 'alert'
-                    ? 'bg-red-900/40 border-red-700/50'
-                    : 'bg-blue-900/40 border-blue-700/50'
-                }`}
-              >
-                <View className="flex-row items-start">
-                  {announcement.type === 'warning' ? (
-                    <AlertTriangle size={20} color="#fbbf24" />
-                  ) : announcement.type === 'alert' ? (
-                    <AlertCircle size={20} color="#f87171" />
-                  ) : (
-                    <Info size={20} color="#60a5fa" />
-                  )}
-                  <View className="flex-1 ml-3">
-                    {announcement.title ? (
-                      <Text
-                        className={`font-semibold text-sm ${
-                          announcement.type === 'warning'
-                            ? 'text-amber-200'
-                            : announcement.type === 'alert'
-                            ? 'text-red-200'
-                            : 'text-blue-200'
-                        }`}
-                      >
-                        {announcement.title}
-                      </Text>
-                    ) : null}
+              <View className="flex-row gap-2 mb-4">
+                {typeOptions.map(({ value, label, Icon, color }) => (
+                  <Pressable
+                    key={value}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setAnnouncement({ ...announcement, type: value });
+                    }}
+                    className={`flex-1 py-3 rounded-xl border items-center flex-row justify-center gap-2 ${
+                      announcement.type === value
+                        ? 'bg-neutral-800 border-lime-600'
+                        : 'bg-[#141414] border-neutral-800'
+                    }`}
+                  >
+                    <Icon size={16} color={color} />
                     <Text
-                      className={`text-sm ${announcement.title ? 'mt-1' : ''} ${
-                        announcement.type === 'warning'
-                          ? 'text-amber-200'
-                          : announcement.type === 'alert'
-                          ? 'text-red-200'
-                          : 'text-blue-200'
+                      className={`text-sm font-medium ${
+                        announcement.type === value ? 'text-white' : 'text-neutral-400'
                       }`}
                     >
-                      {announcement.message}
+                      {label}
                     </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
+                Title (optional)
+              </Text>
+              <TextInput
+                value={announcement.title}
+                onChangeText={(text) => setAnnouncement({ ...announcement, title: text })}
+                placeholder="e.g., Course Update"
+                placeholderTextColor="#525252"
+                className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-4"
+              />
+
+              <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
+                Message
+              </Text>
+              <TextInput
+                value={announcement.message}
+                onChangeText={(text) => setAnnouncement({ ...announcement, message: text })}
+                placeholder="Enter your announcement message..."
+                placeholderTextColor="#525252"
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-6 min-h-[120px]"
+              />
+
+              {customPreview ? (
+                <View className="mb-6">
+                  <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
+                    Preview
+                  </Text>
+                  <View
+                    className={`rounded-xl p-4 border ${
+                      announcement.type === 'warning'
+                        ? 'bg-amber-900/40 border-amber-700/50'
+                        : announcement.type === 'alert'
+                        ? 'bg-red-900/40 border-red-700/50'
+                        : 'bg-blue-900/40 border-blue-700/50'
+                    }`}
+                  >
+                    <View className="flex-row items-start">
+                      {announcement.type === 'warning' ? (
+                        <AlertTriangle size={20} color="#fbbf24" />
+                      ) : announcement.type === 'alert' ? (
+                        <AlertCircle size={20} color="#f87171" />
+                      ) : (
+                        <Info size={20} color="#60a5fa" />
+                      )}
+                      <View className="flex-1 ml-3">
+                        {announcement.title ? (
+                          <Text
+                            className={`font-semibold text-sm ${
+                              announcement.type === 'warning'
+                                ? 'text-amber-200'
+                                : announcement.type === 'alert'
+                                ? 'text-red-200'
+                                : 'text-blue-200'
+                            }`}
+                          >
+                            {announcement.title}
+                          </Text>
+                        ) : null}
+                        <Text
+                          className={`text-sm ${announcement.title ? 'mt-1' : ''} ${
+                            announcement.type === 'warning'
+                              ? 'text-amber-200'
+                              : announcement.type === 'alert'
+                              ? 'text-red-200'
+                              : 'text-blue-200'
+                          }`}
+                        >
+                          {announcement.message}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View className="bg-[#141414] rounded-xl border border-neutral-800 p-4 mb-4">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center flex-1">
+                    <Info size={20} color={announcement.placeholder_enabled ? '#60a5fa' : '#525252'} />
+                    <View className="ml-3 flex-1">
+                      <Text className="text-white font-medium">Placeholder Banner</Text>
+                      <Text className="text-neutral-500 text-xs mt-0.5">
+                        Shown until a custom announcement is published
+                      </Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={announcement.placeholder_enabled ?? true}
+                    onValueChange={(value) =>
+                      setAnnouncement({ ...announcement, placeholder_enabled: value })
+                    }
+                    trackColor={{ false: '#333', true: '#365314' }}
+                    thumbColor={announcement.placeholder_enabled ? '#a3e635' : '#666'}
+                  />
+                </View>
               </View>
-            </View>
+
+              {(announcement.placeholder_enabled ?? true) ? (
+                <>
+                  <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
+                    Placeholder Title
+                  </Text>
+                  <TextInput
+                    value={announcement.placeholder_title ?? ''}
+                    onChangeText={(text) =>
+                      setAnnouncement({ ...announcement, placeholder_title: text })
+                    }
+                    placeholder="More Information Coming Soon"
+                    placeholderTextColor="#525252"
+                    className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-4"
+                  />
+
+                  <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
+                    Placeholder Message
+                  </Text>
+                  <TextInput
+                    value={announcement.placeholder_message ?? ''}
+                    onChangeText={(text) =>
+                      setAnnouncement({ ...announcement, placeholder_message: text })
+                    }
+                    placeholder="We're preparing club updates. More information to follow."
+                    placeholderTextColor="#525252"
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-6 min-h-[100px]"
+                  />
+
+                  {placeholderPreview ? (
+                    <View className="mb-6">
+                      <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
+                        Preview
+                      </Text>
+                      <View className="rounded-xl p-4 border bg-blue-900/40 border-blue-700/50">
+                        <View className="flex-row items-start">
+                          <Info size={20} color="#60a5fa" />
+                          <View className="flex-1 ml-3">
+                            {announcement.placeholder_title?.trim() ? (
+                              <Text className="font-semibold text-sm text-blue-200">
+                                {announcement.placeholder_title}
+                              </Text>
+                            ) : null}
+                            <Text
+                              className={`text-sm text-blue-200 ${
+                                announcement.placeholder_title?.trim() ? 'mt-1' : ''
+                              }`}
+                            >
+                              {announcement.placeholder_message}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
+            </>
           )}
 
-          {/* Save Button */}
           <Pressable
             onPress={handleSaveAnnouncement}
             disabled={isSaving}
@@ -1013,34 +1169,106 @@ export default function AdminDashboardScreen() {
             {isSaving ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text className="text-white font-semibold">
-                {announcement.enabled ? 'Publish Announcement' : 'Save Draft'}
-              </Text>
+              <Text className="text-white font-semibold">Save Banner Settings</Text>
             )}
           </Pressable>
-
-          {/* Clear Announcement */}
-          {(announcement.message || announcement.title) && (
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setAnnouncement({
-                  enabled: false,
-                  title: '',
-                  message: '',
-                  type: 'info',
-                  expires_at: null,
-                });
-              }}
-              className="mt-4 py-3 items-center"
-            >
-              <Text className="text-red-400 font-medium">Clear Announcement</Text>
-            </Pressable>
-          )}
         </Animated.View>
       </>
     );
   };
+
+  const renderTurnMessagingSection = () => (
+    <>
+      <Pressable
+        onPress={() => setSection('main')}
+        className="flex-row items-center mb-6"
+      >
+        <Text className="text-lime-400 text-sm">← Back to Dashboard</Text>
+      </Pressable>
+
+      <Animated.View entering={FadeInDown.delay(100).duration(500)}>
+        <Text className="text-white text-xl font-bold mb-2">Turn Messaging</Text>
+        <Text className="text-neutral-500 text-sm mb-6">
+          Edit the built-in copy shown during the mid-round break (after hole 9). Sponsor ads are
+          managed separately under Sponsor Ads.
+        </Text>
+
+        <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
+          Scorecard Screen
+        </Text>
+        <TextInput
+          value={turnMessaging.scorecard_title}
+          onChangeText={(text) => setTurnMessaging({ ...turnMessaging, scorecard_title: text })}
+          placeholder="Enjoy the Turn"
+          placeholderTextColor="#525252"
+          className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-3"
+        />
+        <TextInput
+          value={turnMessaging.scorecard_countdown_label}
+          onChangeText={(text) =>
+            setTurnMessaging({ ...turnMessaging, scorecard_countdown_label: text })
+          }
+          placeholder="Back 9 starts in..."
+          placeholderTextColor="#525252"
+          className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-3"
+        />
+        <TextInput
+          value={turnMessaging.scorecard_body}
+          onChangeText={(text) => setTurnMessaging({ ...turnMessaging, scorecard_body: text })}
+          placeholder="Grab a snack, refresh your drink..."
+          placeholderTextColor="#525252"
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+          className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-3 min-h-[90px]"
+        />
+        <TextInput
+          value={turnMessaging.scorecard_skip_label}
+          onChangeText={(text) =>
+            setTurnMessaging({ ...turnMessaging, scorecard_skip_label: text })
+          }
+          placeholder="Skip & Start Hole 10"
+          placeholderTextColor="#525252"
+          className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-6"
+        />
+
+        <Text className="text-neutral-400 text-xs uppercase tracking-[0.1em] mb-2 ml-1">
+          Home Hub (when geofencing is enabled)
+        </Text>
+        <TextInput
+          value={turnMessaging.hub_title}
+          onChangeText={(text) => setTurnMessaging({ ...turnMessaging, hub_title: text })}
+          placeholder="The Turn"
+          placeholderTextColor="#525252"
+          className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-3"
+        />
+        <TextInput
+          value={turnMessaging.hub_prompt}
+          onChangeText={(text) => setTurnMessaging({ ...turnMessaging, hub_prompt: text })}
+          placeholder="Stop by the canteen for refreshments?"
+          placeholderTextColor="#525252"
+          multiline
+          numberOfLines={2}
+          textAlignVertical="top"
+          className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-4 text-white text-base mb-6 min-h-[80px]"
+        />
+
+        <Pressable
+          onPress={handleSaveTurnMessaging}
+          disabled={isSaving}
+          className={`rounded-xl py-4 items-center ${
+            isSaving ? 'bg-lime-700/50' : 'bg-lime-600 active:bg-lime-700'
+          }`}
+        >
+          {isSaving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text className="text-white font-semibold">Save Turn Messaging</Text>
+          )}
+        </Pressable>
+      </Animated.View>
+    </>
+  );
 
   if (isLoading) {
     return (
@@ -1073,6 +1301,7 @@ export default function AdminDashboardScreen() {
           {section === 'main' && renderMainSection()}
           {section === 'geofencing' && renderGeofencingSection()}
           {section === 'announcements' && renderAnnouncementsSection()}
+          {section === 'turnMessaging' && renderTurnMessagingSection()}
           {section === 'notifications' && renderNotificationsSection()}
           {section === 'reports' && renderReportsSection()}
           {section === 'ads' && (

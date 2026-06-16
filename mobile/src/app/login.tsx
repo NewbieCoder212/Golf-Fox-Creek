@@ -21,12 +21,14 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { Clock, Eye, EyeOff, LogIn } from 'lucide-react-native';
+import { Eye, EyeOff, LogIn } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { getAuthenticatedUserProfile, signIn } from '@/lib/supabase';
 import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
+
+const FC_LOGO = require('@/assets/images/fc-logo.png');
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -119,77 +121,43 @@ export default function LoginScreen() {
         className="flex-1"
       >
         <View
-          className="flex-1 justify-end px-6"
+          className="flex-1 px-6"
           style={{ paddingTop: insets.top, paddingBottom: insets.bottom + 20 }}
         >
-          {/* Logo and Title Section */}
+          {/* Hero — logo and event title centered */}
           <Animated.View
             entering={FadeInDown.delay(100).duration(800).springify()}
-            className="items-center mb-10"
+            className="flex-1 items-center justify-center w-full"
           >
-            {/* FC Logo */}
-            <View className="w-28 h-28 rounded-full overflow-hidden mb-6 border-2 border-white/20 bg-white">
-              <Image
-                source={{ uri: '/fc-logo.png' }}
-                className="w-full h-full"
-                resizeMode="contain"
-              />
-            </View>
+            <Image
+              source={FC_LOGO}
+              style={{ width: 160, height: 160 }}
+              resizeMode="contain"
+            />
 
-            <Text className="text-white text-3xl font-light tracking-widest text-center">
-              FOX CREEK
-            </Text>
-            <Text className="text-lime-400/80 text-xs tracking-[0.3em] mt-2 uppercase">
-              Golf Club
-            </Text>
+            <View className="items-center w-full mt-6">
+              <Text className="text-white text-3xl font-light tracking-widest text-center w-full">
+                Generation Cup
+              </Text>
+              <Text className="text-lime-400/90 text-xl font-light tracking-[0.15em] text-center w-full uppercase mt-1">
+                Weekend
+              </Text>
+              <Text className="text-neutral-400 text-sm text-center mt-3 w-full">
+                June 19 – June 20, 2026
+              </Text>
+            </View>
           </Animated.View>
 
-          {/* Coming Soon Card */}
+          {/* Sign In Card */}
           <Animated.View
             entering={FadeInUp.delay(300).duration(800).springify()}
             className="overflow-hidden rounded-3xl"
           >
             <BlurView intensity={40} tint="dark" style={{ overflow: 'hidden' }}>
               <View className="p-6 border border-white/10 rounded-3xl">
-                {/* Coming Soon Badge */}
-                <View className="items-center mb-6">
-                  <View className="bg-amber-900/40 border border-amber-700/50 rounded-full px-4 py-2 flex-row items-center">
-                    <Clock size={16} color="#fbbf24" />
-                    <Text className="text-amber-300 text-sm font-medium ml-2">
-                      Coming Soon
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Message */}
-                <Text className="text-white text-xl font-semibold text-center mb-3">
-                  Member Portal
-                </Text>
-                <Text className="text-neutral-400 text-sm text-center leading-relaxed mb-6">
-                  We're connecting to Chronogolf to bring you seamless access to your membership, tee times, and more.
-                </Text>
-
-                {/* Features Preview */}
-                <View className="bg-white/5 rounded-2xl p-4 mb-6">
-                  <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-3">
-                    What's Coming
-                  </Text>
-                  <View className="gap-2">
-                    <Text className="text-neutral-300 text-sm">• Book tee times instantly</Text>
-                    <Text className="text-neutral-300 text-sm">• Track your handicap & scores</Text>
-                    <Text className="text-neutral-300 text-sm">• Earn loyalty points</Text>
-                    <Text className="text-neutral-300 text-sm">• Course conditions & weather</Text>
-                  </View>
-                </View>
-
-                {/* Dev member login (Supabase) until Chronogolf SSO is ready */}
                 <View className="mb-6">
                   <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-3">
                     Member Sign In
-                  </Text>
-                  <Text className="text-neutral-500 text-xs mb-4">
-                    Members, managers, and staff all use the same sign-in. Chronogolf SSO is coming
-                    soon.
                   </Text>
 
                   {error ? (
@@ -277,11 +245,6 @@ export default function LoginScreen() {
                       </>
                     )}
                   </AnimatedPressable>
-
-                  <Text className="text-neutral-500 text-xs text-center mt-4 leading-relaxed">
-                    Managers and super admins are taken straight to the admin dashboard after
-                    sign-in.
-                  </Text>
                 </View>
               </View>
             </BlurView>
@@ -293,10 +256,7 @@ export default function LoginScreen() {
             className="mt-8 items-center"
           >
             <Text className="text-neutral-600 text-xs text-center">
-              Questions? Contact the Pro Shop
-            </Text>
-            <Text className="text-neutral-500 text-xs text-center mt-1">
-              (506) 855-7383
+              Product of Acadia Venture Studio
             </Text>
           </Animated.View>
         </View>

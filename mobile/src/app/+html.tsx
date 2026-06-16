@@ -13,21 +13,21 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 
         {/* Browser Tab Title */}
-        <title>Fox Creek Member Portal</title>
+        <title>Generation Cup Weekend</title>
 
         {/* PWA Meta Tags */}
-        <meta name="application-name" content="Fox Creek Golf Club" />
+        <meta name="application-name" content="Generation Cup Weekend" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Fox Creek Golf Club" />
+        <meta name="apple-mobile-web-app-title" content="Generation Cup Weekend" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#0c0c0c" />
-        <meta name="description" content="Fox Creek Golf Club Member Portal - Book tee times, track scores, and stay connected with your golf community" />
+        <meta name="description" content="Sign in for Generation Cup Weekend — June 19–20, 2026 at Fox Creek Golf Club" />
 
         {/* Open Graph / Social Sharing */}
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="Fox Creek Member Portal" />
-        <meta property="og:description" content="Fox Creek Golf Club - Book tee times, track scores, and stay connected" />
+        <meta property="og:title" content="Generation Cup Weekend" />
+        <meta property="og:description" content="Sign in for Generation Cup Weekend — June 19–20, 2026 at Fox Creek Golf Club" />
         <meta property="og:image" content="/fc-logo.png" />
 
         {/* Favicon - FC Logo */}

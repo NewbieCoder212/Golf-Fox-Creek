@@ -1,7 +1,7 @@
 {
-  "name": "Fox Creek Golf Club",
-  "short_name": "Fox Creek",
-  "description": "Fox Creek Golf Club Member Portal - Book tee times, track scores, and stay connected",
+  "name": "Generation Cup Weekend",
+  "short_name": "Generation Cup",
+  "description": "Sign in for Generation Cup Weekend — June 19–20, 2026 at Fox Creek Golf Club",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c0c0c",

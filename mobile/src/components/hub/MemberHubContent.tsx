@@ -9,14 +9,17 @@ import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HubHeroWelcome } from '@/components/hub/HubHeroWelcome';
+import { HubMemberToolbar } from '@/components/hub/HubMemberToolbar';
 import { HubContextCard } from '@/components/hub/HubContextCard';
 import { HubMyEventsStrip } from '@/components/hub/HubMyEventsStrip';
-import { HubAdBanner } from '@/components/hub/HubAdBanner';
+import { HubAdBanner, HubAdFeedCards } from '@/components/hub/HubAdBanner';
+import { useTopTabBarHeight } from '@/components/navigation/TopTabBar';
 import {
-  COMPACT_SPONSOR_BANNER_HEIGHT,
+  FOOTER_SPONSOR_BANNER_HEIGHT,
   STICKY_FOOTER_AD_EXTRA,
   useAdPlacement,
 } from '@/components/SponsorBanner';
+import { isBannerLayout } from '@/lib/ad-placement-service';
 import { TournamentLeaderboardCard } from '@/components/TournamentLeaderboardCard';
 import { HubWeatherStrip } from '@/components/hub/HubWeatherStrip';
 import { HubQuickActions } from '@/components/hub/HubQuickActions';
@@ -84,6 +87,7 @@ export function MemberHubContent({
 }: MemberHubContentProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const topTabBarHeight = useTopTabBarHeight();
   const t = useTranslations();
   const { data: weather, isLoading: weatherLoading, isError: weatherError } = useWeather();
 
@@ -161,12 +165,12 @@ export function MemberHubContent({
   const showWeatherUnavailable = weatherError || (!weatherLoading && !weather);
 
   const { data: memberHubAds = [] } = useAdPlacement('member_hub');
-  const hasStickyFooterAd = memberHubAds.length > 0;
+  const hasStickyFooterAd = memberHubAds.some(isBannerLayout);
   const stickyFooterHeight = hasStickyFooterAd
-    ? COMPACT_SPONSOR_BANNER_HEIGHT + STICKY_FOOTER_AD_EXTRA
+    ? FOOTER_SPONSOR_BANNER_HEIGHT + STICKY_FOOTER_AD_EXTRA
     : 0;
 
-  const topPadding = contentPaddingTop ?? insets.top;
+  const topPadding = contentPaddingTop ?? (previewMode ? 0 : topTabBarHeight);
 
   const handleMyEventsAction = () => {
     if (previewMode) return;
@@ -185,8 +189,10 @@ export function MemberHubContent({
           paddingBottom: stickyFooterHeight + 16,
         }}
       >
+        {!previewMode ? <HubMemberToolbar onLogout={handleLogout} /> : null}
+
         {announcement ? (
-          <Animated.View entering={FadeIn.duration(400)} className="mx-5 mt-4">
+          <Animated.View entering={FadeIn.duration(400)} className="mx-5 mt-3 mb-1">
             {(() => {
               const style = getAnnouncementStyle(announcement.type);
               return (
@@ -212,11 +218,7 @@ export function MemberHubContent({
           </Animated.View>
         ) : null}
 
-        <HubHeroWelcome
-          userProfile={userProfile}
-          onLogout={handleLogout}
-          previewMode={previewMode}
-        />
+        <HubHeroWelcome userProfile={userProfile} previewMode={previewMode} />
 
         <HubSection title={t.yourRound} className="mt-4">
           <HubContextCard />
@@ -246,10 +248,15 @@ export function MemberHubContent({
         <HubSection title={t.play}>
           <HubQuickActions embedded previewMode={previewMode} userProfile={userProfile} />
         </HubSection>
+
+        <HubAdFeedCards />
       </ScrollView>
 
       {hasStickyFooterAd ? (
-        <View className="bg-fox-background border-t border-fox-border/60 pt-2">
+        <View
+          className="bg-fox-background border-t border-fox-border/40 pt-3"
+          style={{ paddingBottom: Math.max(insets.bottom, 8) }}
+        >
           <HubAdBanner embedded />
         </View>
       ) : null}

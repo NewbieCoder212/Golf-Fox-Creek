@@ -11,9 +11,9 @@ import {
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
+import { useTabScreenPadding } from '@/components/navigation/TopTabBar';
 import { FOX_CREEK_DATA } from '@/lib/course-data';
 import {
   getScorecardTee,
@@ -106,8 +106,7 @@ function TeeGuideBadge({ teeName }: { teeName: string }) {
 }
 
 export default function CourseScreen() {
-  const insets = useSafeAreaInsets();
-
+  const topPadding = useTabScreenPadding(12);
   const handleCall = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Linking.openURL(`tel:${FOX_CREEK_DATA.phone.replace(/[^0-9]/g, '')}`);
@@ -127,7 +126,7 @@ export default function CourseScreen() {
         showsVerticalScrollIndicator={false}
         style={{ width: '100%' }}
         contentContainerStyle={{
-          paddingTop: insets.top + 12,
+          paddingTop: topPadding,
           paddingBottom: 32,
           width: '100%',
           alignItems: 'stretch',

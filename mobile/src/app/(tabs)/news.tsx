@@ -1,19 +1,19 @@
 import { View, Text, ScrollView } from 'react-native';
 import { Newspaper, Construction } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useTabScreenPadding } from '@/components/navigation/TopTabBar';
 
 import { foxColors } from '@/theme/tokens';
 
 export default function NewsScreen() {
-  const insets = useSafeAreaInsets();
-
+  const topPadding = useTabScreenPadding(16);
   return (
     <View className="flex-1 bg-fox-background">
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: insets.top + 16,
+          paddingTop: topPadding,
           paddingBottom: 32,
           flexGrow: 1,
         }}

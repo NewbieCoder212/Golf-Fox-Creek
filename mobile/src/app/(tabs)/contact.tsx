@@ -1,7 +1,8 @@
 import { View, Text, ScrollView } from 'react-native';
 import { MapPin, Phone, Mail, Clock, Globe } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useTabScreenPadding } from '@/components/navigation/TopTabBar';
 
 import { foxColors } from '@/theme/tokens';
 
@@ -48,13 +49,13 @@ function ContactRow({
 }
 
 export default function ContactScreen() {
-  const insets = useSafeAreaInsets();
+  const topPadding = useTabScreenPadding(16);
 
   return (
     <View className="flex-1 bg-fox-background">
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingTop: topPadding, paddingBottom: 32 }}
       >
         <Animated.View entering={FadeInDown.delay(100).duration(500)} className="px-5 mb-6">
           <Text className="text-white text-2xl font-display tracking-tight">Contact Us</Text>

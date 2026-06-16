@@ -2,7 +2,7 @@
  * Ad placement service — curated local sponsor banners from Supabase.
  */
 
-import type { AdPlacement, AdDisplayPosition, AdPlacementType } from '@/types';
+import type { AdPlacement, AdDisplayPosition, AdPlacementType, AdImageLayout } from '@/types';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -33,12 +33,20 @@ export type AdPlacementInsert = {
   banner_text: string;
   action_url?: string | null;
   display_position?: AdDisplayPosition | null;
+  image_layout?: AdImageLayout;
   is_active?: boolean;
 };
 
 export type AdPlacementUpdate = Partial<AdPlacementInsert>;
 
 type AdPlacementResult<T> = { data: T; error: null } | { data: null; error: string };
+
+function normalizeActionUrl(url: string | null | undefined): string | null {
+  const trimmed = url?.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
 
 async function publicRequest<T>(
   query: Record<string, string>,
@@ -183,9 +191,10 @@ export async function createAdPlacementAuth(
     is_active: payload.is_active ?? true,
     hole_number:
       payload.placement_type === 'hole_sponsor' ? payload.hole_number : null,
-    action_url: payload.action_url?.trim() || null,
+    action_url: normalizeActionUrl(payload.action_url),
     display_position:
       payload.placement_type === 'leaderboard' ? payload.display_position ?? 'sidebar' : null,
+    image_layout: payload.image_layout ?? 'banner',
   };
 
   return authRequest<AdPlacement[]>(accessToken, {
@@ -205,8 +214,9 @@ export async function updateAdPlacementAuth(
   if (payload.placement_type !== undefined) body.placement_type = payload.placement_type;
   if (payload.image_url !== undefined) body.image_url = payload.image_url.trim();
   if (payload.banner_text !== undefined) body.banner_text = payload.banner_text.trim();
-  if (payload.action_url !== undefined) body.action_url = payload.action_url?.trim() || null;
+  if (payload.action_url !== undefined) body.action_url = normalizeActionUrl(payload.action_url);
   if (payload.is_active !== undefined) body.is_active = payload.is_active;
+  if (payload.image_layout !== undefined) body.image_layout = payload.image_layout;
 
   if (payload.placement_type !== undefined) {
     body.placement_type = payload.placement_type;
@@ -252,3 +262,17 @@ export const DISPLAY_POSITION_LABELS: Record<AdDisplayPosition, string> = {
   sidebar: 'Sidebar / carousel',
   footer: 'Footer strip',
 };
+
+export const IMAGE_LAYOUT_LABELS: Record<AdImageLayout, string> = {
+  banner: 'Banner (wide)',
+  portrait: 'Portrait (flyer)',
+  square: 'Square',
+};
+
+export function getAdImageLayout(ad: Pick<AdPlacement, 'image_layout'>): AdImageLayout {
+  return ad.image_layout ?? 'banner';
+}
+
+export function isBannerLayout(ad: Pick<AdPlacement, 'image_layout'>): boolean {
+  return getAdImageLayout(ad) === 'banner';
+}

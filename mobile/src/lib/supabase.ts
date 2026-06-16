@@ -10,6 +10,7 @@ import type {
   GMAnnouncement,
   TurnMessagingSettings,
   TournamentFormatsSettings,
+  AdRotationSettings,
   LoyaltyConfig,
   LoyaltyTransaction,
   LoyaltyTransactionInsert,
@@ -320,7 +321,7 @@ export function getDefaultGMAnnouncementSettings(): GMAnnouncement {
     message: '',
     type: 'info',
     expires_at: null,
-    placeholder_enabled: true,
+    placeholder_enabled: false,
     placeholder_title: 'More Information Coming Soon',
     placeholder_message: "We're preparing club updates. More information to follow.",
   };
@@ -590,16 +591,6 @@ export async function getGMAnnouncement(): Promise<GMAnnouncement | null> {
     }
   }
 
-  if (settings.placeholder_enabled && settings.placeholder_message?.trim()) {
-    return {
-      enabled: true,
-      title: settings.placeholder_title?.trim() || 'More Information Coming Soon',
-      message: settings.placeholder_message.trim(),
-      type: 'info',
-      expires_at: null,
-    };
-  }
-
   return null;
 }
 
@@ -683,6 +674,75 @@ export async function updateTurnMessagingAuth(
 
   return result !== null;
 }
+
+// ============================================
+// AD ROTATION SETTINGS
+// ============================================
+
+export function getDefaultAdRotationSettings(): AdRotationSettings {
+  return {
+    enabled: false,
+    interval_seconds: 12,
+  };
+}
+
+export async function getAdRotationSettings(): Promise<AdRotationSettings> {
+  if (!isConfigured()) return getDefaultAdRotationSettings();
+
+  const data = await supabaseRequest<AppSetting>('app_settings', {
+    query: { setting_key: 'eq.ad_rotation' },
+    single: true,
+  });
+
+  if (!data) return getDefaultAdRotationSettings();
+
+  const value = data.setting_value as AdRotationSettings;
+  return {
+    ...getDefaultAdRotationSettings(),
+    ...value,
+    interval_seconds: Math.min(60, Math.max(8, value.interval_seconds ?? 12)),
+  };
+}
+
+export async function updateAdRotationSettingsAuth(
+  settings: AdRotationSettings,
+  accessToken: string
+): Promise<boolean> {
+  const body: AdRotationSettings = {
+    enabled: settings.enabled,
+    interval_seconds: Math.min(60, Math.max(8, settings.interval_seconds)),
+  };
+
+  const existing = await supabaseRequest<AppSetting>('app_settings', {
+    query: { setting_key: 'eq.ad_rotation' },
+    single: true,
+  });
+
+  if (existing) {
+    const result = await authenticatedRequest('app_settings', accessToken, {
+      method: 'PATCH',
+      query: { setting_key: 'eq.ad_rotation' },
+      body: {
+        setting_value: body,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    return result !== null;
+  }
+
+  const result = await authenticatedRequest('app_settings', accessToken, {
+    method: 'POST',
+    body: {
+      setting_key: 'ad_rotation',
+      setting_value: body,
+      description: 'Rotate sponsor ads when multiple active ads share the same placement slot',
+    },
+  });
+
+  return result !== null;
+}
+
+export const AD_ROTATION_INTERVAL_OPTIONS = [8, 12, 15, 20, 30] as const;
 
 // ============================================
 // AUTHENTICATION

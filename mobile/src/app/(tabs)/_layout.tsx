@@ -3,18 +3,20 @@ import { Tabs } from 'expo-router';
 import { View, Platform } from 'react-native';
 import { Home, Clock, Flag, Phone, ClipboardList, Users, Newspaper } from 'lucide-react-native';
 
+import { TopTabBar } from '@/components/navigation/TopTabBar';
+
 export default function TabLayout() {
   return (
     <Tabs
+      tabBar={(props) => <TopTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
           backgroundColor: '#0c0c0c',
-          borderTopColor: '#262626',
-          borderTopWidth: 0.5,
-          height: Platform.OS === 'web' ? 70 : 85,
-          paddingBottom: Platform.OS === 'web' ? 12 : 28,
-          paddingTop: 12,
+          borderTopWidth: 0,
+          height: Platform.OS === 'web' ? 64 : 60,
+          paddingTop: 6,
+          paddingBottom: 6,
         },
         tabBarActiveTintColor: '#a3e635',
         tabBarInactiveTintColor: '#525252',

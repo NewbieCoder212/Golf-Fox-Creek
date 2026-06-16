@@ -1273,7 +1273,7 @@ export default function AdminDashboardScreen() {
     );
   }
 
-  const isFullScreenSection = section === 'tournaments' || section === 'ads';
+  const isFullScreenSection = section === 'tournaments';
 
   const dashboardHeader = (
     <View className="py-4 mb-2">
@@ -1290,24 +1290,6 @@ export default function AdminDashboardScreen() {
         <SafeAreaView className="flex-1">
           <View className="flex-1 px-5">
             {dashboardHeader}
-            {section === 'ads' &&
-              (accessToken ? (
-                <AdminAdPlacementsSection
-                  accessToken={accessToken}
-                  onBack={() => {
-                    setOpenAdsFormOnMount(false);
-                    setSection('main');
-                  }}
-                  initialOpenForm={openAdsFormOnMount}
-                  onFormOpened={() => setOpenAdsFormOnMount(false)}
-                />
-              ) : (
-                <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
-                  <Text className="text-red-200 text-sm">
-                    Admin session expired. Log out and sign in again to manage sponsor ads.
-                  </Text>
-                </View>
-              ))}
             {section === 'tournaments' &&
               (accessToken ? (
                 <View className="flex-1">
@@ -1350,6 +1332,24 @@ export default function AdminDashboardScreen() {
           {section === 'turnMessaging' && renderTurnMessagingSection()}
           {section === 'notifications' && renderNotificationsSection()}
           {section === 'reports' && renderReportsSection()}
+          {section === 'ads' &&
+            (accessToken ? (
+              <AdminAdPlacementsSection
+                accessToken={accessToken}
+                onBack={() => {
+                  setOpenAdsFormOnMount(false);
+                  setSection('main');
+                }}
+                initialOpenForm={openAdsFormOnMount}
+                onFormOpened={() => setOpenAdsFormOnMount(false)}
+              />
+            ) : (
+              <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
+                <Text className="text-red-200 text-sm">
+                  Admin session expired. Log out and sign in again to manage sponsor ads.
+                </Text>
+              </View>
+            ))}
 
           <View className="h-8" />
         </ScrollView>

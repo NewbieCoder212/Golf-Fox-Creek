@@ -16,15 +16,22 @@ import { Plus, Pencil, Trash2, ImageIcon } from 'lucide-react-native';
 
 import { cn } from '@/lib/cn';
 import {
+  AD_ROTATION_INTERVAL_OPTIONS,
+  getAdRotationSettings,
+  getDefaultAdRotationSettings,
+  updateAdRotationSettingsAuth,
+} from '@/lib/supabase';
+import {
   createAdPlacementAuth,
   deleteAdPlacementAuth,
   getAllAdPlacements,
   PLACEMENT_TYPE_LABELS,
   DISPLAY_POSITION_LABELS,
+  IMAGE_LAYOUT_LABELS,
   updateAdPlacementAuth,
   type AdPlacementInsert,
 } from '@/lib/ad-placement-service';
-import type { AdPlacement, AdDisplayPosition, AdPlacementType } from '@/types';
+import type { AdPlacement, AdDisplayPosition, AdImageLayout, AdPlacementType, AdRotationSettings } from '@/types';
 
 const PLACEMENT_TYPES: AdPlacementType[] = [
   'scorecard_header',
@@ -36,6 +43,8 @@ const PLACEMENT_TYPES: AdPlacementType[] = [
 
 const DISPLAY_POSITIONS: AdDisplayPosition[] = ['header_left', 'sidebar', 'footer'];
 
+const IMAGE_LAYOUTS: AdImageLayout[] = ['banner', 'portrait', 'square'];
+
 const EMPTY_FORM: AdPlacementInsert = {
   sponsor_name: '',
   placement_type: 'scorecard_header',
@@ -44,6 +53,7 @@ const EMPTY_FORM: AdPlacementInsert = {
   banner_text: '',
   action_url: '',
   display_position: 'sidebar',
+  image_layout: 'banner',
   is_active: true,
 };
 
@@ -64,6 +74,21 @@ export function AdminAdPlacementsSection({
   const [showForm, setShowForm] = useState(initialOpenForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<AdPlacementInsert>(EMPTY_FORM);
+  const [rotationSettings, setRotationSettings] = useState<AdRotationSettings>(
+    getDefaultAdRotationSettings()
+  );
+  const [isSavingRotation, setIsSavingRotation] = useState(false);
+
+  const { data: loadedRotationSettings } = useQuery({
+    queryKey: ['adRotationSettings'],
+    queryFn: getAdRotationSettings,
+  });
+
+  useEffect(() => {
+    if (loadedRotationSettings) {
+      setRotationSettings(loadedRotationSettings);
+    }
+  }, [loadedRotationSettings]);
 
   useEffect(() => {
     if (initialOpenForm) {
@@ -82,6 +107,44 @@ export function AdminAdPlacementsSection({
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['adminAdPlacements'] });
     queryClient.invalidateQueries({ queryKey: ['adPlacement'] });
+    queryClient.invalidateQueries({ queryKey: ['adRotationSettings'] });
+  };
+
+  const handleSaveRotation = async () => {
+    setIsSavingRotation(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const ok = await updateAdRotationSettingsAuth(rotationSettings, accessToken);
+    setIsSavingRotation(false);
+
+    if (!ok) {
+      Alert.alert('Could not save rotation settings', 'Try again in a moment.');
+      return;
+    }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    invalidate();
+  };
+
+  const activeAdsBySlot = ads.reduce<Record<string, number>>((counts, ad) => {
+    if (!ad.is_active) return counts;
+    const slotKey = [
+      ad.placement_type,
+      ad.hole_number ?? '',
+      ad.display_position ?? '',
+      ad.image_layout ?? 'banner',
+    ].join('|');
+    counts[slotKey] = (counts[slotKey] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  const getRotationPoolSize = (ad: AdPlacement) => {
+    const slotKey = [
+      ad.placement_type,
+      ad.hole_number ?? '',
+      ad.display_position ?? '',
+      ad.image_layout ?? 'banner',
+    ].join('|');
+    return activeAdsBySlot[slotKey] ?? 0;
   };
 
   const createMutation = useMutation({
@@ -162,6 +225,7 @@ export function AdminAdPlacementsSection({
       banner_text: ad.banner_text,
       action_url: ad.action_url ?? '',
       display_position: ad.display_position ?? 'sidebar',
+      image_layout: ad.image_layout ?? 'banner',
       is_active: ad.is_active,
     });
     setShowForm(true);
@@ -198,6 +262,74 @@ export function AdminAdPlacementsSection({
         <Text className="text-neutral-500 text-sm mb-4">
           Manage banners on scorecards, The Turn, and TV leaderboard displays
         </Text>
+
+        <View className="bg-[#141414] rounded-2xl border border-neutral-800 p-4 mb-6">
+          <Text className="text-white font-semibold mb-1">Ad Rotation</Text>
+          <Text className="text-neutral-500 text-sm mb-4 leading-5">
+            Turn on rotation, then create multiple active ads with the same placement (and hole /
+            TV position when applicable). Members will see sponsors cycle automatically.
+          </Text>
+
+          <View className="flex-row items-center justify-between py-2 mb-3">
+            <View className="flex-1 pr-4">
+              <Text className="text-white font-medium">Rotate multiple sponsors</Text>
+              <Text className="text-neutral-500 text-xs mt-1">
+                Off = newest ad only. On = carousel through all active ads in each slot.
+              </Text>
+            </View>
+            <Switch
+              value={rotationSettings.enabled}
+              onValueChange={(enabled) =>
+                setRotationSettings((current) => ({ ...current, enabled }))
+              }
+              trackColor={{ false: '#404040', true: '#4d7c0f' }}
+              thumbColor={rotationSettings.enabled ? '#a3e635' : '#737373'}
+            />
+          </View>
+
+          <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
+            Seconds per sponsor
+          </Text>
+          <View className="flex-row flex-wrap gap-2 mb-4">
+            {AD_ROTATION_INTERVAL_OPTIONS.map((seconds) => (
+              <Pressable
+                key={seconds}
+                onPress={() =>
+                  setRotationSettings((current) => ({ ...current, interval_seconds: seconds }))
+                }
+                className={cn(
+                  'px-3 py-2 rounded-lg border',
+                  rotationSettings.interval_seconds === seconds
+                    ? 'bg-lime-900/40 border-lime-600'
+                    : 'bg-[#0c0c0c] border-neutral-800'
+                )}
+              >
+                <Text
+                  className={cn(
+                    'text-xs',
+                    rotationSettings.interval_seconds === seconds
+                      ? 'text-lime-400'
+                      : 'text-neutral-400'
+                  )}
+                >
+                  {seconds}s
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Pressable
+            onPress={handleSaveRotation}
+            disabled={isSavingRotation}
+            className="bg-lime-600 rounded-xl py-3 items-center active:opacity-80"
+          >
+            {isSavingRotation ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text className="text-white font-semibold">Save Rotation Settings</Text>
+            )}
+          </Pressable>
+        </View>
 
         <Pressable
           onPress={startCreate}
@@ -248,6 +380,37 @@ export function AdminAdPlacementsSection({
             </View>
             <Text className="text-neutral-600 text-xs mb-4 leading-5">
               Member Hub = sticky footer on Home tab. Scorecard Header = top banner on Scorecard tab.
+            </Text>
+
+            <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
+              Image Shape
+            </Text>
+            <View className="flex-row flex-wrap gap-2 mb-2">
+              {IMAGE_LAYOUTS.map((layout) => (
+                <Pressable
+                  key={layout}
+                  onPress={() => setForm((f) => ({ ...f, image_layout: layout }))}
+                  className={cn(
+                    'px-3 py-2 rounded-lg border',
+                    form.image_layout === layout
+                      ? 'bg-lime-900/40 border-lime-600'
+                      : 'bg-[#0c0c0c] border-neutral-800'
+                  )}
+                >
+                  <Text
+                    className={cn(
+                      'text-xs',
+                      form.image_layout === layout ? 'text-lime-400' : 'text-neutral-400'
+                    )}
+                  >
+                    {IMAGE_LAYOUT_LABELS[layout]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text className="text-neutral-600 text-xs mb-4 leading-5">
+              Banner = wide logos & short ads. Portrait = tall flyers, lot maps, posters (shows as a
+              card in the home feed). Square = social-style graphics.
             </Text>
 
             {form.placement_type === 'hole_sponsor' && (
@@ -320,8 +483,11 @@ export function AdminAdPlacementsSection({
             {form.image_url.trim() ? (
               <Image
                 source={{ uri: form.image_url.trim() }}
-                className="w-full h-24 rounded-xl mb-4"
-                resizeMode="cover"
+                className="w-full rounded-xl mb-4 bg-white"
+                style={{
+                  height: form.image_layout === 'portrait' ? 220 : form.image_layout === 'square' ? 160 : 96,
+                }}
+                resizeMode="contain"
               />
             ) : null}
 
@@ -375,8 +541,11 @@ export function AdminAdPlacementsSection({
               <View className="bg-[#141414] rounded-xl border border-neutral-800 mb-3 overflow-hidden">
                 <Image
                   source={{ uri: ad.image_url }}
-                  className="w-full h-24"
-                  resizeMode="cover"
+                  className="w-full bg-white"
+                  style={{
+                    height: ad.image_layout === 'portrait' ? 180 : ad.image_layout === 'square' ? 140 : 96,
+                  }}
+                  resizeMode="contain"
                 />
                 <View className="p-4">
                   <View className="flex-row items-start justify-between mb-2">
@@ -384,9 +553,13 @@ export function AdminAdPlacementsSection({
                       <Text className="text-white font-semibold">{ad.sponsor_name}</Text>
                       <Text className="text-lime-400/80 text-xs mt-0.5">
                         {PLACEMENT_TYPE_LABELS[ad.placement_type]}
+                        {` · ${IMAGE_LAYOUT_LABELS[ad.image_layout ?? 'banner']}`}
                         {ad.hole_number ? ` · Hole ${ad.hole_number}` : ''}
                         {ad.display_position
                           ? ` · ${DISPLAY_POSITION_LABELS[ad.display_position]}`
+                          : ''}
+                        {ad.is_active && getRotationPoolSize(ad) > 1
+                          ? ` · Rotation pool (${getRotationPoolSize(ad)})`
                           : ''}
                       </Text>
                     </View>

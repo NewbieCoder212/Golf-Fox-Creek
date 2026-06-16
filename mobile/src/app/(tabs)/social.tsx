@@ -1,19 +1,17 @@
 import { View, Text, ScrollView } from 'react-native';
 import { Users, Construction } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { foxColors } from '@/theme/tokens';
+import { useTabScreenPadding } from '@/components/navigation/TopTabBar';
 
 export default function SocialScreen() {
-  const insets = useSafeAreaInsets();
-
+  const topPadding = useTabScreenPadding(16);
   return (
     <View className="flex-1 bg-fox-background">
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: insets.top + 16,
+          paddingTop: topPadding,
           paddingBottom: 32,
           flexGrow: 1,
         }}

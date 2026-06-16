@@ -105,6 +105,8 @@ export type AdPlacementType =
 
 export type AdDisplayPosition = 'header_left' | 'sidebar' | 'footer';
 
+export type AdImageLayout = 'banner' | 'portrait' | 'square';
+
 export interface AdPlacement {
   id: string;
   sponsor_name: string;
@@ -114,9 +116,15 @@ export interface AdPlacement {
   banner_text: string;
   action_url: string | null;
   display_position: AdDisplayPosition | null;
+  image_layout: AdImageLayout;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface AdRotationSettings {
+  enabled: boolean;
+  interval_seconds: number;
 }
 
 export interface DisplaySponsor {

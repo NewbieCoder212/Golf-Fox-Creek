@@ -43,6 +43,7 @@ export const translations = {
     goodMorning: 'Good morning',
     goodAfternoon: 'Good afternoon',
     goodEvening: 'Good evening',
+    logOut: 'Log out',
 
     // Stats
     handicap: 'Handicap',
@@ -128,6 +129,7 @@ export const translations = {
     goodMorning: 'Bonjour',
     goodAfternoon: 'Bon après-midi',
     goodEvening: 'Bonsoir',
+    logOut: 'Se déconnecter',
 
     // Stats
     handicap: 'Handicap',

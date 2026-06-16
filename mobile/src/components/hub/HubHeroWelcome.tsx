@@ -1,20 +1,12 @@
 import { useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  Image,
-  useWindowDimensions,
-  type LayoutChangeEvent,
-} from 'react-native';
-import { Globe, LogOut } from 'lucide-react-native';
+import { View, Text, Pressable, Image, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
-import { useTranslations, useLanguageStore } from '@/lib/language-store';
-import { getFirstName, getGreetingKey, foxColors } from '@/theme/tokens';
+import { useTranslations } from '@/lib/language-store';
+import { getFirstName, getGreetingKey } from '@/theme/tokens';
 import { bridgeMemberAuthToAdmin, canAccessAdminRole } from '@/lib/admin-auth-bridge';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import type { UserProfile } from '@/types';
@@ -26,7 +18,6 @@ const HERO_MAX_HEIGHT = 380;
 
 interface HubHeroWelcomeProps {
   userProfile: UserProfile | null | undefined;
-  onLogout: () => void;
   previewMode?: boolean;
 }
 
@@ -39,12 +30,10 @@ function getHeroHeight(containerWidth: number, windowHeight: number): number {
   return Math.min(aspectHeight, heightBased, HERO_MAX_HEIGHT);
 }
 
-export function HubHeroWelcome({ userProfile, onLogout, previewMode = false }: HubHeroWelcomeProps) {
+export function HubHeroWelcome({ userProfile, previewMode = false }: HubHeroWelcomeProps) {
   const router = useRouter();
   const t = useTranslations();
   const { height: windowHeight } = useWindowDimensions();
-  const language = useLanguageStore((s) => s.language);
-  const toggleLanguage = useLanguageStore((s) => s.toggleLanguage);
   const [containerWidth, setContainerWidth] = useState(0);
 
   const tapCountRef = useRef(0);
@@ -91,11 +80,6 @@ export function HubHeroWelcome({ userProfile, onLogout, previewMode = false }: H
     }, TRIPLE_TAP_TIMEOUT);
   };
 
-  const handleLanguageToggle = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    toggleLanguage();
-  };
-
   return (
     <Animated.View
       entering={FadeInDown.delay(100).duration(600)}
@@ -124,32 +108,7 @@ export function HubHeroWelcome({ userProfile, onLogout, previewMode = false }: H
         style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
       />
 
-      <View className="flex-1 px-5 pt-3 pb-5 justify-between">
-        <View className="flex-row items-center justify-end gap-2">
-          <Pressable
-            onPress={handleLanguageToggle}
-            className="flex-row items-center bg-black/40 rounded-full px-2.5 py-1.5 border border-white/10 active:opacity-70"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Globe size={14} color={foxColors.lime} strokeWidth={2} />
-            <Text className="text-neutral-200 text-xs font-body-semibold ml-1.5 tracking-wide">
-              {language.toUpperCase()}
-            </Text>
-          </Pressable>
-          {!previewMode ? (
-            <Pressable
-              onPress={onLogout}
-              className="w-9 h-9 bg-black/40 rounded-full items-center justify-center border border-white/10 active:opacity-70"
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel="Sign out"
-            >
-              <LogOut size={16} color={foxColors.danger} strokeWidth={2} />
-            </Pressable>
-          ) : null}
-        </View>
-
-        <View className="flex-1" />
-
+      <View className="flex-1 px-5 pb-5 justify-end">
         <Pressable onPress={handleHeaderTap}>
           <Text className="text-white text-3xl font-display">{greeting}</Text>
           <Text className="text-neutral-300 text-xs uppercase tracking-[0.2em] font-body-semibold mt-1.5">

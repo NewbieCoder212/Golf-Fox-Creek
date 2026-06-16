@@ -1,19 +1,28 @@
-import { View, Text, Pressable, Image, Platform, Linking } from 'react-native';
+import { View, Text, Pressable, Image, Platform, Linking, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import { ChevronRight } from 'lucide-react-native';
 
 import { cn } from '@/lib/cn';
+import { SponsorAdRotator } from '@/components/SponsorAdRotator';
 import {
-  getActiveAdPlacement,
   getActiveAdPlacements,
+  getAdImageLayout,
   isAdPlacementServiceConfigured,
 } from '@/lib/ad-placement-service';
-import type { AdDisplayPosition, AdPlacementType } from '@/types';
+import { getAdRotationSettings, isSupabaseConfigured } from '@/lib/supabase';
+import type { AdDisplayPosition, AdPlacement, AdPlacementType } from '@/types';
 
-export const COMPACT_SPONSOR_BANNER_HEIGHT = 96;
-export const STICKY_FOOTER_AD_EXTRA = 20;
+export const STANDARD_SPONSOR_BANNER_HEIGHT = 160;
+export const COMPACT_SPONSOR_BANNER_HEIGHT = 120;
+export const FOOTER_SPONSOR_BANNER_HEIGHT = 152;
+export const STICKY_FOOTER_AD_EXTRA = 16;
+
+const PORTRAIT_IMAGE_ASPECT = 0.72;
+const SQUARE_IMAGE_ASPECT = 1;
+const AD_POOL_LIMIT = 20;
 
 interface UseAdPlacementOptions {
   holeNumber?: number;
@@ -24,70 +33,175 @@ export function useAdPlacement(
   placementType: AdPlacementType | string,
   options?: UseAdPlacementOptions
 ) {
-  const useMulti =
-    placementType === 'leaderboard' && options?.displayPosition != null;
-
   return useQuery({
     queryKey: [
       'adPlacement',
       placementType,
       options?.holeNumber ?? null,
       options?.displayPosition ?? null,
-      useMulti,
     ],
     queryFn: () =>
-      useMulti
-        ? getActiveAdPlacements(placementType, {
-            displayPosition: options!.displayPosition,
-            limit: 1,
-          })
-        : getActiveAdPlacement(placementType, options?.holeNumber).then((ad) =>
-            ad ? [ad] : []
-          ),
+      getActiveAdPlacements(placementType, {
+        holeNumber: options?.holeNumber,
+        displayPosition: options?.displayPosition,
+        limit: AD_POOL_LIMIT,
+      }),
     enabled: isAdPlacementServiceConfigured(),
     staleTime: 1000 * 60 * 5,
   });
 }
 
+export function useAdRotationSettings() {
+  return useQuery({
+    queryKey: ['adRotationSettings'],
+    queryFn: getAdRotationSettings,
+    enabled: isSupabaseConfigured(),
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
 interface SponsorBannerProps {
+  ads?: AdPlacement[];
+  ad?: AdPlacement;
   placementType: AdPlacementType | string;
   holeNumber?: number;
   displayPosition?: AdDisplayPosition;
   className?: string;
   compact?: boolean;
+  variant?: 'default' | 'footer' | 'card';
 }
 
-function openActionUrl(url: string) {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.open(url, '_blank', 'noopener,noreferrer');
-    return;
+function normalizeActionUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+async function openActionUrl(url: string) {
+  const normalized = normalizeActionUrl(url);
+  if (!normalized) return;
+
+  try {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.open(normalized, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    await Linking.openURL(normalized);
+  } catch {
+    Alert.alert('Could not open link', 'Check that the ad action URL is valid and includes a website address.');
   }
-  Linking.openURL(url);
 }
 
-export function SponsorBanner({
-  placementType,
-  holeNumber,
-  displayPosition,
+function SponsorAdFooterStrip({
+  ad,
+  hasAction,
+}: {
+  ad: AdPlacement;
+  hasAction: boolean;
+}) {
+  return (
+    <View className="border-t border-neutral-800 px-4 py-3.5">
+      <View className="flex-row items-center">
+        <View className="flex-1 pr-3">
+          <Text className="text-neutral-500 text-[10px] font-body-semibold uppercase tracking-[0.12em]">
+            {ad.sponsor_name}
+          </Text>
+          <Text className="text-white font-body-semibold text-sm mt-1" numberOfLines={3}>
+            {ad.banner_text}
+          </Text>
+          {hasAction ? (
+            <Text className="text-lime-400/90 text-xs font-body mt-1.5">Tap to open offer</Text>
+          ) : null}
+        </View>
+        {hasAction ? (
+          <View className="w-8 h-8 rounded-full bg-lime-400/10 items-center justify-center">
+            <ChevronRight size={18} color="#a3e635" strokeWidth={2} />
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function SponsorAdCard({
+  ad,
   className,
   compact = false,
-}: SponsorBannerProps) {
-  const { data: ads = [] } = useAdPlacement(placementType, { holeNumber, displayPosition });
-
-  const ad = ads[0];
-
-  if (!ad) {
-    return null;
-  }
-
-  const imageHeight = compact ? 96 : 140;
-  const hasAction = Boolean(ad.action_url);
+  variant = 'default',
+}: {
+  ad: AdPlacement;
+  className?: string;
+  compact?: boolean;
+  variant?: 'default' | 'footer' | 'card';
+}) {
+  const layout = getAdImageLayout(ad);
+  const hasAction = Boolean(ad.action_url?.trim());
 
   const handlePress = () => {
-    if (!ad.action_url) return;
+    if (!ad.action_url?.trim()) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    openActionUrl(ad.action_url);
+    void openActionUrl(ad.action_url);
   };
+
+  const cardShell = cn(
+    'overflow-hidden rounded-2xl border border-neutral-800 bg-[#141414] active:opacity-95',
+    hasAction && 'active:scale-[0.995]'
+  );
+
+  if (layout === 'portrait' || layout === 'square' || variant === 'card') {
+    const imageAspect = layout === 'square' ? SQUARE_IMAGE_ASPECT : PORTRAIT_IMAGE_ASPECT;
+
+    return (
+      <Animated.View entering={FadeInDown.duration(400)} className={className}>
+        <Pressable
+          onPress={hasAction ? handlePress : undefined}
+          disabled={!hasAction}
+          className={cardShell}
+        >
+          <View className="bg-white px-4 pt-3 pb-4">
+            <Text className="text-[10px] font-body-semibold uppercase tracking-[0.18em] text-neutral-400 mb-2">
+              Sponsored
+            </Text>
+            <Image
+              source={{ uri: ad.image_url }}
+              style={{ width: '100%', aspectRatio: imageAspect }}
+              resizeMode="contain"
+            />
+          </View>
+          <SponsorAdFooterStrip ad={ad} hasAction={hasAction} />
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  if (variant === 'footer') {
+    return (
+      <Animated.View entering={FadeInDown.duration(400)} className={className}>
+        <Pressable
+          onPress={hasAction ? handlePress : undefined}
+          disabled={!hasAction}
+          className={cardShell}
+        >
+          <View className="bg-white px-6 pt-4 pb-5 items-center">
+            <Text className="self-start text-[10px] font-body-semibold uppercase tracking-[0.18em] text-neutral-400 mb-3">
+              Sponsored
+            </Text>
+            <Image
+              source={{ uri: ad.image_url }}
+              style={{ width: '100%', height: 52, maxWidth: 280 }}
+              resizeMode="contain"
+            />
+          </View>
+          <SponsorAdFooterStrip ad={ad} hasAction={hasAction} />
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  const imageHeight = compact ? COMPACT_SPONSOR_BANNER_HEIGHT : STANDARD_SPONSOR_BANNER_HEIGHT;
+  const imagePadding = compact ? 12 : 16;
+  const logoHeight = imageHeight - imagePadding * 2;
 
   return (
     <Animated.View
@@ -102,12 +216,16 @@ export function SponsorBanner({
           hasAction && 'active:scale-[0.99]'
         )}
       >
-        <Image
-          source={{ uri: ad.image_url }}
-          className="w-full"
-          style={{ height: imageHeight }}
-          resizeMode="cover"
-        />
+        <View
+          className="w-full items-center justify-center bg-white"
+          style={{ height: imageHeight, paddingHorizontal: imagePadding, paddingVertical: imagePadding }}
+        >
+          <Image
+            source={{ uri: ad.image_url }}
+            style={{ width: '100%', height: logoHeight, maxHeight: logoHeight }}
+            resizeMode="contain"
+          />
+        </View>
 
         <View className="absolute top-0 right-0 w-16 h-16 overflow-hidden">
           <View
@@ -123,17 +241,17 @@ export function SponsorBanner({
         </View>
 
         <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.92)']}
+          colors={['transparent', 'rgba(12,12,12,0.88)']}
           style={{
             position: 'absolute',
             left: 0,
             right: 0,
             bottom: 0,
-            height: compact ? 72 : 100,
+            height: compact ? 68 : 88,
           }}
         />
 
-        <View className="absolute bottom-3 left-3 right-3">
+        <View className="absolute bottom-3 left-4 right-4">
           <Text className="text-fox-lime text-[10px] font-body-semibold uppercase tracking-[0.15em]">
             {ad.sponsor_name}
           </Text>
@@ -154,5 +272,58 @@ export function SponsorBanner({
         </View>
       </Pressable>
     </Animated.View>
+  );
+}
+
+export function SponsorBanner({
+  ads: adsProp,
+  ad: adProp,
+  placementType,
+  holeNumber,
+  displayPosition,
+  className,
+  compact = false,
+  variant = 'default',
+}: SponsorBannerProps) {
+  const { data: rotationSettings } = useAdRotationSettings();
+  const { data: fetchedAds = [] } = useAdPlacement(placementType, { holeNumber, displayPosition });
+
+  const pool = adsProp ?? fetchedAds;
+  const rotationEnabled = rotationSettings?.enabled ?? false;
+  const adsToShow =
+    rotationEnabled && !adProp && !adsProp ? pool : pool.slice(0, 1);
+
+  if (adProp) {
+    return (
+      <SponsorAdCard ad={adProp} className={className} compact={compact} variant={variant} />
+    );
+  }
+
+  if (adsToShow.length === 0) {
+    return null;
+  }
+
+  if (adsToShow.length === 1) {
+    return (
+      <SponsorAdCard
+        ad={adsToShow[0]}
+        className={className}
+        compact={compact}
+        variant={variant}
+      />
+    );
+  }
+
+  const intervalMs = (rotationSettings?.interval_seconds ?? 12) * 1000;
+
+  return (
+    <SponsorAdRotator
+      ads={adsToShow}
+      intervalMs={intervalMs}
+      className={className}
+      renderAd={(ad) => (
+        <SponsorAdCard ad={ad} compact={compact} variant={variant} />
+      )}
+    />
   );
 }

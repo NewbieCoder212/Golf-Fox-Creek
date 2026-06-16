@@ -23,7 +23,8 @@ import {
   Clock,
   Swords,
   UserPlus,
-  Trash2,
+  Mail,
+  Shield,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -39,6 +40,7 @@ import {
   getTournamentScores,
   getTournamentTeams,
   isUserRegisteredForTournament,
+  updateTournamentTeam,
 } from '@/lib/tournament-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
@@ -80,15 +82,18 @@ import { cn } from '@/lib/cn';
 import { SponsorBanner } from '@/components/SponsorBanner';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import {
+  TournamentRosterEditor,
+  type RosterDraftEntry,
+} from '@/components/TournamentRosterEditor';
+import { markTeamRosterReadyAndNotify } from '@/lib/tournament-team-service';
+import {
+  canCaptainManageRoster,
+  canManageTeamRoster,
+  getTeamRosterStatusLabel,
+} from '@/lib/tournament-roster-utils';
 
 type DetailTab = 'leaderboard' | 'teams' | 'matches' | 'teeTimes';
-
-interface RosterDraftEntry {
-  key: string;
-  display_name: string;
-  handicap_index: number;
-  user_id?: string | null;
-}
 
 export default function TournamentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -97,6 +102,9 @@ export default function TournamentDetailScreen() {
   const queryClient = useQueryClient();
   const user = useMemberAuthStore((s) => s.user);
   const profile = useMemberAuthStore((s) => s.profile);
+  const memberAccessToken = useMemberAuthStore((s) => s.accessToken);
+  const adminAccessToken = useAdminAuthStore((s) => s.accessToken);
+  const accessToken = memberAccessToken ?? adminAccessToken;
   const canAccessAdmin = useAdminAuthStore((s) => s.canAccessAdmin);
   const isManager =
     profile?.role === 'manager' ||
@@ -109,7 +117,10 @@ export default function TournamentDetailScreen() {
   const [editingTeam, setEditingTeam] = useState<TournamentTeam | null>(null);
   const [teamName, setTeamName] = useState('');
   const [teamSide, setTeamSide] = useState<TournamentTeamSide>('side_a');
+  const [captainUserId, setCaptainUserId] = useState<string | null>(null);
+  const [editingCaptainUserId, setEditingCaptainUserId] = useState<string | null>(null);
   const [rosterDraft, setRosterDraft] = useState<RosterDraftEntry[]>([]);
+  const [markReadyTeam, setMarkReadyTeam] = useState<TournamentTeam | null>(null);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerHandicap, setNewPlayerHandicap] = useState('');
   const [isOpeningScorecard, setIsOpeningScorecard] = useState(false);
@@ -138,6 +149,7 @@ export default function TournamentDetailScreen() {
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
   const canAddTeam = !sideATeam || !sideBTeam;
+  const myCaptainTeam = teams.find((team) => team.captain_user_id === user?.id) ?? null;
 
   const { data: scores = [] } = useQuery({
     queryKey: ['tournamentScores', id],
@@ -197,12 +209,14 @@ export default function TournamentDetailScreen() {
     mutationFn: (params: {
       team_name: string;
       side: TournamentTeamSide;
+      captain_user_id: string | null;
       roster: RosterDraftEntry[];
     }) =>
       createTournamentTeamWithRoster({
         tournament_id: id!,
         team_name: params.team_name,
         side: params.side,
+        captain_user_id: params.captain_user_id,
         roster: params.roster.map((entry) => ({
           display_name: entry.display_name,
           handicap_index: entry.handicap_index,
@@ -250,6 +264,22 @@ export default function TournamentDetailScreen() {
     },
   });
 
+  const updateCaptainMutation = useMutation({
+    mutationFn: async (params: { teamId: string; captainUserId: string }) => {
+      const result = await updateTournamentTeam(params.teamId, {
+        captain_user_id: params.captainUserId,
+      });
+      return requireData(result, 'Could not update captain');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tournamentTeams', id] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: Error) => {
+      Alert.alert('Could not update captain', error.message);
+    },
+  });
+
   const removePlayerMutation = useMutation({
     mutationFn: async (params: { team: TournamentTeam; playerId: string }) => {
       const result = await removePlayerFromTeam(params.team, params.playerId);
@@ -265,6 +295,37 @@ export default function TournamentDetailScreen() {
     },
   });
 
+  const markReadyMutation = useMutation({
+    mutationFn: async (team: TournamentTeam) => {
+      if (!accessToken) {
+        throw new Error('You must be signed in as a manager');
+      }
+      const result = await markTeamRosterReadyAndNotify({
+        tournamentId: id!,
+        teamId: team.id,
+        accessToken,
+      });
+      if (!result.success) {
+        throw new Error(result.error ?? 'Could not mark roster ready');
+      }
+      return result;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['tournamentTeams', id] });
+      setMarkReadyTeam(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const emailed = result.emailed ?? 0;
+      const skipped = result.skippedGuests ?? 0;
+      Alert.alert(
+        'Roster ready',
+        `Onboard email sent to ${emailed} member${emailed === 1 ? '' : 's'}.${skipped > 0 ? ` ${skipped} guest${skipped === 1 ? '' : 's'} skipped (no email on file).` : ''}`
+      );
+    },
+    onError: (error: Error) => {
+      Alert.alert('Could not mark roster ready', error.message);
+    },
+  });
+
   const leaderboard = buildTournamentLeaderboard(scores, leaderboardMode);
   const teamNameById = Object.fromEntries(teams.map((t) => [t.id, t.team_name]));
   const { nameById: playerNameById } = buildTournamentPlayerMaps(tournamentPlayers, members);
@@ -273,9 +334,28 @@ export default function TournamentDetailScreen() {
     setShowTeamModal(false);
     setEditingTeam(null);
     setTeamName('');
+    setCaptainUserId(null);
+    setEditingCaptainUserId(null);
     setRosterDraft([]);
     setNewPlayerName('');
     setNewPlayerHandicap('');
+  };
+
+  const selectCaptain = (memberId: string) => {
+    setCaptainUserId(memberId);
+    const member = members.find((m) => m.id === memberId);
+    if (!member) return;
+    if (rosterDraft.some((entry) => entry.user_id === member.id)) return;
+    setRosterDraft((prev) => [
+      ...prev,
+      {
+        key: member.id,
+        display_name: member.full_name,
+        handicap_index: member.handicap_index ?? 0,
+        user_id: member.id,
+      },
+    ]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const addDraftPlayerByName = () => {
@@ -318,6 +398,7 @@ export default function TournamentDetailScreen() {
   const openTeamModal = () => {
     setEditingTeam(null);
     setTeamSide(sideATeam ? 'side_b' : 'side_a');
+    setCaptainUserId(null);
     setRosterDraft([]);
     setNewPlayerName('');
     setNewPlayerHandicap('');
@@ -325,7 +406,9 @@ export default function TournamentDetailScreen() {
   };
 
   const openManageRoster = (team: TournamentTeam) => {
+    if (!canManageTeamRoster(team, { isManager, userId: user?.id })) return;
     setEditingTeam(team);
+    setEditingCaptainUserId(team.captain_user_id);
     setNewPlayerName('');
     setNewPlayerHandicap('');
     setShowTeamModal(true);
@@ -337,6 +420,15 @@ export default function TournamentDetailScreen() {
   const editingTeamRoster = activeEditingTeam
     ? resolveRosterEntries(activeEditingTeam.player_ids, tournamentPlayers, members)
     : [];
+
+  const selectEditingCaptain = (memberId: string) => {
+    if (!activeEditingTeam) return;
+    setEditingCaptainUserId(memberId);
+    updateCaptainMutation.mutate({
+      teamId: activeEditingTeam.id,
+      captainUserId: memberId,
+    });
+  };
 
   const addPlayerToExistingTeam = () => {
     if (!activeEditingTeam) return;
@@ -375,8 +467,16 @@ export default function TournamentDetailScreen() {
           : teamSide === 'side_b' && !sideBTeam
             ? 'side_b'
             : side,
+      captain_user_id: captainUserId,
       roster: rosterDraft,
     });
+  };
+
+  const getMarkReadyPreview = (team: TournamentTeam) => {
+    const rosterEntries = resolveRosterEntries(team.player_ids, tournamentPlayers, members);
+    const membersWithEmail = rosterEntries.filter((entry) => entry.user_id);
+    const guests = rosterEntries.length - membersWithEmail.length;
+    return { rosterEntries, membersWithEmail, guests };
   };
 
   const canEnterScores =
@@ -652,6 +752,27 @@ export default function TournamentDetailScreen() {
           </View>
         ) : tab === 'teams' ? (
           <View className="mx-5">
+            {myCaptainTeam && canCaptainManageRoster(myCaptainTeam, user?.id) && (
+              <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mt-2 mb-1">
+                <View className="flex-row items-center">
+                  <Shield size={16} color="#a3e635" />
+                  <Text className="text-lime-400 font-semibold text-sm ml-2">
+                    You're the captain — build your roster
+                  </Text>
+                </View>
+                <Text className="text-neutral-400 text-xs mt-1">
+                  Add club members or guests for {myCaptainTeam.team_name}. Your pro shop will send
+                  onboard emails when the roster is marked ready.
+                </Text>
+                <Pressable
+                  onPress={() => openManageRoster(myCaptainTeam)}
+                  className="mt-3 self-start active:opacity-80"
+                >
+                  <Text className="text-lime-400 font-semibold text-sm">Manage roster</Text>
+                </Pressable>
+              </View>
+            )}
+
             {(isManager || tournamentNeedsTeams(tournament)) && canAddTeam && (
               <Pressable
                 onPress={openTeamModal}
@@ -664,7 +785,19 @@ export default function TournamentDetailScreen() {
               </Pressable>
             )}
 
-            {teams.map((team, index) => (
+            {teams.map((team, index) => {
+              const captainName = team.captain_user_id
+                ? members.find((member) => member.id === team.captain_user_id)?.full_name ?? 'Captain'
+                : null;
+              const rosterStatusLabel = getTeamRosterStatusLabel(team);
+              const canManageRoster = canManageTeamRoster(team, { isManager, userId: user?.id });
+              const canMarkReady =
+                isManager &&
+                (team.roster_status ?? 'draft') === 'draft' &&
+                Boolean(team.captain_user_id) &&
+                team.player_ids.length > 0;
+
+              return (
               <Animated.View
                 key={team.id}
                 entering={FadeInDown.delay(index * 50).duration(300)}
@@ -672,14 +805,28 @@ export default function TournamentDetailScreen() {
               >
                 <View className="flex-row items-center justify-between">
                   <Text className="text-white font-bold text-base">{team.team_name}</Text>
-                  {team.side && (
-                    <View className="bg-lime-900/30 border border-lime-700/40 rounded-full px-2 py-0.5">
-                      <Text className="text-lime-400 text-[10px] font-bold uppercase">
-                        {team.side === 'side_a' ? 'Team A' : 'Team B'}
+                  <View className="flex-row items-center gap-2">
+                    <View className="bg-neutral-900 border border-neutral-700 rounded-full px-2 py-0.5">
+                      <Text className="text-neutral-300 text-[10px] font-bold uppercase">
+                        {rosterStatusLabel}
                       </Text>
                     </View>
-                  )}
+                    {team.side && (
+                      <View className="bg-lime-900/30 border border-lime-700/40 rounded-full px-2 py-0.5">
+                        <Text className="text-lime-400 text-[10px] font-bold uppercase">
+                          {team.side === 'side_a' ? 'Team A' : 'Team B'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
+                {captainName ? (
+                  <Text className="text-neutral-500 text-xs mt-2">
+                    Captain: {captainName}
+                  </Text>
+                ) : (
+                  <Text className="text-amber-500/90 text-xs mt-2">Captain not assigned</Text>
+                )}
                 <Text className="text-neutral-500 text-xs mt-2 uppercase tracking-widest">
                   Players
                 </Text>
@@ -688,7 +835,7 @@ export default function TournamentDetailScreen() {
                     • {playerNameById[pid] ?? 'Player'}
                   </Text>
                 ))}
-                {isManager && (
+                {canManageRoster && (
                   <Pressable
                     onPress={() => openManageRoster(team)}
                     className="flex-row items-center mt-3 pt-3 border-t border-neutral-800 active:opacity-80"
@@ -697,8 +844,20 @@ export default function TournamentDetailScreen() {
                     <Text className="text-lime-400 font-semibold text-sm ml-2">Manage Players</Text>
                   </Pressable>
                 )}
+                {canMarkReady && (
+                  <Pressable
+                    onPress={() => setMarkReadyTeam(team)}
+                    className="flex-row items-center mt-3 pt-3 border-t border-neutral-800 active:opacity-80"
+                  >
+                    <Mail size={14} color="#a3e635" />
+                    <Text className="text-lime-400 font-semibold text-sm ml-2">
+                      Mark roster ready & send email
+                    </Text>
+                  </Pressable>
+                )}
               </Animated.View>
-            ))}
+            );
+            })}
 
             {!tournamentNeedsTeams(tournament) && teams.length === 0 && (
               <Text className="text-neutral-500 text-sm text-center mt-6 px-4">
@@ -813,6 +972,73 @@ export default function TournamentDetailScreen() {
                     placeholderTextColor="#525252"
                     className="bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 text-white mb-4"
                   />
+
+                  <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
+                    Captain
+                  </Text>
+                  <View className="mb-4">
+                    {members.map((member) => (
+                      <Pressable
+                        key={member.id}
+                        onPress={() => selectCaptain(member.id)}
+                        className={cn(
+                          'flex-row items-center justify-between px-4 py-3 rounded-xl mb-2 border',
+                          captainUserId === member.id
+                            ? 'bg-lime-900/30 border-lime-600'
+                            : 'bg-[#0c0c0c] border-neutral-800 active:opacity-80'
+                        )}
+                      >
+                        <Text
+                          className={
+                            captainUserId === member.id
+                              ? 'text-lime-400 font-semibold'
+                              : 'text-white font-medium'
+                          }
+                        >
+                          {member.full_name}
+                        </Text>
+                        <Text className="text-neutral-500 text-sm">
+                          {captainUserId === member.id ? 'Selected' : 'Tap to select'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {editingTeam && activeEditingTeam && isManager && (
+                <>
+                  <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
+                    Captain
+                  </Text>
+                  <View className="mb-4">
+                    {members.map((member) => (
+                      <Pressable
+                        key={member.id}
+                        onPress={() => selectEditingCaptain(member.id)}
+                        disabled={updateCaptainMutation.isPending}
+                        className={cn(
+                          'flex-row items-center justify-between px-4 py-3 rounded-xl mb-2 border',
+                          editingCaptainUserId === member.id
+                            ? 'bg-lime-900/30 border-lime-600'
+                            : 'bg-[#0c0c0c] border-neutral-800 active:opacity-80'
+                        )}
+                      >
+                        <Text
+                          className={
+                            editingCaptainUserId === member.id
+                              ? 'text-lime-400 font-semibold'
+                              : 'text-white font-medium'
+                          }
+                        >
+                          {member.full_name}
+                        </Text>
+                        <Text className="text-neutral-500 text-sm">
+                          {editingCaptainUserId === member.id ? 'Selected' : 'Tap to select'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
                 </>
               )}
 
@@ -822,127 +1048,44 @@ export default function TournamentDetailScreen() {
                   <Text className="text-neutral-500 text-xs mt-1">
                     {editingTeamRoster.length} player{editingTeamRoster.length !== 1 ? 's' : ''} on roster
                   </Text>
+                  <Text className="text-neutral-500 text-xs mt-1">
+                    Status: {getTeamRosterStatusLabel(activeEditingTeam)}
+                  </Text>
                 </View>
               )}
 
-              <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
-                Add Player by Name
-              </Text>
-              <View className="flex-row gap-2 mb-2">
-                <TextInput
-                  value={newPlayerName}
-                  onChangeText={setNewPlayerName}
-                  placeholder="Player name"
-                  placeholderTextColor="#525252"
-                  className="flex-1 bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 text-white"
-                />
-                <TextInput
-                  value={newPlayerHandicap}
-                  onChangeText={setNewPlayerHandicap}
-                  placeholder="HI"
-                  placeholderTextColor="#525252"
-                  keyboardType="decimal-pad"
-                  className="w-16 bg-[#0c0c0c] border border-neutral-800 rounded-xl px-3 py-3 text-white text-center"
-                />
-              </View>
-              <Pressable
-                onPress={editingTeam ? addPlayerToExistingTeam : addDraftPlayerByName}
-                disabled={!newPlayerName.trim() || addPlayerMutation.isPending}
-                className="flex-row items-center justify-center bg-neutral-800 rounded-xl py-3 mb-4 active:opacity-80"
-              >
-                <UserPlus size={16} color="#a3e635" />
-                <Text className="text-lime-400 font-semibold ml-2">Add Player</Text>
-              </Pressable>
-
-              <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
-                Or Add Club Member
-              </Text>
-              <View className="mb-4">
-                {members.map((member) => {
-                  const onRoster = editingTeam
-                    ? editingTeamRoster.some((entry) => entry.user_id === member.id)
-                    : rosterDraft.some((entry) => entry.user_id === member.id);
-                  return (
-                    <Pressable
-                      key={member.id}
-                      onPress={() =>
-                        editingTeam
-                          ? addMemberToExistingTeam(member.id)
-                          : addDraftMember(member.id)
-                      }
-                      disabled={onRoster || addPlayerMutation.isPending}
-                      className={cn(
-                        'flex-row items-center justify-between px-4 py-3 rounded-xl mb-2 border',
-                        onRoster
-                          ? 'bg-neutral-900 border-neutral-800 opacity-50'
-                          : 'bg-[#0c0c0c] border-neutral-800 active:opacity-80'
-                      )}
-                    >
-                      <Text className="text-white font-medium">{member.full_name}</Text>
-                      <Text className="text-neutral-500 text-sm">
-                        {onRoster ? 'Added' : `${member.handicap_index?.toFixed(1) ?? '--'} HI`}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
-                {editingTeam ? 'Current Roster' : `Roster (${rosterDraft.length})`}
-              </Text>
-              {!editingTeam ? (
-                rosterDraft.length === 0 ? (
-                  <Text className="text-neutral-500 text-sm mb-4">Add at least one player.</Text>
-                ) : (
-                  rosterDraft.map((entry) => (
-                    <View
-                      key={entry.key}
-                      className="flex-row items-center justify-between bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 mb-2"
-                    >
-                      <View>
-                        <Text className="text-white font-medium">{entry.display_name}</Text>
-                        <Text className="text-neutral-500 text-xs mt-0.5">
-                          {entry.handicap_index.toFixed(1)} HI
-                          {entry.user_id ? ' · Member' : ' · Guest'}
-                        </Text>
-                      </View>
-                      <Pressable onPress={() => removeDraftPlayer(entry.key)}>
-                        <Trash2 size={16} color="#737373" />
-                      </Pressable>
-                    </View>
-                  ))
-                )
-              ) : editingTeamRoster.length === 0 ? (
-                <Text className="text-neutral-500 text-sm mb-4">Add at least one player.</Text>
-              ) : (
-                editingTeamRoster.map((entry) => (
-                  <View
-                    key={entry.id}
-                    className="flex-row items-center justify-between bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 mb-2"
-                  >
-                    <View>
-                      <Text className="text-white font-medium">{entry.display_name}</Text>
-                      <Text className="text-neutral-500 text-xs mt-0.5">
-                        {entry.handicap_index.toFixed(1)} HI
-                        {entry.user_id ? ' · Member' : ' · Guest'}
-                      </Text>
-                    </View>
-                    {editingTeamRoster.length > 1 && activeEditingTeam ? (
-                      <Pressable
-                        onPress={() =>
-                          removePlayerMutation.mutate({
-                            team: activeEditingTeam,
-                            playerId: entry.id,
-                          })
-                        }
-                        disabled={removePlayerMutation.isPending}
-                      >
-                        <Trash2 size={16} color="#737373" />
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ))
-              )}
+              <TournamentRosterEditor
+                members={members}
+                mode={editingTeam ? 'editing' : 'draft'}
+                draftRoster={rosterDraft}
+                editingRoster={editingTeamRoster}
+                newPlayerName={newPlayerName}
+                newPlayerHandicap={newPlayerHandicap}
+                onNewPlayerNameChange={setNewPlayerName}
+                onNewPlayerHandicapChange={setNewPlayerHandicap}
+                onAddPlayerByName={
+                  editingTeam ? addPlayerToExistingTeam : addDraftPlayerByName
+                }
+                onAddMember={
+                  editingTeam
+                    ? addMemberToExistingTeam
+                    : addDraftMember
+                }
+                onRemoveDraftPlayer={removeDraftPlayer}
+                onRemoveEditingPlayer={(playerId) => {
+                  if (!activeEditingTeam) return;
+                  removePlayerMutation.mutate({
+                    team: activeEditingTeam,
+                    playerId,
+                  });
+                }}
+                canRemoveEditingPlayers={Boolean(
+                  activeEditingTeam &&
+                    canManageTeamRoster(activeEditingTeam, { isManager, userId: user?.id })
+                )}
+                isAddingPlayer={addPlayerMutation.isPending}
+                isRemovingPlayer={removePlayerMutation.isPending}
+              />
             </ScrollView>
 
             {!editingTeam && (
@@ -962,6 +1105,57 @@ export default function TournamentDetailScreen() {
                 )}
               </Pressable>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(markReadyTeam)} animationType="fade" transparent>
+        <View className="flex-1 bg-black/70 justify-center px-5">
+          <View className="bg-[#141414] rounded-2xl border border-neutral-800 p-5">
+            <Text className="text-white text-xl font-bold mb-2">Mark roster ready?</Text>
+            {markReadyTeam ? (
+              <>
+                <Text className="text-neutral-400 text-sm mb-4">
+                  This will lock captain edits and send onboard emails for{' '}
+                  <Text className="text-white font-semibold">{markReadyTeam.team_name}</Text>.
+                </Text>
+                {getMarkReadyPreview(markReadyTeam).rosterEntries.map((entry) => (
+                  <Text key={entry.id} className="text-neutral-300 text-sm">
+                    • {entry.display_name}
+                    {entry.user_id ? '' : ' (guest — no email)'}
+                  </Text>
+                ))}
+                <Text className="text-neutral-500 text-xs mt-3 mb-5">
+                  {getMarkReadyPreview(markReadyTeam).membersWithEmail.length} member
+                  {getMarkReadyPreview(markReadyTeam).membersWithEmail.length === 1 ? '' : 's'} will
+                  be emailed.
+                  {getMarkReadyPreview(markReadyTeam).guests > 0
+                    ? ` ${getMarkReadyPreview(markReadyTeam).guests} guest${getMarkReadyPreview(markReadyTeam).guests === 1 ? '' : 's'} skipped.`
+                    : ''}
+                </Text>
+              </>
+            ) : null}
+            <View className="flex-row gap-3">
+              <Pressable
+                onPress={() => setMarkReadyTeam(null)}
+                className="flex-1 bg-neutral-800 rounded-xl py-3 items-center active:opacity-80"
+              >
+                <Text className="text-white font-semibold">Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (markReadyTeam) markReadyMutation.mutate(markReadyTeam);
+                }}
+                disabled={markReadyMutation.isPending}
+                className="flex-1 bg-lime-600 rounded-xl py-3 items-center active:opacity-80"
+              >
+                {markReadyMutation.isPending ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text className="text-white font-bold">Send emails</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>

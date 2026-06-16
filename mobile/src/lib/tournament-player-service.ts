@@ -9,9 +9,7 @@ import {
   unwrapList,
   type TournamentServiceResult,
 } from './tournament-supabase';
-import { createTournamentTeam, updateTournamentTeam } from './tournament-service';
-
-export async function getTournamentPlayers(tournamentId: string): Promise<TournamentPlayer[]> {
+import { createTournamentTeam, updateTournamentTeam } from './tournament-service';(tournamentId: string): Promise<TournamentPlayer[]> {
   const result = await tournamentSupabaseRequest<TournamentPlayer[]>('tournament_players', {
     query: {
       tournament_id: `eq.${tournamentId}`,
@@ -93,9 +91,17 @@ export async function appendPlayersToTeam(
   if (createdResult.error) return { data: null, error: createdResult.error };
 
   const created = createdResult.data ?? [];
-  return updateTournamentTeam(team.id, {
+  const updates: Partial<TournamentTeamInsert> & {
+    roster_status?: TournamentTeam['roster_status'];
+    onboard_email_sent_at?: string | null;
+  } = {
     player_ids: [...team.player_ids, ...created.map((p) => p.id)],
-  });
+  };
+  if ((team.roster_status ?? 'draft') === 'ready') {
+    updates.roster_status = 'draft';
+    updates.onboard_email_sent_at = null;
+  }
+  return updateTournamentTeam(team.id, updates);
 }
 
 export async function removePlayerFromTeam(
@@ -107,7 +113,16 @@ export async function removePlayerFromTeam(
     return { data: null, error: 'A team must have at least one player' };
   }
 
-  return updateTournamentTeam(team.id, { player_ids: nextIds });
+  const updates: Partial<TournamentTeamInsert> & {
+    roster_status?: TournamentTeam['roster_status'];
+    onboard_email_sent_at?: string | null;
+  } = { player_ids: nextIds };
+  if ((team.roster_status ?? 'draft') === 'ready') {
+    updates.roster_status = 'draft';
+    updates.onboard_email_sent_at = null;
+  }
+
+  return updateTournamentTeam(team.id, updates);
 }
 
 export function buildTournamentPlayerMaps(
@@ -174,6 +189,7 @@ export async function createTournamentTeamWithRoster(params: {
   tournament_id: string;
   team_name: string;
   side: TournamentTeamInsert['side'];
+  captain_user_id?: string | null;
   roster: Array<{
     display_name: string;
     handicap_index: number;
@@ -195,6 +211,8 @@ export async function createTournamentTeamWithRoster(params: {
     team_name: params.team_name,
     side: params.side,
     player_ids: players.map((player) => player.id),
+    captain_user_id: params.captain_user_id ?? null,
+    roster_status: 'draft',
   });
 
   return requireData(teamResult, 'Could not create team');

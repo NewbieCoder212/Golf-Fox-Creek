@@ -559,6 +559,8 @@ export interface TournamentInsert {
   players_per_match?: number;
 }
 
+export type TournamentRosterStatus = 'draft' | 'ready';
+
 export interface TournamentTeam {
   id: string;
   tournament_id: string;
@@ -566,6 +568,11 @@ export interface TournamentTeam {
   side: TournamentTeamSide | null;
   player_ids: string[];
   logo_url: string | null;
+  captain_user_id: string | null;
+  roster_status: TournamentRosterStatus;
+  roster_ready_at: string | null;
+  roster_ready_by: string | null;
+  onboard_email_sent_at: string | null;
 }
 
 export interface TournamentTeamInsert {
@@ -574,6 +581,8 @@ export interface TournamentTeamInsert {
   side: TournamentTeamSide;
   player_ids: string[];
   logo_url?: string | null;
+  captain_user_id?: string | null;
+  roster_status?: TournamentRosterStatus;
 }
 
 export interface TournamentPlayer {

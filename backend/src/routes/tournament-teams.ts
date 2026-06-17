@@ -159,7 +159,7 @@ tournamentTeamsRouter.patch(
     );
 
     if (!patchResult.ok) {
-      const details = getErrorMessage(patchResult.data as Record<string, unknown>);
+      const details = getErrorMessage(patchResult.data as unknown as Record<string, unknown>);
       console.error('[TournamentTeams] PATCH failed:', details);
       return c.json(
         {

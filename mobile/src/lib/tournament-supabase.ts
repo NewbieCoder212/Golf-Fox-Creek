@@ -1,6 +1,6 @@
 /**
  * Shared Supabase REST client for tournament tables.
- * Uses member/admin JWT when available; falls back to anon on auth errors (dev).
+ * Uses member/admin JWT when available; does not silently fall back to anon on auth errors.
  */
 
 import { useAdminAuthStore } from './admin-auth-store';
@@ -55,8 +55,11 @@ function parseSupabaseError(status: number, errorText: string): string {
     if (parsed.message?.includes('captain_player_id') && parsed.code === '42703') {
       return 'Missing captain_player_id column. Run supabase/migrations/20260716000000_tournament_team_captain_player.sql in the Supabase SQL editor.';
     }
-    if (parsed.message?.includes('row-level security')) {
-      return 'Database permissions blocked score sync. Run supabase/migrations/20260707000000_tournament_scorecard_member_writes.sql in the Supabase SQL editor.';
+    if (parsed.message?.includes('row-level security') || parsed.code === '42501') {
+      if (parsed.message?.includes('tournament_scores')) {
+        return 'Database permissions blocked score sync. Run supabase/migrations/20260707000000_tournament_scorecard_member_writes.sql in the Supabase SQL editor.';
+      }
+      return 'Database permissions blocked this request. Log in as a manager or participant, or run supabase/migrations/20260628000000_tournament_tv_display.sql for public TV reads.';
     }
     if (parsed.message?.includes('tournament_players') && parsed.code === '42P01') {
       return 'Missing tournament_players table. Run supabase/migrations/20260621000000_tournament_players.sql in Supabase.';
@@ -99,6 +102,7 @@ export async function tournamentSupabaseRequest<T>(
   }
 
   const { method = 'GET', query = {}, body, single = false, accessToken } = options;
+  const isMutation = method !== 'GET';
   const url = new URL(`${supabaseUrl}/rest/v1/${table}`);
   Object.entries(query).forEach(([key, value]) => url.searchParams.append(key, value));
 
@@ -118,24 +122,37 @@ export async function tournamentSupabaseRequest<T>(
   };
 
   try {
-    const primaryToken = accessToken ?? getAccessToken();
+    const primaryToken = accessToken ?? getManagerAccessToken() ?? getAccessToken();
     let response = await fetchWithToken(url.toString(), init, primaryToken);
-
-    const isMutation = method !== 'GET';
 
     if (
       !response.ok &&
       response.status === 401 &&
       primaryToken !== supabaseAnonKey &&
-      !isMutation
+      !accessToken
     ) {
-      console.log('[Tournament] Auth token rejected, retrying with anon key');
-      response = await fetchWithToken(url.toString(), init, supabaseAnonKey);
+      const memberToken = useMemberAuthStore.getState().accessToken;
+      const adminToken = useAdminAuthStore.getState().accessToken;
+      const retryToken =
+        primaryToken === memberToken && adminToken && adminToken !== memberToken
+          ? adminToken
+          : primaryToken === adminToken && memberToken && memberToken !== adminToken
+            ? memberToken
+            : null;
+      if (retryToken) {
+        response = await fetchWithToken(url.toString(), init, retryToken);
+      }
     }
 
     if (!response.ok) {
       const errorText = await response.text();
       console.log(`[Tournament] ${method} ${table} ${response.status}:`, errorText);
+      if (response.status === 401 && primaryToken !== supabaseAnonKey) {
+        return {
+          data: null,
+          error: 'Session expired. Log out and log back in, then try again.',
+        };
+      }
       if (response.status === 401 && isMutation) {
         return {
           data: null,

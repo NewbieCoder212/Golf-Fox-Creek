@@ -36,7 +36,8 @@ import {
 import { TournamentMyMatchTab } from '@/components/TournamentMyMatchTab';
 import { TournamentTeeTimesTab } from '@/components/TournamentTeeTimesTab';
 import { TournamentMatchGroupsTab } from '@/components/TournamentMatchGroupsTab';
-import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
+import { TournamentDataLoadError } from '@/components/TournamentDataLoadError';
 import {
   buildTournamentPlayerMaps,
   getTournamentPlayers,
@@ -119,12 +120,12 @@ export default function TournamentDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const { data: matchGroups = [] } = useQuery({
-    queryKey: ['tournamentMatchGroups', id],
-    queryFn: () => getTournamentMatchGroups(id!),
-    enabled: Boolean(id),
-    refetchInterval: 15000,
-  });
+  const {
+    data: matchGroups = [],
+    isError: matchGroupsError,
+    error: matchGroupsLoadError,
+    refetch: refetchMatchGroups,
+  } = useTournamentMatchGroupsQuery(id, { refetchInterval: 15_000 });
 
   const { data: myRosterPlayerIds = [] } = useQuery({
     queryKey: ['myRosterPlayerIds', id, user?.id],
@@ -314,6 +315,19 @@ export default function TournamentDetailScreen() {
         </View>
 
         <View className="pt-4">
+          {matchGroupsError && (tab === 'schedule' || tab === 'match') ? (
+            <View className="px-5 mb-4">
+              <TournamentDataLoadError
+                title="Could not load tee times"
+                message={
+                  matchGroupsLoadError instanceof Error
+                    ? matchGroupsLoadError.message
+                    : 'Try logging in again.'
+                }
+                onRetry={() => void refetchMatchGroups()}
+              />
+            </View>
+          ) : null}
           {tab === 'schedule' ? (
             <>
               <View className="px-5 mb-4">

@@ -11,7 +11,7 @@ import {
   getTournamentTeams,
   getScoresForMatchGroup,
 } from '@/lib/tournament-service';
-import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 import {
   buildLiveMatchScores,
   computeMatchHoleResults,
@@ -117,11 +117,7 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     enabled: Boolean(id),
   });
 
-  const { data: matchGroups = [] } = useQuery({
-    queryKey: ['tournamentMatchGroups', id],
-    queryFn: () => getTournamentMatchGroups(id!),
-    enabled: Boolean(id),
-  });
+  const { data: matchGroups = [] } = useTournamentMatchGroupsQuery(id);
 
   const { data: myRosterPlayerIds = [] } = useQuery({
     queryKey: ['myRosterPlayerIds', id, user?.id],

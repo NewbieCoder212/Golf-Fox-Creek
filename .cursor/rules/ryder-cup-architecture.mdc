@@ -1,0 +1,58 @@
+---
+description: Ryder Cup tournament architecture — admin setup, scoring, and leaderboard data flow
+globs: mobile/src/**/*tournament*,mobile/src/**/scorecard*,mobile/src/components/admin/**,backend/src/routes/display.ts
+alwaysApply: false
+---
+
+# Ryder Cup Architecture
+
+## Admin setup order (do not reorder)
+
+1. **Participants** — build player list with emails
+2. **Teams** — Depends vs Diapers (side_a / side_b), assign players
+3. **Matches tab** — pairings + tee times + starting hole (`tournament_match_groups`)
+4. **Send Invites** — email participants
+
+Tee times for match play live on **Matches tab** (`tournament_match_groups.tee_time`). Do not use `tournament_tee_assignments` unless explicitly building a second system.
+
+## Member scorecard entry
+
+- Tournament scoring: **My Events → tournament → Enter scores** → `/(tabs)/scorecard?id&matchGroupId&round&side`
+- Scorecard bottom tab alone = casual/quick play or empty state (no stale `?id=`)
+
+## Scoring pipeline
+
+Match tab (AS, 1 UP) → Save / auto-save on hole change → `tournament_scores` + `tournament_match_hole_results` + `match_points` on match group.
+
+## Formats
+
+- `scramble` / `alternate_shot`: side-scoped team gross
+- `best_ball`: foursome match status; viewer enters own side on paper card
+- `singles`: 1v1 sub-matches within foursome; personal match status shown
+
+## Data load paths (one per surface — do not split)
+
+| Surface | Load path | Notes |
+|---------|-----------|-------|
+| **Clubhouse TV** | `GET /api/display/tournament/:id?token=` only | Full payload: match groups, scores, teams, standings. Never direct Supabase for TV grids. |
+| **Admin / member app** | `useTournamentMatchGroupsQuery` → `getTournamentMatchGroups` | Uses `tournamentSupabaseRequest`. **Throws on error** — never `return []` on failure. |
+| **Mutations** | `tournamentSupabaseRequest` + `getManagerAccessToken()` | Match group writes require manager JWT. |
+
+## Clubhouse TV
+
+`/display/tournament/:id?token=` — reuse `buildTournamentDisplayPayload`; extend payload for live grids; do not duplicate aggregation.
+
+## Error handling
+
+- Never swallow Supabase read errors as empty arrays on tournament screens.
+- Do not fall back to anon when a user JWT returns 401 (session expired).
+- Show `TournamentDataLoadError` when React Query `isError` on match groups.
+- Run `cd backend && bun run scripts/check-tournament-migrations.ts` after deploying migrations.
+
+## Required migration
+
+`supabase/migrations/20260628000000_tournament_tv_display.sql` — display_token, TV RLS policies, realtime.
+
+## Before fixing UI bugs
+
+Trace: `tournament_match_groups` → `resolveTournamentScorecardRoute` → `buildPlayersForRound` → `initSession` → save → leaderboard/TV.

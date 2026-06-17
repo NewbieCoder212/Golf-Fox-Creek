@@ -18,8 +18,9 @@ import {
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
   getTeamBySide,
-  getTournamentMatchGroups,
 } from '@/lib/tournament-match-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
+import { TournamentDataLoadError } from '@/components/TournamentDataLoadError';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { formatClubTime } from '@/lib/club-timezone';
 import { cn } from '@/lib/cn';
@@ -61,12 +62,12 @@ export function TournamentLiveStandingsPanel({
     refetchInterval: 15_000,
   });
 
-  const { data: matchGroups = [] } = useQuery({
-    queryKey: ['tournamentMatchGroups', tournamentId],
-    queryFn: () => getTournamentMatchGroups(tournamentId),
-    enabled: Boolean(tournamentId),
-    refetchInterval: 15_000,
-  });
+  const {
+    data: matchGroups = [],
+    isError: matchGroupsError,
+    error: matchGroupsLoadError,
+    refetch: refetchMatchGroups,
+  } = useTournamentMatchGroupsQuery(tournamentId, { refetchInterval: 15_000 });
 
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
@@ -139,6 +140,19 @@ export function TournamentLiveStandingsPanel({
           displayPosition="footer"
           className="mb-2"
           compact
+        />
+      ) : null}
+
+      {matchGroupsError ? (
+        <TournamentDataLoadError
+          title="Could not load match pairings"
+          message={
+            matchGroupsLoadError instanceof Error
+              ? matchGroupsLoadError.message
+              : 'Try logging in again.'
+          }
+          onRetry={() => void refetchMatchGroups()}
+          className="mb-3"
         />
       ) : null}
 

@@ -7,7 +7,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Trophy, Radio } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,17 +17,15 @@ import { formatTournamentDates, formatRoundPickerLabel } from '@/lib/tournament-
 import { formatClubTime } from '@/lib/club-timezone';
 import { TvSponsorCarousel, TvSponsorSlot } from '@/components/TvSponsorSlot';
 import { TournamentLiveMatchGrids } from '@/components/TournamentLiveMatchGrids';
-import { getTournamentById, getTournamentScores, getTournamentTeams } from '@/lib/tournament-service';
-import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
-import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
+import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
+import type { Tournament, TournamentPlayer, TournamentTeam } from '@/types';
 
 export default function TournamentTvDisplayScreen() {
   const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
-  const queryClient = useQueryClient();
 
   const displayEnabled = Boolean(id && token);
 
@@ -42,46 +40,15 @@ export default function TournamentTvDisplayScreen() {
     queryKey: ['tournamentDisplay', id, token],
     queryFn: () => fetchTournamentDisplay(id!, token!),
     enabled: displayEnabled,
-    staleTime: 15_000,
-    refetchInterval: 15_000,
+    staleTime: 10_000,
+    refetchInterval: 10_000,
   });
 
-  const matchDataEnabled = displayEnabled && Boolean(data);
-
-  const { data: tournament } = useQuery({
-    queryKey: ['tournament', id],
-    queryFn: () => getTournamentById(id!),
-    enabled: matchDataEnabled,
-    refetchInterval: 15_000,
-  });
-
-  const { data: teams = [] } = useQuery({
-    queryKey: ['tournamentTeams', id],
-    queryFn: () => getTournamentTeams(id!),
-    enabled: matchDataEnabled,
-    refetchInterval: 15_000,
-  });
-
-  const { data: scores = [], isFetching: scoresFetching } = useQuery({
-    queryKey: ['tournamentScores', id],
-    queryFn: () => getTournamentScores(id!),
-    enabled: matchDataEnabled,
-    refetchInterval: 15_000,
-  });
-
-  const { data: matchGroups = [], isFetching: groupsFetching } = useQuery({
-    queryKey: ['tournamentMatchGroups', id],
-    queryFn: () => getTournamentMatchGroups(id!),
-    enabled: matchDataEnabled,
-    refetchInterval: 15_000,
-  });
-
-  const { data: tournamentPlayers = [] } = useQuery({
-    queryKey: ['tournamentPlayers', id],
-    queryFn: () => getTournamentPlayers(id!),
-    enabled: matchDataEnabled,
-    refetchInterval: 15_000,
-  });
+  const tournament = data?.tournament as Tournament | undefined;
+  const teams = (data?.teams ?? []) as TournamentTeam[];
+  const tournamentPlayers = (data?.players ?? []) as TournamentPlayer[];
+  const scores = data?.scores ?? [];
+  const matchGroups = data?.matchGroups ?? [];
 
   const teamNameById = useMemo(
     () => Object.fromEntries(teams.map((team) => [team.id, team.team_name])),
@@ -109,17 +76,10 @@ export default function TournamentTvDisplayScreen() {
   );
 
   const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
-  const isMatchDataRefreshing = scoresFetching || groupsFetching;
 
   const handleRealtimeUpdate = useCallback(() => {
     void refetch();
-    if (!id) return;
-    void queryClient.invalidateQueries({ queryKey: ['tournamentScores', id] });
-    void queryClient.invalidateQueries({ queryKey: ['tournamentMatchGroups', id] });
-    void queryClient.invalidateQueries({ queryKey: ['tournamentTeams', id] });
-    void queryClient.invalidateQueries({ queryKey: ['tournamentPlayers', id] });
-    void queryClient.invalidateQueries({ queryKey: ['tournament', id] });
-  }, [refetch, queryClient, id]);
+  }, [refetch]);
 
   useTournamentDisplayRealtime(id, handleRealtimeUpdate);
 
@@ -157,7 +117,7 @@ export default function TournamentTvDisplayScreen() {
     );
   }
 
-  const hasMatchPoints = data.matchPoints.some((row) => row.matchPoints > 0);
+  const showMatchPoints = data.matchPoints.length > 0;
   const lastUpdated = formatClubTime(new Date(dataUpdatedAt).toISOString(), true);
 
   return (
@@ -196,7 +156,7 @@ export default function TournamentTvDisplayScreen() {
               <Text className="text-lime-400 text-[10px] font-semibold ml-1 uppercase tracking-wider">
                 Live
               </Text>
-              {isFetching || isMatchDataRefreshing ? (
+              {isFetching ? (
                 <ActivityIndicator size="small" color="#a3e635" style={{ marginLeft: 6 }} />
               ) : null}
             </View>
@@ -214,7 +174,7 @@ export default function TournamentTvDisplayScreen() {
             <Text className="text-white text-sm font-bold ml-1.5">Standings</Text>
           </View>
 
-          {hasMatchPoints ? (
+          {showMatchPoints ? (
             <View className="bg-[#141414] rounded-xl border border-lime-700/30 overflow-hidden mb-2">
               <Text className="text-neutral-500 text-[10px] uppercase tracking-widest px-3 pt-2 pb-1">
                 Match Points
@@ -260,10 +220,16 @@ export default function TournamentTvDisplayScreen() {
             </View>
           ) : null}
 
-          {!hasMatchPoints && !data.matchPlay && currentRoundMatchGroups.length === 0 ? (
+          {!showMatchPoints && !data.matchPlay && currentRoundMatchGroups.length === 0 ? (
             <View className="py-8 items-center bg-[#141414] rounded-xl border border-neutral-800">
               <Text className="text-neutral-500 text-sm">No scores yet</Text>
             </View>
+          ) : null}
+
+          {currentRoundMatchGroups.length > 0 && !data.matchPlay ? (
+            <Text className="text-neutral-600 text-[10px] mt-2 px-1 leading-4">
+              Team points update automatically as matches are completed.
+            </Text>
           ) : null}
         </View>
 
@@ -278,7 +244,7 @@ export default function TournamentTvDisplayScreen() {
             variant="tv-compact"
             roundNumber={displayRound}
             hideTitle
-            layout="tv-row"
+            layout="tv-carousel"
           />
         </View>
 

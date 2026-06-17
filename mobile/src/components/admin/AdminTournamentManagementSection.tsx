@@ -35,6 +35,7 @@ import { TournamentTeamsAssignTab } from '@/components/TournamentTeamsAssignTab'
 import { TournamentPublishTab } from '@/components/TournamentPublishTab';
 import { AdminTournamentFormatsTab } from '@/components/admin/AdminTournamentFormatsTab';
 import { TournamentMatchGroupsTab } from '@/components/TournamentMatchGroupsTab';
+import { TournamentDataLoadError } from '@/components/TournamentDataLoadError';
 import { TournamentHandicapFields } from '@/components/TournamentHandicapFields';
 import {
   buildSchedulePayload,
@@ -51,7 +52,8 @@ import {
   updateTournament,
   updateTournamentTeam,
 } from '@/lib/tournament-service';
-import { getTeamBySide, getTournamentMatchGroups } from '@/lib/tournament-match-service';
+import { getTeamBySide } from '@/lib/tournament-match-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import { pickTeamLogoImage, uploadTeamLogoImage } from '@/lib/team-logo-upload';
@@ -172,10 +174,13 @@ export function AdminTournamentManagementSection({
   const [handicapAllowancePct, setHandicapAllowancePct] = useState<HandicapAllowancePct>(100);
   const [matchUseNetScoring, setMatchUseNetScoring] = useState(false);
 
-  const { data: tournaments = [], isLoading: tournamentsLoading } = useQuery({
+  const { data: tournaments = [], isLoading: tournamentsLoading, isError: tournamentsError, error: tournamentsLoadError, refetch: refetchTournaments } = useQuery({
     queryKey: ['adminTournaments'],
     queryFn: async () => {
       const result = await getTournamentsResult({ limit: 30 });
+      if (result.error) {
+        throw new Error(result.error);
+      }
       return result.data ?? [];
     },
   });
@@ -213,11 +218,7 @@ export function AdminTournamentManagementSection({
     enabled: Boolean(tournamentId),
   });
 
-  const { data: matchGroups = [] } = useQuery({
-    queryKey: ['tournamentMatchGroups', tournamentId],
-    queryFn: () => getTournamentMatchGroups(tournamentId!),
-    enabled: Boolean(tournamentId),
-  });
+  const { data: matchGroups = [] } = useTournamentMatchGroupsQuery(tournamentId);
 
   const { data: tournamentPlayers = [] } = useQuery({
     queryKey: ['tournamentPlayers', tournamentId],
@@ -385,6 +386,19 @@ export function AdminTournamentManagementSection({
           <Text className="text-white text-xs font-semibold ml-1">New</Text>
         </Pressable>
       </View>
+
+      {tournamentsError ? (
+        <TournamentDataLoadError
+          title="Could not load events"
+          message={
+            tournamentsLoadError instanceof Error
+              ? tournamentsLoadError.message
+              : 'Try logging out of admin and signing in again.'
+          }
+          onRetry={() => void refetchTournaments()}
+          className="mb-4"
+        />
+      ) : null}
 
       <View className="flex-row flex-wrap mb-4">
         {tournaments.map((tournament) => (

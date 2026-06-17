@@ -165,12 +165,20 @@ export interface DisplayMatchPlaySummary {
 }
 
 export interface TournamentDisplayPayload {
-  tournament: {
-    id: string;
-    name: string;
-    start_date: string;
-    end_date: string;
-  };
+  tournament: Pick<
+    Tournament,
+    | 'id'
+    | 'name'
+    | 'start_date'
+    | 'end_date'
+    | 'round_schedule'
+    | 'rounds_count'
+    | 'match_use_net_scoring'
+  >;
+  teams: Pick<TournamentTeam, 'id' | 'tournament_id' | 'team_name' | 'side'>[];
+  players: Pick<TournamentPlayer, 'id' | 'tournament_id' | 'display_name'>[];
+  matchGroups: TournamentMatchGroup[];
+  scores: TournamentScore[];
   grossStandings: DisplayStandingRow[];
   netStandings: DisplayStandingRow[];
   matchPoints: DisplayMatchPointsRow[];

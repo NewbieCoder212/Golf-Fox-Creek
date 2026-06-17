@@ -18,9 +18,10 @@ import {
   deleteTournamentMatchGroup,
   getMatchHoleResultsForGroups,
   getTeamBySide,
-  getTournamentMatchGroups,
 } from '@/lib/tournament-match-service';
 import { appendPlayersToTeam, getTournamentPlayers } from '@/lib/tournament-player-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
+import { TournamentDataLoadError } from '@/components/TournamentDataLoadError';
 import { formatTeeAssignmentTime } from '@/lib/tournament-tee-service';
 import { getDayNumberForRound } from '@/lib/tournament-schedule';
 import { TournamentFormatRulesCard } from '@/components/TournamentFormatRulesCard';
@@ -49,6 +50,7 @@ import {
   type PairingRowDraft,
 } from '@/lib/tournament-pairings-board';
 import type { Tournament, TournamentTeam, TournamentTeamSide } from '@/types';
+import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
 import { cn } from '@/lib/cn';
 
 interface MemberOption {
@@ -158,7 +160,7 @@ export function TournamentMatchGroupsTab({
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: formatSettings } = useTournamentFormatsSettings();
-  const [roundNumber, setRoundNumber] = useState(1);
+  const [roundNumber, setRoundNumber] = useState(() => getActiveRoundNumber(tournament));
   const [draftRows, setDraftRows] = useState<PairingRowDraft[]>([]);
   const [activeSlot, setActiveSlot] = useState<ActiveSlot | null>(null);
   const [isDirty, setIsDirty] = useState(false);
@@ -181,10 +183,20 @@ export function TournamentMatchGroupsTab({
     [members, playerNameById]
   );
 
-  const { data: allMatchGroups = [] } = useQuery({
-    queryKey: ['tournamentMatchGroups', tournamentId],
-    queryFn: () => getTournamentMatchGroups(tournamentId),
-  });
+  const {
+    data: allMatchGroups = [],
+    isError: matchGroupsError,
+    error: matchGroupsLoadError,
+    isFetching: matchGroupsFetching,
+    refetch: refetchMatchGroups,
+  } = useTournamentMatchGroupsQuery(tournamentId);
+
+  useEffect(() => {
+    setRoundNumber(getActiveRoundNumber(tournament));
+    setActiveSlot(null);
+    setIsDirty(false);
+    setSaveError(null);
+  }, [tournamentId, tournament.start_date, tournament.round_schedule, tournament.rounds_count]);
 
   const matchGroups = useMemo(
     () => allMatchGroups.filter((group) => group.round_number === roundNumber),
@@ -279,6 +291,29 @@ export function TournamentMatchGroupsTab({
     });
     if (side) params.set('side', side);
     router.push(`/(tabs)/scorecard?${params.toString()}`);
+  };
+
+  const selectRound = (nextRound: number) => {
+    if (nextRound === roundNumber) return;
+    if (isDirty) {
+      Alert.alert(
+        'Unsaved tee times',
+        'Save or discard your changes before switching rounds.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          {
+            text: 'Switch anyway',
+            style: 'destructive',
+            onPress: () => {
+              setIsDirty(false);
+              setRoundNumber(nextRound);
+            },
+          },
+        ]
+      );
+      return;
+    }
+    setRoundNumber(nextRound);
   };
 
   const markDirty = () => setIsDirty(true);
@@ -527,7 +562,43 @@ export function TournamentMatchGroupsTab({
         </View>
       ) : null}
 
-      <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">Round</Text>
+      {matchGroupsError ? (
+        <TournamentDataLoadError
+          title="Could not load tee times"
+          message={
+            matchGroupsLoadError instanceof Error
+              ? matchGroupsLoadError.message
+              : 'Try logging in again or refresh.'
+          }
+          onRetry={() => void refetchMatchGroups()}
+          className="mb-4"
+        />
+      ) : null}
+
+      {isDirty ? (
+        <View className="bg-amber-950/30 border border-amber-700/40 rounded-xl px-4 py-3 mb-4">
+          <Text className="text-amber-300 text-sm font-semibold">Unsaved changes</Text>
+          <Text className="text-amber-200/80 text-xs mt-1">
+            Tap &quot;Save tee times &amp; pairings&quot; or tee times you added will not appear after
+            you leave this screen.
+          </Text>
+        </View>
+      ) : null}
+
+      {matchGroupsFetching && allMatchGroups.length === 0 ? (
+        <View className="py-6 items-center mb-4">
+          <ActivityIndicator color="#a3e635" />
+          <Text className="text-neutral-500 text-sm mt-2">Loading tee times…</Text>
+        </View>
+      ) : null}
+
+      <View className="flex-row items-center justify-between mb-2">
+        <Text className="text-neutral-500 text-xs uppercase tracking-widest">Round</Text>
+        <Text className="text-neutral-600 text-[10px]">
+          {matchGroups.length} tee time{matchGroups.length !== 1 ? 's' : ''} this round
+        </Text>
+      </View>
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
         <View className="flex-row gap-2">
           {Array.from({ length: tournament.rounds_count }, (_, i) => i + 1).map((n) => {
@@ -548,7 +619,7 @@ export function TournamentMatchGroupsTab({
             return (
               <Pressable
                 key={n}
-                onPress={() => setRoundNumber(n)}
+                onPress={() => selectRound(n)}
                 className={cn(
                   'px-4 py-2 rounded-lg border min-w-[140px]',
                   roundNumber === n

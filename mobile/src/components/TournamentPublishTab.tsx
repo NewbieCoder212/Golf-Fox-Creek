@@ -9,7 +9,7 @@ import {
   getAssignedPlayerIds,
   resolveParticipantEmail,
 } from '@/lib/tournament-participant-utils';
-import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 import { formatRoundPickerLabel } from '@/lib/tournament-labels';
 import type { Tournament, TournamentPlayer, TournamentTeam } from '@/types';
 import { webPressHandler } from '@/lib/web-press';
@@ -33,10 +33,7 @@ export function TournamentPublishTab({
 }: TournamentPublishTabProps) {
   const queryClient = useQueryClient();
 
-  const { data: matchGroups = [] } = useQuery({
-    queryKey: ['tournamentMatchGroups', tournamentId],
-    queryFn: () => getTournamentMatchGroups(tournamentId),
-  });
+  const { data: matchGroups = [] } = useTournamentMatchGroupsQuery(tournamentId);
 
   const memberEmailByUserId = Object.fromEntries(
     members.filter((m) => m.email).map((m) => [m.id, m.email as string])

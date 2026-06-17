@@ -28,8 +28,11 @@ displayRouter.get('/tournament/:id', async (c) => {
     start_date: string;
     end_date: string;
     display_token: string;
+    round_schedule: Array<{ formats: string[] }>;
+    rounds_count: number;
+    match_use_net_scoring: boolean;
   }>(
-    `/rest/v1/tournaments?id=eq.${tournamentId}&display_token=eq.${token}&select=id,name,start_date,end_date,display_token`
+    `/rest/v1/tournaments?id=eq.${tournamentId}&display_token=eq.${token}&select=id,name,start_date,end_date,display_token,round_schedule,rounds_count,match_use_net_scoring`
   );
 
   const tournament = tournaments[0];
@@ -37,14 +40,20 @@ displayRouter.get('/tournament/:id', async (c) => {
     return c.json({ error: 'Tournament not found or invalid token' }, 404);
   }
 
-  const [teams, players, scores, matchGroups, ads] = await Promise.all([
+  const matchGroupSelect =
+    'id,tournament_id,round_number,format,side_a_team_id,side_b_team_id,side_a_player_ids,side_b_player_ids,tee_time,starting_hole,group_number,notes,match_winner,match_points_a,match_points_b,created_at';
+
+  const [teams, players, scores, matchGroups, fullMatchGroups, ads] = await Promise.all([
     fetchRows(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_name,side`),
     fetchRows(`/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,tournament_id,display_name`),
     fetchRows(
-      `/rest/v1/tournament_scores?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_id,tournament_player_id,user_id,total_gross,total_net`
+      `/rest/v1/tournament_scores?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_id,tournament_player_id,user_id,match_group_id,round_number,hole_scores,total_gross,total_net,created_at&order=round_number.asc`
     ),
     fetchRows(
       `/rest/v1/tournament_match_groups?tournament_id=eq.${tournamentId}&select=tournament_id,side_a_team_id,side_b_team_id,match_points_a,match_points_b,match_winner`
+    ),
+    fetchRows(
+      `/rest/v1/tournament_match_groups?tournament_id=eq.${tournamentId}&select=${matchGroupSelect}&order=round_number.asc,tee_time.asc,group_number.asc`
     ),
     fetchRows(
       `/rest/v1/ad_placements?placement_type=eq.leaderboard&is_active=eq.true&order=created_at.desc&select=id,sponsor_name,placement_type,image_url,banner_text,action_url,display_position,is_active`
@@ -71,6 +80,8 @@ displayRouter.get('/tournament/:id', async (c) => {
     matchGroups: matchGroups as never,
     holeResults,
     ads: ads as never,
+    fullMatchGroups: fullMatchGroups as never,
+    fullScores: scores as never,
   });
 
   return c.json(payload);

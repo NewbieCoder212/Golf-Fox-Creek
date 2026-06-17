@@ -66,7 +66,7 @@ import { AdminAdPlacementsSection } from '@/components/admin/AdminAdPlacementsSe
 import { AdminTournamentManagementSection } from '@/components/admin/AdminTournamentManagementSection';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import { buildMatchPointsLeaderboard, getTournamentTeams } from '@/lib/tournament-service';
-import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 
 type AdminSection =
   | 'main'
@@ -120,10 +120,13 @@ export default function AdminDashboardScreen() {
 
   const pendingReportsCount = courseReports?.filter((r) => r.status === 'pending').length ?? 0;
 
-  const { data: adminTournaments = [] } = useQuery({
+  const { data: adminTournaments = [], isError: adminTournamentsError, error: adminTournamentsLoadError } = useQuery({
     queryKey: ['adminLeaderboardTournament'],
     queryFn: async () => {
-      const result = await getTournamentsResult({ limit: 1 });
+      const result = await getTournamentsResult({ limit: 30 });
+      if (result.error) {
+        throw new Error(result.error);
+      }
       return result.data ?? [];
     },
     staleTime: 1000 * 60 * 2,
@@ -138,11 +141,8 @@ export default function AdminDashboardScreen() {
     staleTime: 1000 * 60 * 2,
   });
 
-  const { data: adminMatchGroups = [] } = useQuery({
-    queryKey: ['tournamentMatchGroups', adminLeaderboardTournamentId],
-    queryFn: () => getTournamentMatchGroups(adminLeaderboardTournamentId!),
+  const { data: adminMatchGroups = [] } = useTournamentMatchGroupsQuery(adminLeaderboardTournamentId, {
     enabled: Boolean(adminLeaderboardTournamentId),
-    staleTime: 1000 * 60 * 2,
   });
 
   const adminTeamStats = buildMatchPointsLeaderboard(adminTeams, adminMatchGroups).map((row) => ({

@@ -12,128 +12,101 @@ import type {
 } from '@/types';
 import { deleteTournamentScoresForMatchRound } from './tournament-service';
 import { computeMatchHoleResults, computeMatchPoints } from './tournament-match-scoring';
-import { useAdminAuthStore } from './admin-auth-store';
-import { useMemberAuthStore } from './member-auth-store';
+import {
+  getManagerAccessToken,
+  requireData,
+  tournamentSupabaseRequest,
+  type TournamentServiceResult,
+  unwrapList,
+} from './tournament-supabase';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-
-const isConfigured = () => Boolean(supabaseUrl && supabaseAnonKey);
-
-function getAccessToken(): string {
-  return (
-    useMemberAuthStore.getState().accessToken ??
-    useAdminAuthStore.getState().accessToken ??
-    supabaseAnonKey
-  );
-}
-
-async function supabaseRequest<T>(
-  table: string,
-  options: {
-    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
-    query?: Record<string, string>;
-    body?: Record<string, unknown> | Record<string, unknown>[];
-    single?: boolean;
-  } = {}
-): Promise<T | null> {
-  if (!isConfigured()) return null;
-
-  const { method = 'GET', query = {}, body, single = false } = options;
-  const url = new URL(`${supabaseUrl}/rest/v1/${table}`);
-  Object.entries(query).forEach(([key, value]) => url.searchParams.append(key, value));
-
-  const headers: Record<string, string> = {
-    apikey: supabaseAnonKey,
-    Authorization: `Bearer ${getAccessToken()}`,
-    'Content-Type': 'application/json',
-    Prefer: 'return=representation',
-  };
-
-  if (single) headers['Accept'] = 'application/vnd.pgrst.object+json';
-
-  try {
-    const response = await fetch(url.toString(), {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`[TournamentMatch] Error ${response.status}:`, errorText);
-      return null;
-    }
-
-    if (response.status === 204) {
-      return [] as T;
-    }
-
-    return response.json();
-  } catch (err) {
-    console.log('[TournamentMatch] Request failed:', err);
-    return null;
-  }
-}
-
-function requireMatchMutation<T>(result: T | null, action: string): T {
-  if (result === null) {
-    throw new Error(`Failed to ${action}. Check database permissions or log in again.`);
-  }
-  return result;
-}
-
-export async function getTournamentMatchGroups(
+function matchGroupsQuery(
   tournamentId: string,
   roundNumber?: number
-): Promise<TournamentMatchGroup[]> {
+): Record<string, string> {
   const query: Record<string, string> = {
     tournament_id: `eq.${tournamentId}`,
     order: 'round_number.asc,tee_time.asc,group_number.asc',
   };
-
   if (roundNumber !== undefined) {
     query.round_number = `eq.${roundNumber}`;
   }
+  return query;
+}
 
-  const data = await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', { query });
-  return data ?? [];
+export async function getTournamentMatchGroupsResult(
+  tournamentId: string,
+  roundNumber?: number
+): Promise<TournamentServiceResult<TournamentMatchGroup[]>> {
+  return tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+    query: matchGroupsQuery(tournamentId, roundNumber),
+  });
+}
+
+/** Throws on load failure — use in React Query or try/catch. Never returns [] on error. */
+export async function getTournamentMatchGroups(
+  tournamentId: string,
+  roundNumber?: number
+): Promise<TournamentMatchGroup[]> {
+  const result = await getTournamentMatchGroupsResult(tournamentId, roundNumber);
+  return requireData(result, 'Could not load match pairings');
+}
+
+function requireMatchMutation<T>(result: TournamentServiceResult<T>, action: string): T {
+  return requireData(result, `Failed to ${action}. Check database permissions or log in again.`);
 }
 
 export async function saveTournamentMatchGroup(
   group: TournamentMatchGroupInsert
 ): Promise<TournamentMatchGroup | null> {
-  const existing = await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
-    query: {
-      tournament_id: `eq.${group.tournament_id}`,
-      round_number: `eq.${group.round_number}`,
-      group_number: `eq.${group.group_number ?? 1}`,
-    },
-  });
+  const token = getManagerAccessToken();
+  const existing = await tournamentSupabaseRequest<TournamentMatchGroup[]>(
+    'tournament_match_groups',
+    {
+      query: {
+        tournament_id: `eq.${group.tournament_id}`,
+        round_number: `eq.${group.round_number}`,
+        group_number: `eq.${group.group_number ?? 1}`,
+      },
+      accessToken: token,
+    }
+  );
 
-  if (existing?.[0]) {
-    const result = await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
-      method: 'PATCH',
-      query: { id: `eq.${existing[0].id}` },
-      body: group as unknown as Record<string, unknown>,
-    });
-    return result?.[0] ?? null;
+  if (existing.error) {
+    console.log('[TournamentMatch] lookup existing group:', existing.error);
+    return null;
   }
 
-  const result = await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+  if (existing.data?.[0]) {
+    const result = await tournamentSupabaseRequest<TournamentMatchGroup[]>(
+      'tournament_match_groups',
+      {
+        method: 'PATCH',
+        query: { id: `eq.${existing.data[0].id}` },
+        body: group as unknown as Record<string, unknown>,
+        accessToken: token,
+      }
+    );
+    if (result.error) return null;
+    return result.data?.[0] ?? null;
+  }
+
+  const result = await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
     method: 'POST',
     body: group as unknown as Record<string, unknown>,
+    accessToken: token,
   });
-
-  return result?.[0] ?? null;
+  if (result.error) return null;
+  return result.data?.[0] ?? null;
 }
 
 export async function deleteTournamentMatchGroup(groupId: string): Promise<boolean> {
-  const result = await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+  const result = await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
     method: 'DELETE',
     query: { id: `eq.${groupId}` },
+    accessToken: getManagerAccessToken(),
   });
-  return result !== null;
+  return result.error === null;
 }
 
 export async function getMatchHoleResultsForGroups(
@@ -142,28 +115,34 @@ export async function getMatchHoleResultsForGroups(
 ): Promise<TournamentMatchHoleResult[]> {
   if (matchGroupIds.length === 0) return [];
 
-  const data = await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
-    query: {
-      match_group_id: `in.(${matchGroupIds.join(',')})`,
-      round_number: `eq.${roundNumber}`,
-      order: 'match_group_id.asc,hole.asc',
-    },
-  });
-  return data ?? [];
+  const result = await tournamentSupabaseRequest<TournamentMatchHoleResult[]>(
+    'tournament_match_hole_results',
+    {
+      query: {
+        match_group_id: `in.(${matchGroupIds.join(',')})`,
+        round_number: `eq.${roundNumber}`,
+        order: 'match_group_id.asc,hole.asc',
+      },
+    }
+  );
+  return unwrapList(result);
 }
 
 export async function getMatchHoleResults(
   matchGroupId: string,
   roundNumber: number
 ): Promise<TournamentMatchHoleResult[]> {
-  const data = await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
-    query: {
-      match_group_id: `eq.${matchGroupId}`,
-      round_number: `eq.${roundNumber}`,
-      order: 'hole.asc',
-    },
-  });
-  return data ?? [];
+  const result = await tournamentSupabaseRequest<TournamentMatchHoleResult[]>(
+    'tournament_match_hole_results',
+    {
+      query: {
+        match_group_id: `eq.${matchGroupId}`,
+        round_number: `eq.${roundNumber}`,
+        order: 'hole.asc',
+      },
+    }
+  );
+  return unwrapList(result);
 }
 
 export async function getMatchHoleResultsForTournament(
@@ -173,13 +152,16 @@ export async function getMatchHoleResultsForTournament(
   if (groups.length === 0) return [];
 
   const groupIds = groups.map((g) => g.id).join(',');
-  const data = await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
-    query: {
-      match_group_id: `in.(${groupIds})`,
-      order: 'round_number.asc,hole.asc',
-    },
-  });
-  return data ?? [];
+  const result = await tournamentSupabaseRequest<TournamentMatchHoleResult[]>(
+    'tournament_match_hole_results',
+    {
+      query: {
+        match_group_id: `in.(${groupIds})`,
+        order: 'round_number.asc,hole.asc',
+      },
+    }
+  );
+  return unwrapList(result);
 }
 
 export async function syncMatchHoleResults(params: {
@@ -197,13 +179,16 @@ export async function syncMatchHoleResults(params: {
     { useNetScoring: params.useNetScoring ?? false }
   );
 
-  await requireMatchMutation(
-    await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+  const token = getManagerAccessToken();
+
+  requireMatchMutation(
+    await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
       method: 'DELETE',
       query: {
         match_group_id: `eq.${params.matchGroup.id}`,
         round_number: `eq.${params.roundNumber}`,
       },
+      accessToken: token,
     }),
     'clear prior match hole results'
   );
@@ -211,9 +196,10 @@ export async function syncMatchHoleResults(params: {
   if (rows.length === 0) return [];
 
   const saved = requireMatchMutation(
-    await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+    await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
       method: 'POST',
       body: rows as unknown as Record<string, unknown>[],
+      accessToken: token,
     }),
     'save match hole results'
   );
@@ -240,7 +226,7 @@ export async function computeAndSaveMatchResults(params: {
   const points = computeMatchPoints(params);
 
   const result = requireMatchMutation(
-    await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+    await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
       method: 'PATCH',
       query: { id: `eq.${params.matchGroup.id}` },
       body: {
@@ -248,6 +234,7 @@ export async function computeAndSaveMatchResults(params: {
         match_points_a: points.match_points_a,
         match_points_b: points.match_points_b,
       },
+      accessToken: getManagerAccessToken(),
     }),
     'update match points'
   );
@@ -265,20 +252,23 @@ export async function clearTournamentMatchRound(params: {
   );
   if (!scoreResult.success) return scoreResult;
 
+  const token = getManagerAccessToken();
+
   try {
     requireMatchMutation(
-      await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+      await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
         method: 'DELETE',
         query: {
           match_group_id: `eq.${params.matchGroupId}`,
           round_number: `eq.${params.roundNumber}`,
         },
+        accessToken: token,
       }),
       'clear match hole results'
     );
 
     requireMatchMutation(
-      await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+      await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
         method: 'PATCH',
         query: { id: `eq.${params.matchGroupId}` },
         body: {
@@ -286,6 +276,7 @@ export async function clearTournamentMatchRound(params: {
           match_points_a: 0,
           match_points_b: 0,
         },
+        accessToken: token,
       }),
       'reset match results'
     );

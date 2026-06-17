@@ -34,13 +34,68 @@ export interface DisplayMatchPlaySummary {
   ties: number;
 }
 
+export interface DisplayTournamentMeta {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  round_schedule: Array<{ formats: string[] }>;
+  rounds_count: number;
+  match_use_net_scoring: boolean;
+}
+
+export interface DisplayTeamRow {
+  id: string;
+  tournament_id: string;
+  team_name: string;
+  side: string | null;
+}
+
+export interface DisplayPlayerRow {
+  id: string;
+  tournament_id: string;
+  display_name: string;
+}
+
+export interface DisplayMatchGroupRow {
+  id: string;
+  tournament_id: string;
+  round_number: number;
+  format: string;
+  side_a_team_id: string;
+  side_b_team_id: string;
+  side_a_player_ids: string[];
+  side_b_player_ids: string[];
+  tee_time: string;
+  starting_hole: number;
+  group_number: number;
+  notes: string | null;
+  match_winner: 'side_a' | 'side_b' | 'tie' | null;
+  match_points_a: number;
+  match_points_b: number;
+  created_at: string;
+}
+
+export interface DisplayScoreRow {
+  id: string;
+  tournament_id: string;
+  team_id: string | null;
+  user_id: string | null;
+  tournament_player_id: string | null;
+  match_group_id: string | null;
+  round_number: number;
+  hole_scores: Array<{ hole: number; gross?: number; net?: number; entered?: boolean }>;
+  total_gross: number;
+  total_net: number;
+  created_at: string;
+}
+
 export interface TournamentDisplayPayload {
-  tournament: {
-    id: string;
-    name: string;
-    start_date: string;
-    end_date: string;
-  };
+  tournament: DisplayTournamentMeta;
+  teams: DisplayTeamRow[];
+  players: DisplayPlayerRow[];
+  matchGroups: DisplayMatchGroupRow[];
+  scores: DisplayScoreRow[];
   grossStandings: DisplayStandingRow[];
   netStandings: DisplayStandingRow[];
   matchPoints: DisplayMatchPointsRow[];
@@ -60,6 +115,9 @@ type TournamentRow = {
   start_date: string;
   end_date: string;
   display_token: string;
+  round_schedule: Array<{ formats: string[] }>;
+  rounds_count: number;
+  match_use_net_scoring: boolean;
 };
 
 type TeamRow = {
@@ -237,8 +295,11 @@ export function buildTournamentDisplayPayload(params: {
   matchGroups: MatchGroupRow[];
   holeResults: HoleResultRow[];
   ads: AdRow[];
+  fullMatchGroups?: DisplayMatchGroupRow[];
+  fullScores?: DisplayScoreRow[];
 }): TournamentDisplayPayload {
-  const { tournament, teams, players, scores, matchGroups, holeResults, ads } = params;
+  const { tournament, teams, players, scores, matchGroups, holeResults, ads, fullMatchGroups, fullScores } =
+    params;
   const nameByKey = buildNameMap(teams, players);
 
   const sideATeam = teams.find((t) => t.side === 'side_a');
@@ -251,7 +312,23 @@ export function buildTournamentDisplayPayload(params: {
       name: tournament.name,
       start_date: tournament.start_date,
       end_date: tournament.end_date,
+      round_schedule: tournament.round_schedule,
+      rounds_count: tournament.rounds_count,
+      match_use_net_scoring: tournament.match_use_net_scoring,
     },
+    teams: teams.map((team) => ({
+      id: team.id,
+      tournament_id: team.tournament_id,
+      team_name: team.team_name,
+      side: team.side,
+    })),
+    players: players.map((player) => ({
+      id: player.id,
+      tournament_id: player.tournament_id,
+      display_name: player.display_name,
+    })),
+    matchGroups: fullMatchGroups ?? [],
+    scores: fullScores ?? [],
     grossStandings: buildLeaderboard(scores, nameByKey, 'gross'),
     netStandings: buildLeaderboard(scores, nameByKey, 'net'),
     matchPoints: buildMatchPoints(teams, matchGroups),

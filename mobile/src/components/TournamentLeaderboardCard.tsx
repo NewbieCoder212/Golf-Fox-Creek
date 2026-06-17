@@ -10,7 +10,7 @@ import {
   getTournamentById,
   getTournamentTeams,
 } from '@/lib/tournament-service';
-import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 import { formatTournamentDates } from '@/lib/tournament-labels';
 import { cn } from '@/lib/cn';
 import { useTranslations } from '@/lib/language-store';
@@ -41,12 +41,10 @@ export function TournamentLeaderboardCard({
     enabled: Boolean(tournamentId),
   });
 
-  const { data: matchGroups = [], isFetching: groupsFetching } = useQuery({
-    queryKey: ['tournamentMatchGroups', tournamentId],
-    queryFn: () => getTournamentMatchGroups(tournamentId),
-    enabled: Boolean(tournamentId),
-    refetchInterval: hubEmbedded ? 30_000 : 15_000,
-  });
+  const { data: matchGroups = [], isFetching: groupsFetching } = useTournamentMatchGroupsQuery(
+    tournamentId,
+    { refetchInterval: hubEmbedded ? 30_000 : 15_000 }
+  );
 
   const standings = buildMatchPointsLeaderboard(teams, matchGroups);
   const teamStats = standings.map((row) => ({

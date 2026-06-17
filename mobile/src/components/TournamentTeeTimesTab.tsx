@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { Clock } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
 
-import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
 import { formatTeeAssignmentTime } from '@/lib/tournament-tee-service';
+import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
+import { TournamentDataLoadError } from '@/components/TournamentDataLoadError';
 import {
   formatRoundPickerLabel,
   getRoundFormat,
@@ -170,10 +170,14 @@ export function TournamentTeeTimesTab({
     defaultRoundNumber ?? getActiveRoundNumber(tournament)
   );
 
-  const { data: fetchedGroups = [], isPending } = useQuery({
-    queryKey: ['tournamentMatchGroups', tournamentId],
-    queryFn: () => getTournamentMatchGroups(tournamentId),
-    enabled: Boolean(tournamentId) && matchGroupsProp === undefined,
+  const {
+    data: fetchedGroups = [],
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useTournamentMatchGroupsQuery(tournamentId, {
+    enabled: matchGroupsProp === undefined,
     refetchInterval: 30_000,
   });
 
@@ -183,7 +187,7 @@ export function TournamentTeeTimesTab({
   const { data: formatsSettings } = useTournamentFormatsSettings();
   const roundFormat = getRoundFormat(tournament, roundNumber);
   const isSinglesRound = isSinglesFormat(roundFormat);
-  const roundFormatDef = resolveFormatDefinition(formatsSettings, roundFormat);
+  const roundFormatDef = resolveFormatDefinition(roundFormat, formatsSettings);
   const playersPerMatch =
     roundFormatDef?.default_players_per_match ?? tournament.players_per_match ?? 2;
 
@@ -200,6 +204,18 @@ export function TournamentTeeTimesTab({
     return (
       <View className="py-16 items-center">
         <ActivityIndicator color="#a3e635" />
+      </View>
+    );
+  }
+
+  if (isError && matchGroupsProp === undefined) {
+    return (
+      <View className="mx-5 mt-2">
+        <TournamentDataLoadError
+          title="Could not load tee times"
+          message={error instanceof Error ? error.message : 'Try logging in again.'}
+          onRetry={() => void refetch()}
+        />
       </View>
     );
   }

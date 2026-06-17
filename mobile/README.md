@@ -369,7 +369,11 @@ This app is configured for web deployment at **foxcreek.golf**.
 
 ### How to Deploy
 
-1. **Export the web build:**
+1. **Set production environment variables** in your hosting dashboard (required for score sync, TV display API, and invites):
+   - `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+   - `EXPO_PUBLIC_VIBECODE_BACKEND_URL` — your deployed Hono API base URL (e.g. `https://your-app.vibecode.run`). Without this, the web build falls back to direct Supabase for match score saves on foxcreek.golf.
+
+2. **Export the web build:**
    ```bash
    bunx expo export --platform web
    ```

@@ -1,7 +1,5 @@
 import type { TournamentDisplayPayload } from '@/types';
-
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL ?? 'http://localhost:3000';
+import { getBackendUrl } from '@/lib/backend-url';
 
 const WEB_APP_URL =
   process.env.EXPO_PUBLIC_WEB_APP_URL?.replace(/\/$/, '') ??
@@ -22,7 +20,7 @@ export async function fetchTournamentDisplay(
 ): Promise<TournamentDisplayPayload> {
   const params = new URLSearchParams({ token });
   const response = await fetch(
-    `${BACKEND_URL}/api/display/tournament/${tournamentId}?${params.toString()}`
+    `${getBackendUrl()}/api/display/tournament/${tournamentId}?${params.toString()}`
   );
 
   if (!response.ok) {

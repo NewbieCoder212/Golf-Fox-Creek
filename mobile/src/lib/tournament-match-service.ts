@@ -10,6 +10,7 @@ import type {
   TournamentFormat,
   TournamentScore,
 } from '@/types';
+import { useMemberAuthStore } from './member-auth-store';
 import { deleteTournamentScoresForMatchRound } from './tournament-service';
 import { computeMatchHoleResults, computeMatchPoints } from './tournament-match-scoring';
 import {
@@ -179,7 +180,8 @@ export async function syncMatchHoleResults(params: {
     { useNetScoring: params.useNetScoring ?? false }
   );
 
-  const token = getManagerAccessToken();
+  const token =
+    getManagerAccessToken() ?? useMemberAuthStore.getState().accessToken;
 
   requireMatchMutation(
     await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
@@ -224,6 +226,8 @@ export async function computeAndSaveMatchResults(params: {
   useNetScoring?: boolean;
 }): Promise<TournamentMatchGroup | null> {
   const points = computeMatchPoints(params);
+  const token =
+    getManagerAccessToken() ?? useMemberAuthStore.getState().accessToken;
 
   const result = requireMatchMutation(
     await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
@@ -234,7 +238,7 @@ export async function computeAndSaveMatchResults(params: {
         match_points_a: points.match_points_a,
         match_points_b: points.match_points_b,
       },
-      accessToken: getManagerAccessToken(),
+      accessToken: token,
     }),
     'update match points'
   );
@@ -252,7 +256,8 @@ export async function clearTournamentMatchRound(params: {
   );
   if (!scoreResult.success) return scoreResult;
 
-  const token = getManagerAccessToken();
+  const token =
+    getManagerAccessToken() ?? useMemberAuthStore.getState().accessToken;
 
   try {
     requireMatchMutation(

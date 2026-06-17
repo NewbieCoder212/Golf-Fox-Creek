@@ -37,7 +37,7 @@ export function HubAdFeedCards() {
       <SponsorBanner
         ads={cardAds}
         placementType="member_hub"
-        variant="card"
+        variant="auto"
         className="mb-3"
       />
     </HubSection>

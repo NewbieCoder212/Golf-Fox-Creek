@@ -99,9 +99,14 @@ export interface TeeTime {
 export type AdPlacementType =
   | 'scorecard_header'
   | 'hole_sponsor'
+  | 'hole_sponsor_secondary'
   | 'the_turn'
   | 'leaderboard'
-  | 'member_hub';
+  | 'member_hub'
+  | 'tournament_detail'
+  | 'tournament_tab_schedule'
+  | 'tournament_tab_match'
+  | 'tournament_tab_teams';
 
 export type AdDisplayPosition = 'header_left' | 'sidebar' | 'footer';
 

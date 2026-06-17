@@ -25,20 +25,29 @@ import {
   createAdPlacementAuth,
   deleteAdPlacementAuth,
   getAllAdPlacements,
+  isHoleSponsorPlacement,
   PLACEMENT_TYPE_LABELS,
   DISPLAY_POSITION_LABELS,
   IMAGE_LAYOUT_LABELS,
   updateAdPlacementAuth,
   type AdPlacementInsert,
 } from '@/lib/ad-placement-service';
+import { AdPlacementLivePreview } from '@/components/admin/AdPlacementLivePreview';
+import { AdPlacementHelpGuide } from '@/components/admin/AdPlacementHelpGuide';
+import { useAdDraftPreviewStore } from '@/lib/ad-draft-preview-store';
 import type { AdPlacement, AdDisplayPosition, AdImageLayout, AdPlacementType, AdRotationSettings } from '@/types';
 
 const PLACEMENT_TYPES: AdPlacementType[] = [
   'scorecard_header',
   'hole_sponsor',
+  'hole_sponsor_secondary',
   'the_turn',
   'leaderboard',
   'member_hub',
+  'tournament_detail',
+  'tournament_tab_schedule',
+  'tournament_tab_match',
+  'tournament_tab_teams',
 ];
 
 const DISPLAY_POSITIONS: AdDisplayPosition[] = ['header_left', 'sidebar', 'footer'];
@@ -98,6 +107,12 @@ export function AdminAdPlacementsSection({
       onFormOpened?.();
     }
   }, [initialOpenForm, onFormOpened]);
+
+  useEffect(() => {
+    if (showForm) {
+      useAdDraftPreviewStore.getState().setDraft(form);
+    }
+  }, [form, showForm]);
 
   const { data: ads = [], isLoading } = useQuery({
     queryKey: ['adminAdPlacements'],
@@ -236,8 +251,8 @@ export function AdminAdPlacementsSection({
       Alert.alert('Missing fields', 'Sponsor name, image URL, and banner text are required.');
       return;
     }
-    if (form.placement_type === 'hole_sponsor' && !form.hole_number) {
-      Alert.alert('Hole required', 'Pick a hole number for hole sponsor ads.');
+    if (isHoleSponsorPlacement(form.placement_type) && !form.hole_number) {
+      Alert.alert('Hole required', 'Pick a hole number (1–18) for match hole ads.');
       return;
     }
 
@@ -260,14 +275,17 @@ export function AdminAdPlacementsSection({
       <Animated.View entering={FadeInDown.delay(100).duration(500)}>
         <Text className="text-white text-xl font-bold mb-2">Sponsor Ads</Text>
         <Text className="text-neutral-500 text-sm mb-4">
-          Manage banners on scorecards, The Turn, and TV leaderboard displays
+          Manage sponsor ads across the home screen, events, scorecards, and TV display. Use the live
+          preview when creating ads to pick the right placement and image shape.
         </Text>
 
         <View className="bg-[#141414] rounded-2xl border border-neutral-800 p-4 mb-6">
           <Text className="text-white font-semibold mb-1">Ad Rotation</Text>
           <Text className="text-neutral-500 text-sm mb-4 leading-5">
             Turn on rotation, then create multiple active ads with the same placement (and hole /
-            TV position when applicable). Members will see sponsors cycle automatically.
+            TV position when applicable). Each ad renders in the layout that fits its image shape
+            (Banner, Portrait, or Square). Home uses two streams: banners in the footer, flyers in
+            the feed.
           </Text>
 
           <View className="flex-row items-center justify-between py-2 mb-3">
@@ -345,6 +363,13 @@ export function AdminAdPlacementsSection({
               {editingId ? 'Edit Ad' : 'Create Ad'}
             </Text>
 
+            <AdPlacementHelpGuide
+              form={form}
+              onApplyRecommendedLayout={(layout) =>
+                setForm((current) => ({ ...current, image_layout: layout }))
+              }
+            />
+
             <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
               Placement
             </Text>
@@ -356,7 +381,7 @@ export function AdminAdPlacementsSection({
                     setForm((f) => ({
                       ...f,
                       placement_type: type,
-                      hole_number: type === 'hole_sponsor' ? f.hole_number ?? 1 : null,
+                      hole_number: isHoleSponsorPlacement(type) ? f.hole_number ?? 1 : null,
                       display_position: type === 'leaderboard' ? f.display_position ?? 'sidebar' : null,
                     }))
                   }
@@ -379,7 +404,8 @@ export function AdminAdPlacementsSection({
               ))}
             </View>
             <Text className="text-neutral-600 text-xs mb-4 leading-5">
-              Member Hub = sticky footer on Home tab. Scorecard Header = top banner on Scorecard tab.
+              Member Hub: Banner = home footer; Portrait/Square = home feed. Event · Schedule /
+              Match / Teams = one ad slot per tab. Event Header = optional ad above all tabs.
             </Text>
 
             <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
@@ -413,7 +439,7 @@ export function AdminAdPlacementsSection({
               card in the home feed). Square = social-style graphics.
             </Text>
 
-            {form.placement_type === 'hole_sponsor' && (
+            {isHoleSponsorPlacement(form.placement_type) && (
               <View className="mb-4">
                 <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
                   Hole Number
@@ -480,16 +506,7 @@ export function AdminAdPlacementsSection({
             <Field label="Banner Text" value={form.banner_text} onChangeText={(v) => setForm((f) => ({ ...f, banner_text: v }))} placeholder="Show this screen for 10% off!" multiline />
             <Field label="Action URL (optional)" value={form.action_url ?? ''} onChangeText={(v) => setForm((f) => ({ ...f, action_url: v }))} placeholder="https://..." />
 
-            {form.image_url.trim() ? (
-              <Image
-                source={{ uri: form.image_url.trim() }}
-                className="w-full rounded-xl mb-4 bg-white"
-                style={{
-                  height: form.image_layout === 'portrait' ? 220 : form.image_layout === 'square' ? 160 : 96,
-                }}
-                resizeMode="contain"
-              />
-            ) : null}
+            <AdPlacementLivePreview form={form} />
 
             <View className="flex-row items-center justify-between py-3 mb-4">
               <Text className="text-white font-medium">Active</Text>

@@ -49,6 +49,8 @@ import {
   resolveTournamentScorecardRoute,
 } from '@/lib/tournament-scorecard-routing';
 import { cn } from '@/lib/cn';
+import { TournamentTabAdBanner } from '@/components/TournamentTabAdBanner';
+import { SponsorBanner } from '@/components/SponsorBanner';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
 import { TournamentTeamsRosterTab } from '@/components/TournamentTeamsRosterTab';
 
@@ -189,180 +191,196 @@ export default function TournamentDetailScreen() {
 
   return (
     <View className="flex-1 bg-[#0c0c0c]">
-      <View
-        style={{ paddingTop: insets.top, flexShrink: 0 }}
-        className="bg-[#141414] border-b border-neutral-800"
-      >
-        <View className="flex-row items-center px-4 py-2">
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.back();
-            }}
-            className="flex-row items-center active:opacity-60 py-1"
-          >
-            <ChevronLeft size={24} color="#a3e635" />
-            <Text className="text-lime-400 text-base font-medium ml-1">Back</Text>
-          </Pressable>
-        </View>
-
-        <View className="px-5 pb-4">
-          {myMatchAssignment ? (
-            <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-3">
-              <Text className="text-lime-400 text-sm font-semibold">
-                Your group · Tee {formatTeeTimeLabel(myMatchAssignment.group.tee_time)} · Hole{' '}
-                {myMatchAssignment.group.starting_hole}
-              </Text>
-              <Text className="text-neutral-500 text-xs mt-1">
-                Scorecard opens with your foursome and pairings
-              </Text>
-            </View>
-          ) : null}
-          <Pressable
-            onPress={handleEnterScores}
-            disabled={!canEnterScores || isOpeningScorecard}
-            className={cn(
-              'flex-row items-center justify-center rounded-xl py-4',
-              canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
-            )}
-          >
-            {isOpeningScorecard ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <ClipboardList size={20} color="#fff" />
-                <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
-              </>
-            )}
-          </Pressable>
-        </View>
-
-        <View className="px-5 pb-3">
-          <Text className="text-white text-xl font-bold">{tournament.name}</Text>
-          <Text className="text-neutral-400 text-sm mt-0.5">
-            {formatTournamentDates(tournament.start_date, tournament.end_date)}
-          </Text>
-        </View>
-
-        {isManager && tournament.display_token ? (
-          <View className="px-5 pb-3">
-            <TournamentCopyTvLinkButton
-              tournamentId={tournament.id}
-              displayToken={tournament.display_token}
-              compact
-            />
-          </View>
-        ) : null}
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="mx-5 mb-3"
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={{ gap: 8 }}
-        >
-          {[
-            { key: 'schedule' as const, label: 'Schedule', Icon: Clock },
-            { key: 'match' as const, label: 'Match', Icon: Swords },
-            ...(isManager
-              ? [{ key: 'matches' as const, label: 'Matches', Icon: ClipboardList }]
-              : []),
-            { key: 'teams' as const, label: 'Teams', Icon: Users },
-          ].map(({ key, label, Icon }) => (
-            <Pressable
-              key={key}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setTab(key);
-              }}
-              className={cn(
-                'px-4 py-2.5 rounded-lg border flex-row items-center gap-1.5',
-                tab === key
-                  ? 'bg-lime-600 border-lime-600'
-                  : 'bg-[#0c0c0c] border-neutral-800'
-              )}
-            >
-              <Icon size={16} color={tab === key ? '#fff' : '#737373'} />
-              <Text
-                className={cn(
-                  'text-xs font-medium',
-                  tab === key ? 'text-white' : 'text-neutral-500'
-                )}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-
-      {tab === 'teams' ? (
-        <View
-          className="flex-1"
-          style={{ flex: 1, minHeight: 0, paddingBottom: insets.bottom + 8 }}
-        >
-          <TournamentTeamsRosterTab
-            tournamentId={id!}
-            tournament={tournament}
-            teams={teams}
-            members={members}
-            tournamentPlayers={tournamentPlayers}
-            playerNameById={playerNameById}
-            isManager={isManager}
-            userId={user?.id}
-            accessToken={managerAccessToken}
-            layout="hero"
-            introText={
-              isManager
-                ? 'Managers can also build rosters from Admin → Tournaments → Teams. No onboarding emails are sent from this screen.'
-                : undefined
-            }
-          />
-        </View>
-      ) : (
       <ScrollView
         className="flex-1"
-        style={{ flex: 1, minHeight: 0 }}
+        stickyHeaderIndices={[1]}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#a3e635" />
         }
-        contentContainerStyle={{
-          paddingTop: 16,
-          paddingBottom: insets.bottom + 24,
-        }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
       >
-        {tab === 'schedule' ? (
-          <TournamentTeeTimesTab
-            tournamentId={id!}
-            tournament={tournament}
-            teams={teams}
-            playerNameById={playerNameById}
-            matchGroups={matchGroups}
-            defaultRoundNumber={activeRoundNumber}
-          />
-        ) : tab === 'match' && user?.id ? (
-          <TournamentMyMatchTab
-            tournamentId={id!}
-            userId={user.id}
-            tournament={tournament}
-            teams={teams}
-            matchGroups={matchGroups}
-            rosterPlayerIds={myRosterPlayerIds}
-            playerNameById={playerNameById}
-            defaultRoundNumber={activeRoundNumber}
-          />
-        ) : tab === 'matches' && isManager ? (
-          <TournamentMatchGroupsTab
-            tournamentId={id!}
-            tournament={tournament}
-            teams={teams}
-            members={members}
-            playerNameById={playerNameById}
-            isManager={isManager}
-          />
-        ) : null}
+        <View
+          style={{ paddingTop: insets.top }}
+          className="bg-[#141414] border-b border-neutral-800"
+        >
+          <View className="flex-row items-center px-4 py-2">
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.back();
+              }}
+              className="flex-row items-center active:opacity-60 py-1"
+            >
+              <ChevronLeft size={24} color="#a3e635" />
+              <Text className="text-lime-400 text-base font-medium ml-1">Back</Text>
+            </Pressable>
+          </View>
+
+          <View className="px-5 pb-4">
+            {myMatchAssignment ? (
+              <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-3">
+                <Text className="text-lime-400 text-sm font-semibold">
+                  Your group · Tee {formatTeeTimeLabel(myMatchAssignment.group.tee_time)} · Hole{' '}
+                  {myMatchAssignment.group.starting_hole}
+                </Text>
+                <Text className="text-neutral-500 text-xs mt-1">
+                  Scorecard opens with your foursome and pairings
+                </Text>
+              </View>
+            ) : null}
+            <Pressable
+              onPress={handleEnterScores}
+              disabled={!canEnterScores || isOpeningScorecard}
+              className={cn(
+                'flex-row items-center justify-center rounded-xl py-4',
+                canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
+              )}
+            >
+              {isOpeningScorecard ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <ClipboardList size={20} color="#fff" />
+                  <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+
+          <View className="px-5 pb-3">
+            <Text className="text-white text-xl font-bold">{tournament.name}</Text>
+            <Text className="text-neutral-400 text-sm mt-0.5">
+              {formatTournamentDates(tournament.start_date, tournament.end_date)}
+            </Text>
+          </View>
+
+          <View className="px-5 pb-3">
+            <SponsorBanner placementType="tournament_detail" variant="auto" />
+          </View>
+
+          {isManager && tournament.display_token ? (
+            <View className="px-5 pb-3">
+              <TournamentCopyTvLinkButton
+                tournamentId={tournament.id}
+                displayToken={tournament.display_token}
+                compact
+              />
+            </View>
+          ) : null}
+        </View>
+
+        <View className="bg-[#141414] border-b border-neutral-800 z-10">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="mx-5 my-3"
+            style={{ flexGrow: 0 }}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {[
+              { key: 'schedule' as const, label: 'Schedule', Icon: Clock },
+              { key: 'match' as const, label: 'Match', Icon: Swords },
+              ...(isManager
+                ? [{ key: 'matches' as const, label: 'Matches', Icon: ClipboardList }]
+                : []),
+              { key: 'teams' as const, label: 'Teams', Icon: Users },
+            ].map(({ key, label, Icon }) => (
+              <Pressable
+                key={key}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setTab(key);
+                }}
+                className={cn(
+                  'px-4 py-2.5 rounded-lg border flex-row items-center gap-1.5',
+                  tab === key
+                    ? 'bg-lime-600 border-lime-600'
+                    : 'bg-[#0c0c0c] border-neutral-800'
+                )}
+              >
+                <Icon size={16} color={tab === key ? '#fff' : '#737373'} />
+                <Text
+                  className={cn(
+                    'text-xs font-medium',
+                    tab === key ? 'text-white' : 'text-neutral-500'
+                  )}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View className="pt-4">
+          {tab === 'schedule' ? (
+            <>
+              <View className="px-5 mb-4">
+                <TournamentTabAdBanner tab="schedule" />
+              </View>
+              <TournamentTeeTimesTab
+              tournamentId={id!}
+              tournament={tournament}
+              teams={teams}
+              playerNameById={playerNameById}
+              matchGroups={matchGroups}
+              defaultRoundNumber={activeRoundNumber}
+            />
+            </>
+          ) : tab === 'match' && user?.id ? (
+            <>
+              <View className="px-5 mb-4">
+                <TournamentTabAdBanner tab="match" />
+              </View>
+              <TournamentMyMatchTab
+              tournamentId={id!}
+              userId={user.id}
+              tournament={tournament}
+              teams={teams}
+              matchGroups={matchGroups}
+              rosterPlayerIds={myRosterPlayerIds}
+              playerNameById={playerNameById}
+              defaultRoundNumber={activeRoundNumber}
+            />
+            </>
+          ) : tab === 'matches' && isManager ? (
+            <TournamentMatchGroupsTab
+              tournamentId={id!}
+              tournament={tournament}
+              teams={teams}
+              members={members}
+              playerNameById={playerNameById}
+              isManager={isManager}
+            />
+          ) : tab === 'teams' ? (
+            <>
+              <View className="px-5 mb-4">
+                <TournamentTabAdBanner tab="teams" />
+              </View>
+              <View className="px-5" style={{ minHeight: 420 }}>
+              <TournamentTeamsRosterTab
+                tournamentId={id!}
+                tournament={tournament}
+                teams={teams}
+                members={members}
+                tournamentPlayers={tournamentPlayers}
+                playerNameById={playerNameById}
+                isManager={isManager}
+                userId={user?.id}
+                accessToken={managerAccessToken}
+                layout="hero"
+                introText={
+                  isManager
+                    ? 'Managers can also build rosters from Admin → Tournaments → Teams. No onboarding emails are sent from this screen.'
+                    : undefined
+                }
+              />
+              </View>
+            </>
+          ) : null}
+        </View>
       </ScrollView>
-      )}
     </View>
   );
 }

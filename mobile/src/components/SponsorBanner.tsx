@@ -10,7 +10,9 @@ import { SponsorAdRotator } from '@/components/SponsorAdRotator';
 import {
   getActiveAdPlacements,
   getAdImageLayout,
+  getRotationMinHeight,
   isAdPlacementServiceConfigured,
+  resolveAdDisplayVariant,
 } from '@/lib/ad-placement-service';
 import { getAdRotationSettings, isSupabaseConfigured } from '@/lib/supabase';
 import type { AdDisplayPosition, AdPlacement, AdPlacementType } from '@/types';
@@ -23,6 +25,18 @@ export const STICKY_FOOTER_AD_EXTRA = 16;
 const PORTRAIT_IMAGE_ASPECT = 0.72;
 const SQUARE_IMAGE_ASPECT = 1;
 const AD_POOL_LIMIT = 20;
+
+function getStripThumbStyle(layout: ReturnType<typeof getAdImageLayout>) {
+  if (layout === 'portrait') {
+    const width = 96;
+    const height = Math.round(width / PORTRAIT_IMAGE_ASPECT);
+    return { width, height, imageWidth: width - 8, imageHeight: height - 8 };
+  }
+  if (layout === 'square') {
+    return { width: 84, height: 84, imageWidth: 76, imageHeight: 76 };
+  }
+  return { width: 96, height: 56, imageWidth: 88, imageHeight: 44 };
+}
 
 interface UseAdPlacementOptions {
   holeNumber?: number;
@@ -68,7 +82,7 @@ interface SponsorBannerProps {
   displayPosition?: AdDisplayPosition;
   className?: string;
   compact?: boolean;
-  variant?: 'default' | 'footer' | 'card';
+  variant?: 'default' | 'footer' | 'card' | 'strip' | 'mini-card' | 'auto';
 }
 
 function normalizeActionUrl(url: string): string {
@@ -133,7 +147,7 @@ function SponsorAdCard({
   ad: AdPlacement;
   className?: string;
   compact?: boolean;
-  variant?: 'default' | 'footer' | 'card';
+  variant?: 'default' | 'footer' | 'card' | 'strip' | 'mini-card' | 'auto';
 }) {
   const layout = getAdImageLayout(ad);
   const hasAction = Boolean(ad.action_url?.trim());
@@ -148,6 +162,78 @@ function SponsorAdCard({
     'overflow-hidden rounded-2xl border border-neutral-800 bg-[#141414] active:opacity-95',
     hasAction && 'active:scale-[0.995]'
   );
+
+  if (variant === 'strip') {
+    const thumb = getStripThumbStyle(layout);
+
+    return (
+      <Animated.View entering={FadeInDown.duration(400)} className={className}>
+        <Pressable
+          onPress={hasAction ? handlePress : undefined}
+          disabled={!hasAction}
+          className={cn(
+            'flex-row items-center rounded-xl border border-neutral-800 bg-[#0c0c0c] px-4 py-3.5 gap-4 active:opacity-90',
+            hasAction && 'active:scale-[0.99]'
+          )}
+        >
+          <View
+            className="rounded-xl bg-white items-center justify-center overflow-hidden shrink-0"
+            style={{ width: thumb.width, height: thumb.height }}
+          >
+            <Image
+              source={{ uri: ad.image_url }}
+              style={{ width: thumb.imageWidth, height: thumb.imageHeight }}
+              resizeMode="contain"
+            />
+          </View>
+          <View className="flex-1 min-w-0 self-center">
+            <Text className="text-[10px] font-body-semibold uppercase tracking-[0.12em] text-neutral-500">
+              Sponsored · {ad.sponsor_name}
+            </Text>
+            <Text className="text-white text-sm font-body-semibold mt-1 leading-5" numberOfLines={3}>
+              {ad.banner_text}
+            </Text>
+            {hasAction ? (
+              <Text className="text-lime-400/80 text-xs font-body mt-1.5">Tap to open offer</Text>
+            ) : null}
+          </View>
+          {hasAction ? (
+            <View className="w-9 h-9 rounded-full bg-lime-400/10 items-center justify-center shrink-0 self-center">
+              <ChevronRight size={18} color="#a3e635" strokeWidth={2} />
+            </View>
+          ) : null}
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  if (variant === 'mini-card') {
+    const maxImageHeight = layout === 'square' ? 168 : 240;
+    const imageWidth =
+      layout === 'square' ? maxImageHeight : Math.round(maxImageHeight * PORTRAIT_IMAGE_ASPECT);
+
+    return (
+      <Animated.View entering={FadeInDown.duration(400)} className={className}>
+        <Pressable
+          onPress={hasAction ? handlePress : undefined}
+          disabled={!hasAction}
+          className={cardShell}
+        >
+          <View className="bg-white px-4 pt-3 pb-4 items-center">
+            <Text className="self-start text-[10px] font-body-semibold uppercase tracking-[0.18em] text-neutral-400 mb-2">
+              Sponsored
+            </Text>
+            <Image
+              source={{ uri: ad.image_url }}
+              style={{ width: imageWidth, height: maxImageHeight }}
+              resizeMode="contain"
+            />
+          </View>
+          <SponsorAdFooterStrip ad={ad} hasAction={hasAction} />
+        </Pressable>
+      </Animated.View>
+    );
+  }
 
   if (layout === 'portrait' || layout === 'square' || variant === 'card') {
     const imageAspect = layout === 'square' ? SQUARE_IMAGE_ASPECT : PORTRAIT_IMAGE_ASPECT;
@@ -293,9 +379,26 @@ export function SponsorBanner({
   const adsToShow =
     rotationEnabled && !adProp && !adsProp ? pool : pool.slice(0, 1);
 
+  const resolveVariant = (ad: AdPlacement) => {
+    if (variant !== 'auto') {
+      return { variant, compact };
+    }
+    return resolveAdDisplayVariant(
+      placementType as AdPlacementType,
+      ad,
+      displayPosition ?? null
+    );
+  };
+
   if (adProp) {
+    const display = resolveVariant(adProp);
     return (
-      <SponsorAdCard ad={adProp} className={className} compact={compact} variant={variant} />
+      <SponsorAdCard
+        ad={adProp}
+        className={className}
+        compact={display.compact ?? compact}
+        variant={display.variant}
+      />
     );
   }
 
@@ -304,26 +407,43 @@ export function SponsorBanner({
   }
 
   if (adsToShow.length === 1) {
-    return (
+    const display = resolveVariant(adsToShow[0]);
+     return (
       <SponsorAdCard
         ad={adsToShow[0]}
         className={className}
-        compact={compact}
-        variant={variant}
+        compact={display.compact ?? compact}
+        variant={display.variant}
       />
     );
   }
 
   const intervalMs = (rotationSettings?.interval_seconds ?? 12) * 1000;
+  const rotationMinHeight =
+    variant === 'auto'
+      ? getRotationMinHeight(
+          placementType as AdPlacementType,
+          adsToShow,
+          displayPosition ?? null
+        )
+      : undefined;
 
   return (
     <SponsorAdRotator
       ads={adsToShow}
       intervalMs={intervalMs}
       className={className}
-      renderAd={(ad) => (
-        <SponsorAdCard ad={ad} compact={compact} variant={variant} />
-      )}
+      minHeight={rotationMinHeight}
+      renderAd={(ad) => {
+        const display = resolveVariant(ad);
+        return (
+          <SponsorAdCard
+            ad={ad}
+            compact={display.compact ?? compact}
+            variant={display.variant}
+          />
+        );
+      }}
     />
   );
 }

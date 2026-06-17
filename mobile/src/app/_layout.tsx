@@ -96,6 +96,7 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="admin/index" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="admin/dashboard" options={{ headerShown: false }} />
         <Stack.Screen name="admin/hub-preview" options={{ headerShown: false }} />
+        <Stack.Screen name="admin/ad-preview" options={{ headerShown: false }} />
         <Stack.Screen name="admin/members" options={{ headerShown: false }} />
         <Stack.Screen name="report-condition" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="forgot-password" options={{ headerShown: false }} />

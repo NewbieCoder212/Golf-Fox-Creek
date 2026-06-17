@@ -9,6 +9,7 @@ interface SponsorAdRotatorProps {
   ads: AdPlacement[];
   intervalMs: number;
   className?: string;
+  minHeight?: number;
   renderAd: (ad: AdPlacement) => ReactNode;
 }
 
@@ -16,6 +17,7 @@ export function SponsorAdRotator({
   ads,
   intervalMs,
   className,
+  minHeight,
   renderAd,
 }: SponsorAdRotatorProps) {
   const [index, setIndex] = useState(0);
@@ -39,9 +41,11 @@ export function SponsorAdRotator({
 
   return (
     <View className={className}>
-      <Animated.View key={activeAd.id} entering={FadeIn.duration(350)}>
-        {renderAd(activeAd)}
-      </Animated.View>
+      <View style={minHeight ? { minHeight } : undefined}>
+        <Animated.View key={activeAd.id} entering={FadeIn.duration(350)}>
+          {renderAd(activeAd)}
+        </Animated.View>
+      </View>
 
       {ads.length > 1 ? (
         <View className="flex-row items-center justify-center gap-1.5 mt-2">

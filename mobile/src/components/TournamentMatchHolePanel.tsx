@@ -13,6 +13,7 @@ import type { TournamentFormat } from '@/types';
 import type { HoleOutcome, MatchStatus, RecentHoleOutcomeRow } from '@/lib/tournament-match-status';
 import type { TournamentTeamSide } from '@/types';
 import { cn } from '@/lib/cn';
+import { MatchHoleAdBanners } from '@/components/MatchHoleAdBanners';
 
 export interface MatchPanelPlayer {
   id: string;
@@ -489,6 +490,8 @@ export function TournamentMatchHolePanel({
               }
             />
           </View>
+
+          <MatchHoleAdBanners holeNumber={currentHole} className="mb-3" />
 
           <CurrentHoleResultBanner message={currentHoleBannerText} result={viewerHoleResult} />
 

@@ -661,7 +661,7 @@ export default function ScorecardScreen() {
               </Text>
             </View>
 
-            <SponsorBanner placementType="the_turn" className="w-full mb-6" />
+            <SponsorBanner placementType="the_turn" variant="auto" className="w-full mb-6" />
 
             <Pressable
               onPress={() => {
@@ -779,7 +779,7 @@ export default function ScorecardScreen() {
         }
       >
         <View className="mx-4 mt-4">
-          <SponsorBanner placementType="scorecard_header" />
+          <SponsorBanner placementType="scorecard_header" variant="auto" />
         </View>
 
         {showCasualPaperScorecard || showTournamentPaperScorecard ? (
@@ -828,10 +828,13 @@ export default function ScorecardScreen() {
         ) : null}
 
         <View className="mx-4 mt-4">
-          <SponsorBanner
-            placementType="hole_sponsor"
-            holeNumber={isTournamentMode ? tournamentSession.currentHole : currentHole}
-          />
+          {!(isTournamentMode && tournamentSession.hasMatchPlay && tournamentViewTab === 'match') ? (
+            <SponsorBanner
+              placementType="hole_sponsor"
+              variant="auto"
+              holeNumber={isTournamentMode ? tournamentSession.currentHole : currentHole}
+            />
+          ) : null}
         </View>
 
         {/* Round actions */}

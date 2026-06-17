@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HubHeroWelcome } from '@/components/hub/HubHeroWelcome';
 import { HubTournamentMatchCTA } from '@/components/hub/HubTournamentMatchCTA';
 import { HubEventSummaryCard } from '@/components/hub/HubEventSummaryCard';
-import { HubAdBanner } from '@/components/hub/HubAdBanner';
+import { HubAdBanner, HubAdFeedCards } from '@/components/hub/HubAdBanner';
 import {
   useAdPlacement,
 } from '@/components/SponsorBanner';
@@ -103,8 +103,8 @@ export function MemberHubContent({
   const showEventSummary =
     !previewMode && (myEvents.length === 0 || (primaryTournament != null && !isEventDay));
 
-  const hubBody = (
-    <View style={{ flex: 1, paddingTop: topPadding }}>
+  const hubScrollContent = (
+    <>
       <HubHeroWelcome
         userProfile={userProfile}
         previewMode={previewMode}
@@ -130,6 +130,8 @@ export function MemberHubContent({
         ) : null}
       </View>
 
+      <HubAdFeedCards />
+
       {leaderboardTournamentId ? (
         <HubSection title={t.tournamentStandings} className="mt-2" panelClassName="p-2" dense>
           <TournamentLeaderboardCard
@@ -139,25 +141,25 @@ export function MemberHubContent({
           />
         </HubSection>
       ) : null}
-    </View>
+    </>
   );
 
   return (
     <View className="flex-1 bg-fox-background" style={{ width: '100%' }}>
-      {previewMode && refreshControl ? (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={false}
-          className="flex-1"
-          style={{ width: '100%' }}
-          refreshControl={refreshControl}
-          contentContainerStyle={{ flexGrow: 1 }}
-        >
-          {hubBody}
-        </ScrollView>
-      ) : (
-        hubBody
-      )}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!previewMode}
+        className="flex-1"
+        style={{ width: '100%' }}
+        refreshControl={previewMode ? refreshControl : undefined}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingTop: topPadding,
+          paddingBottom: hasStickyFooterAd ? 8 : Math.max(insets.bottom, 16),
+        }}
+      >
+        {hubScrollContent}
+      </ScrollView>
 
       {hasStickyFooterAd ? (
         <View

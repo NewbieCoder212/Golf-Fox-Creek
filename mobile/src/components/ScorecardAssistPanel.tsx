@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { cn } from '@/lib/cn';
+import { MatchHoleAdBanners } from '@/components/MatchHoleAdBanners';
 
 interface AssistPlayer {
   id: number;
@@ -208,6 +209,8 @@ export function ScorecardAssistPanel({
               );
             })}
           </View>
+
+          <MatchHoleAdBanners holeNumber={currentHole} className="mb-3" />
 
           {isTracking ? (
             <Pressable

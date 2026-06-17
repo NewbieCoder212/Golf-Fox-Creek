@@ -2,7 +2,12 @@
  * Tournament roster players — named entries for teams (members or guests).
  */
 
-import type { TournamentPlayer, TournamentPlayerInsert, TournamentTeam, TournamentTeamInsert } from '@/types';
+import type { TournamentPlayer, TournamentPlayerInsert, TournamentTeam, TournamentTeamInsert, TournamentFormat, TeeName } from '@/types';
+import {
+  resolvePlayerHandicapFromConfig,
+  type HandicapAllowancePct,
+  type TournamentHandicapDefaults,
+} from './tournament-scoring';
 import {
   requireData,
   tournamentSupabaseRequest,
@@ -107,7 +112,18 @@ export async function deleteTournamentPlayer(
 
 export async function updateTournamentPlayer(
   playerId: string,
-  updates: Partial<Pick<TournamentPlayerInsert, 'display_name' | 'handicap_index' | 'email' | 'user_id'>>,
+  updates: Partial<
+    Pick<
+      TournamentPlayerInsert,
+      | 'display_name'
+      | 'handicap_index'
+      | 'handicap_use_index'
+      | 'handicap_allowance_pct'
+      | 'manual_handicap'
+      | 'email'
+      | 'user_id'
+    >
+  >,
   context?: { tournamentId?: string; accessToken?: string | null }
 ): Promise<TournamentServiceResult<TournamentPlayer>> {
   const body: Record<string, unknown> = { ...updates };
@@ -263,6 +279,34 @@ export function buildTournamentPlayerMaps(
   }
 
   return { nameById, handicapById };
+}
+
+export function resolveTournamentPlayerHandicap(params: {
+  playerId: string;
+  tournamentPlayers: TournamentPlayer[];
+  members: Array<{ id: string; handicap_index?: number | null }>;
+  tournamentDefaults: TournamentHandicapDefaults;
+  format: TournamentFormat;
+  teePlayed?: TeeName;
+}): { handicapIndex: number; playingHandicap: number } {
+  const rosterPlayer = params.tournamentPlayers.find((p) => p.id === params.playerId);
+  const member = params.members.find((m) => m.id === params.playerId);
+  const handicapIndex =
+    rosterPlayer?.handicap_index ?? member?.handicap_index ?? 0;
+
+  const playingHandicap = resolvePlayerHandicapFromConfig({
+    tournament: params.tournamentDefaults,
+    player: {
+      handicap_index: handicapIndex,
+      handicap_use_index: rosterPlayer?.handicap_use_index,
+      handicap_allowance_pct: rosterPlayer?.handicap_allowance_pct as HandicapAllowancePct | null | undefined,
+      manual_handicap: rosterPlayer?.manual_handicap,
+    },
+    format: params.format,
+    teePlayed: params.teePlayed,
+  });
+
+  return { handicapIndex, playingHandicap };
 }
 
 export function resolveRosterEntries(

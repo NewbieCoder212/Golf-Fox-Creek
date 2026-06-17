@@ -13,6 +13,11 @@ import * as Haptics from 'expo-haptics';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { createTournamentPlayer, deleteTournamentPlayer, updateTournamentPlayer } from '@/lib/tournament-player-service';
+import { PlayerHandicapOverrideFields } from '@/components/TournamentHandicapFields';
+import {
+  resolvePlayerHandicapFromConfig,
+  type HandicapAllowancePct,
+} from '@/lib/tournament-scoring';
 import {
   getTeamForPlayer,
   isValidEmail,
@@ -45,6 +50,7 @@ const inputStyle = { color: '#ffffff' as const };
 
 export function TournamentParticipantsTab({
   tournamentId,
+  tournament,
   participants,
   teams,
   members,
@@ -58,6 +64,15 @@ export function TournamentParticipantsTab({
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editHandicap, setEditHandicap] = useState('');
+  const [editInheritHandicap, setEditInheritHandicap] = useState(true);
+  const [editUseIndex, setEditUseIndex] = useState(true);
+  const [editAllowancePct, setEditAllowancePct] = useState<HandicapAllowancePct>(100);
+  const [editManualHandicap, setEditManualHandicap] = useState('');
+
+  const tournamentHandicapDefaults = {
+    handicap_use_index: tournament.handicap_use_index ?? true,
+    handicap_allowance_pct: (tournament.handicap_allowance_pct ?? 100) as HandicapAllowancePct,
+  };
 
   const memberEmailByUserId = Object.fromEntries(
     members.filter((m) => m.email).map((m) => [m.id, m.email as string])
@@ -153,6 +168,17 @@ export function TournamentParticipantsTab({
     setEditHandicap(
       player.handicap_index != null ? String(player.handicap_index) : ''
     );
+    const hasOverride =
+      player.handicap_use_index != null ||
+      player.handicap_allowance_pct != null ||
+      Boolean(player.manual_handicap?.trim());
+    setEditInheritHandicap(!hasOverride);
+    setEditUseIndex(player.handicap_use_index ?? tournamentHandicapDefaults.handicap_use_index);
+    setEditAllowancePct(
+      (player.handicap_allowance_pct ??
+        tournamentHandicapDefaults.handicap_allowance_pct) as HandicapAllowancePct
+    );
+    setEditManualHandicap(player.manual_handicap ?? '');
   };
 
   const cancelEditing = () => {
@@ -160,7 +186,23 @@ export function TournamentParticipantsTab({
     setEditName('');
     setEditEmail('');
     setEditHandicap('');
+    setEditInheritHandicap(true);
+    setEditUseIndex(true);
+    setEditAllowancePct(100);
+    setEditManualHandicap('');
   };
+
+  const previewPlayingHandicap = (player: TournamentPlayer) =>
+    resolvePlayerHandicapFromConfig({
+      tournament: tournamentHandicapDefaults,
+      player: {
+        handicap_index: player.handicap_index,
+        handicap_use_index: player.handicap_use_index,
+        handicap_allowance_pct: player.handicap_allowance_pct as HandicapAllowancePct | null | undefined,
+        manual_handicap: player.manual_handicap,
+      },
+      format: 'best_ball',
+    });
 
   const updateMutation = useMutation({
     mutationFn: async (playerId: string) => {
@@ -176,6 +218,11 @@ export function TournamentParticipantsTab({
           display_name: displayName,
           email: emailValue,
           handicap_index: Number.isFinite(hi) ? hi : null,
+          handicap_use_index: editInheritHandicap ? null : editUseIndex,
+          handicap_allowance_pct: editInheritHandicap
+            ? null
+            : (editAllowancePct as HandicapAllowancePct),
+          manual_handicap: editInheritHandicap || editUseIndex ? null : editManualHandicap.trim() || null,
         },
         { tournamentId, accessToken }
       );
@@ -316,7 +363,33 @@ export function TournamentParticipantsTab({
                   className={cn(inputClassName, 'mb-3')}
                   style={inputStyle}
                 />
-                <View className="flex-row gap-2">
+                <PlayerHandicapOverrideFields
+                  inheritTournamentDefaults={editInheritHandicap}
+                  onInheritChange={setEditInheritHandicap}
+                  useIndex={editUseIndex}
+                  onUseIndexChange={setEditUseIndex}
+                  allowancePct={editAllowancePct}
+                  onAllowancePctChange={setEditAllowancePct}
+                  manualHandicap={editManualHandicap}
+                  onManualHandicapChange={setEditManualHandicap}
+                  resolvedPreview={String(
+                    resolvePlayerHandicapFromConfig({
+                      tournament: tournamentHandicapDefaults,
+                      player: {
+                        handicap_index: Number.isFinite(Number(editHandicap))
+                          ? Number(editHandicap)
+                          : null,
+                        handicap_use_index: editInheritHandicap ? null : editUseIndex,
+                        handicap_allowance_pct: editInheritHandicap
+            ? null
+            : (editAllowancePct as HandicapAllowancePct),
+                        manual_handicap: editManualHandicap,
+                      },
+                      format: 'best_ball',
+                    })
+                  )}
+                />
+                <View className="flex-row gap-2 mt-3">
                   <Pressable
                     onPress={webPressHandler(() => updateMutation.mutate(player.id))}
                     disabled={isSaving || !editName.trim() || !editEmail.trim()}
@@ -354,6 +427,7 @@ export function TournamentParticipantsTab({
                 <Text className="text-neutral-500 text-xs mt-0.5">
                   {resolvedEmail ?? 'No email'}
                   {player.handicap_index != null ? ` · ${player.handicap_index} HI` : ''}
+                  {` · Plays off ${previewPlayingHandicap(player)}`}
                 </Text>
                 <Text className="text-neutral-600 text-[10px] mt-1">
                   {team ? `Team: ${team.team_name}` : 'Unassigned'}

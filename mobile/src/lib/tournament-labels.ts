@@ -82,6 +82,16 @@ export function isTeamScorecardFormat(format: TournamentFormat): boolean {
   return format === 'scramble' || format === 'alternate_shot';
 }
 
+/** Team formats where each phone only enters one side's team score (not full foursome). */
+export function isSideScopedTeamFormat(format: TournamentFormat): boolean {
+  return isTeamScorecardFormat(format);
+}
+
+/** Formats where the scorecard lists every player in the tee-time foursome. */
+export function isFoursomePlayerScorecardFormat(format: TournamentFormat): boolean {
+  return format === 'best_ball' || format === 'singles' || format === 'match_play';
+}
+
 export function getRoundFormat(
   tournament: Pick<Tournament, 'round_schedule'>,
   roundNumber: number
@@ -93,8 +103,11 @@ export function getMatchGroupFormat(
   group: Pick<TournamentMatchGroup, 'format' | 'round_number'>,
   tournament?: Pick<Tournament, 'round_schedule'>
 ): TournamentFormat {
+  // Tournament round schedule is authoritative (match group format can be stale).
+  if (tournament) {
+    return getRoundFormat(tournament, group.round_number);
+  }
   if (group.format) return group.format;
-  if (tournament) return getRoundFormat(tournament, group.round_number);
   return 'scramble';
 }
 

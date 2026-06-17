@@ -24,6 +24,7 @@ import { scorecardTeeToDbTee } from '@/lib/scorecard-tees';
 import { useTranslations } from '@/lib/language-store';
 import { useTournamentScorecardSession } from '@/hooks/useTournamentScorecardSession';
 import { TournamentScorecardToolbar } from '@/components/TournamentScorecardToolbar';
+import { TournamentMatchHolePanel } from '@/components/TournamentMatchHolePanel';
 import type { TournamentTeamSide } from '@/types';
 
 // Fox Creek Golf Club - Dieppe, NB, Canada
@@ -87,6 +88,7 @@ export default function ScorecardScreen() {
     side?: TournamentTeamSide;
   }>();
   const isTournamentMode = Boolean(tournamentId);
+  const [tournamentViewTab, setTournamentViewTab] = useState<'match' | 'card'>('match');
 
   const { data: turnMessaging = getDefaultTurnMessagingSettings() } = useQuery({
     queryKey: ['turnMessaging'],
@@ -200,12 +202,12 @@ export default function ScorecardScreen() {
       Alert.alert(
         'Saved',
         tournamentSession.activeMatchGroup
-          ? 'Scores synced. Match hole wins updated automatically.'
-          : 'Tournament scores synced to Supabase.'
+          ? 'Scores saved. Match status updated.'
+          : 'Your tournament scores have been saved.'
       );
       return;
     }
-    Alert.alert('Save failed', result.error ?? 'Could not sync scores.');
+    Alert.alert('Save failed', result.error ?? 'Could not save scores.');
   };
 
   const hasRoundProgress = useMemo(
@@ -673,10 +675,70 @@ export default function ScorecardScreen() {
             roundNumber={tournamentSession.roundNumber}
             isDirty={tournamentSession.isDirty}
             teeTimeLabel={tournamentSession.matchTeeTimeLabel}
+            matchStatusLabel={
+              tournamentSession.hasMatchPlay && tournamentSession.matchStatus.throughHole > 0
+                ? `${tournamentSession.matchStatus.label} · thru ${tournamentSession.matchStatus.throughHole}`
+                : null
+            }
             onRoundChange={tournamentSession.handleRoundChange}
           />
         ) : null}
-        <ScorecardAssistPanel {...assistPanelProps} />
+        {isTournamentMode && tournamentSession.hasMatchPlay ? (
+          <>
+            <View className="flex-row mx-4 mb-2 gap-2">
+              {(['match', 'card'] as const).map((tab) => (
+                <Pressable
+                  key={tab}
+                  onPress={() => setTournamentViewTab(tab)}
+                  className={cn(
+                    'flex-1 py-2 rounded-lg border items-center',
+                    tournamentViewTab === tab
+                      ? 'bg-lime-900/30 border-lime-600'
+                      : 'bg-[#141414] border-neutral-800'
+                  )}
+                >
+                  <Text
+                    className={cn(
+                      'text-sm font-semibold capitalize',
+                      tournamentViewTab === tab ? 'text-lime-400' : 'text-neutral-500'
+                    )}
+                  >
+                    {tab === 'match' ? 'Match' : 'Full Card'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {tournamentViewTab === 'match' && tournamentSession.format ? (
+              <TournamentMatchHolePanel
+                currentHole={tournamentSession.currentHole}
+                currentHolePar={tournamentSession.currentHolePar}
+                sideAName={tournamentSession.sideAName}
+                sideBName={tournamentSession.sideBName}
+                matchStatus={tournamentSession.matchStatus}
+                viewerSide={tournamentSession.viewerSide}
+                format={tournamentSession.format}
+                isTeamFormat={tournamentSession.isTeamFormat}
+                sideAPlayers={tournamentSession.sideAPlayers}
+                sideBPlayers={tournamentSession.sideBPlayers}
+                sideATeamGross={tournamentSession.sideATeamGross}
+                sideBTeamGross={tournamentSession.sideBTeamGross}
+                currentHoleOutcome={tournamentSession.currentHoleOutcomeLabel}
+                currentHoleWinner={tournamentSession.currentHoleWinner}
+                recentHoleRows={tournamentSession.matchRecentHoleRows}
+                scoringModeLabel={tournamentSession.matchScoringModeLabel}
+                onSetCurrentHole={tournamentSession.setCurrentHole}
+                onPlayerScoreAdjust={tournamentSession.handleMatchPlayerAdjust}
+                onTeamScoreAdjust={
+                  tournamentSession.isTeamFormat
+                    ? tournamentSession.handleMatchTeamAdjust
+                    : undefined
+                }
+              />
+            ) : null}
+          </>
+        ) : (
+          <ScorecardAssistPanel {...assistPanelProps} />
+        )}
       </View>
 
       <ScrollView
@@ -690,6 +752,9 @@ export default function ScorecardScreen() {
           <SponsorBanner placementType="scorecard_header" />
         </View>
 
+        {(!isTournamentMode ||
+          !tournamentSession.hasMatchPlay ||
+          tournamentViewTab === 'card') && (
         <Animated.View entering={FadeIn.duration(400)} className="mx-4 mt-4">
           <FoxCreekPaperScorecard
             players={isTournamentMode ? tournamentSession.paperPlayers : paperPlayers}
@@ -707,12 +772,6 @@ export default function ScorecardScreen() {
                 handlePaperScoreChange(playerId, hole, score);
               }
             }}
-            netScores={
-              isTournamentMode && !tournamentSession.isTeamFormat
-                ? tournamentSession.paperNetScores
-                : undefined
-            }
-            showNetColumn={isTournamentMode && !tournamentSession.isTeamFormat}
             teamMode={isTournamentMode && tournamentSession.isTeamFormat}
             teamLabel={tournamentSession.teamName ?? 'Team'}
             teamScores={isTournamentMode ? tournamentSession.teamGrossScores : undefined}
@@ -724,6 +783,7 @@ export default function ScorecardScreen() {
             }
           />
         </Animated.View>
+        )}
 
         <View className="mx-4 mt-4">
           <SponsorBanner
@@ -794,11 +854,14 @@ export default function ScorecardScreen() {
             className="flex-row items-center justify-center bg-lime-600 rounded-xl py-4 active:opacity-80"
           >
             {tournamentSession.isSyncing ? (
-              <ActivityIndicator color="#fff" />
+              <>
+                <ActivityIndicator color="#fff" />
+                <Text className="text-white font-bold text-base ml-2">Saving…</Text>
+              </>
             ) : (
               <>
                 <Save size={18} color="#fff" />
-                <Text className="text-white font-bold text-base ml-2">Sync to Supabase</Text>
+                <Text className="text-white font-bold text-base ml-2">Save scores</Text>
               </>
             )}
           </Pressable>

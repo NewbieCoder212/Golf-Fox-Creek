@@ -33,6 +33,7 @@ import { TournamentTeamsAssignTab } from '@/components/TournamentTeamsAssignTab'
 import { TournamentPublishTab } from '@/components/TournamentPublishTab';
 import { AdminTournamentFormatsTab } from '@/components/admin/AdminTournamentFormatsTab';
 import { TournamentMatchGroupsTab } from '@/components/TournamentMatchGroupsTab';
+import { TournamentHandicapFields } from '@/components/TournamentHandicapFields';
 import {
   buildSchedulePayload,
   createEmptySchedule,
@@ -55,6 +56,7 @@ import { pickTeamLogoImage, uploadTeamLogoImage } from '@/lib/team-logo-upload';
 import { formatTournamentDates, toTournamentDateInputValue, tournamentDateInputToIso } from '@/lib/tournament-labels';
 import { getActiveFormatIds } from '@/lib/tournament-format-settings';
 import { useTournamentFormatsSettings } from '@/lib/useTournamentFormatsSettings';
+import type { HandicapAllowancePct } from '@/lib/tournament-scoring';
 import type { Tournament, TournamentDaySchedule, TournamentTeam } from '@/types';
 import { useRouter } from 'expo-router';
 import { cn } from '@/lib/cn';
@@ -164,6 +166,9 @@ export function AdminTournamentManagementSection({
   const [endDate, setEndDate] = useState('');
   const [schedule, setSchedule] = useState<TournamentDaySchedule[]>(createEmptySchedule);
   const [customFormatByKey, setCustomFormatByKey] = useState<Record<string, string>>({});
+  const [handicapUseIndex, setHandicapUseIndex] = useState(true);
+  const [handicapAllowancePct, setHandicapAllowancePct] = useState<HandicapAllowancePct>(100);
+  const [matchUseNetScoring, setMatchUseNetScoring] = useState(false);
 
   const { data: tournaments = [], isLoading: tournamentsLoading } = useQuery({
     queryKey: ['adminTournaments'],
@@ -191,6 +196,11 @@ export function AdminTournamentManagementSection({
     setStartDate(toTournamentDateInputValue(selectedTournament.start_date));
     setEndDate(toTournamentDateInputValue(selectedTournament.end_date));
     setSchedule(selectedTournament.round_schedule);
+    setHandicapUseIndex(selectedTournament.handicap_use_index ?? true);
+    setHandicapAllowancePct(
+      (selectedTournament.handicap_allowance_pct ?? 100) as HandicapAllowancePct
+    );
+    setMatchUseNetScoring(selectedTournament.match_use_net_scoring ?? false);
   }, [selectedTournament, isCreating]);
 
   const tournamentId = isCreating ? null : selectedTournamentId;
@@ -251,6 +261,9 @@ export function AdminTournamentManagementSection({
         name: name.trim(),
         start_date: tournamentDateInputToIso(startDate),
         end_date: tournamentDateInputToIso(endDate),
+        handicap_use_index: handicapUseIndex,
+        handicap_allowance_pct: handicapAllowancePct,
+        match_use_net_scoring: matchUseNetScoring,
         ...buildSchedulePayload(schedule),
       };
 
@@ -326,6 +339,9 @@ export function AdminTournamentManagementSection({
     setStartDate('');
     setEndDate('');
     setSchedule(createEmptySchedule());
+    setHandicapUseIndex(true);
+    setHandicapAllowancePct(100);
+    setMatchUseNetScoring(false);
     setTab('event');
   };
 
@@ -532,6 +548,68 @@ export function AdminTournamentManagementSection({
                   setCustomFormatByKey((prev) => ({ ...prev, [key]: value }))
                 }
               />
+
+              <View className="bg-[#141414] border border-neutral-800 rounded-xl p-4 mt-4 mb-2">
+                <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-3">
+                  Handicaps
+                </Text>
+                <TournamentHandicapFields
+                  useIndex={handicapUseIndex}
+                  onUseIndexChange={setHandicapUseIndex}
+                  allowancePct={handicapAllowancePct}
+                  onAllowancePctChange={setHandicapAllowancePct}
+                  inheritLabel="Default for all players unless overridden on the roster."
+                />
+
+                <View className="mt-4 pt-4 border-t border-neutral-800">
+                  <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
+                    Match play scoring
+                  </Text>
+                  <Text className="text-neutral-600 text-xs mb-3">
+                    Default is gross best-ball. Enable net when handicaps should decide holes.
+                  </Text>
+                  <View className="flex-row gap-2">
+                    <Pressable
+                      onPress={() => setMatchUseNetScoring(false)}
+                      className={cn(
+                        'flex-1 rounded-xl py-2.5 items-center border',
+                        !matchUseNetScoring
+                          ? 'bg-lime-900/30 border-lime-600'
+                          : 'bg-[#0c0c0c] border-neutral-800'
+                      )}
+                    >
+                      <Text
+                        className={
+                          !matchUseNetScoring
+                            ? 'text-lime-400 font-semibold text-sm'
+                            : 'text-neutral-400 text-sm'
+                        }
+                      >
+                        Gross
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setMatchUseNetScoring(true)}
+                      className={cn(
+                        'flex-1 rounded-xl py-2.5 items-center border',
+                        matchUseNetScoring
+                          ? 'bg-lime-900/30 border-lime-600'
+                          : 'bg-[#0c0c0c] border-neutral-800'
+                      )}
+                    >
+                      <Text
+                        className={
+                          matchUseNetScoring
+                            ? 'text-lime-400 font-semibold text-sm'
+                            : 'text-neutral-400 text-sm'
+                        }
+                      >
+                        Net (hcp)
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
 
               <Pressable
                 onPress={() => saveTournamentMutation.mutate(isCreating)}

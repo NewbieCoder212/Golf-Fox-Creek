@@ -490,8 +490,10 @@ export async function getSinglesRoundScoreByTournamentPlayer(
 
 export async function saveTournamentScore(
   score: TournamentScoreInsert
-): Promise<TournamentScore | null> {
-  if (!isConfigured()) return null;
+): Promise<TournamentServiceResult<TournamentScore>> {
+  if (!isConfigured()) {
+    return { data: null, error: 'Supabase is not configured' };
+  }
 
   const existing = score.team_id
     ? await getTeamRoundScore(score.tournament_id, score.team_id, score.round_number)
@@ -513,9 +515,13 @@ export async function saveTournamentScore(
         hole_scores: score.hole_scores,
         total_gross: score.total_gross,
         total_net: score.total_net,
+        match_group_id: score.match_group_id ?? existing.match_group_id,
       },
     });
-    return unwrapList(result)[0] ?? null;
+    if (result.error) return { data: null, error: result.error };
+    const saved = unwrapList(result)[0] ?? null;
+    if (!saved) return { data: null, error: 'Score update returned no data' };
+    return { data: saved, error: null };
   }
 
   const result = await tournamentSupabaseRequest<TournamentScore[]>('tournament_scores', {
@@ -523,7 +529,10 @@ export async function saveTournamentScore(
     body: score as unknown as Record<string, unknown>,
   });
 
-  return unwrapList(result)[0] ?? null;
+  if (result.error) return { data: null, error: result.error };
+  const saved = unwrapList(result)[0] ?? null;
+  if (!saved) return { data: null, error: 'Score insert returned no data' };
+  return { data: saved, error: null };
 }
 
 export async function deleteTournamentScore(scoreId: string): Promise<boolean> {

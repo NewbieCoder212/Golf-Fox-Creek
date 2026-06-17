@@ -31,6 +31,7 @@ import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 import { getGMAnnouncement, getUserProfile, isSupabaseConfigured, signOut } from '@/lib/supabase';
 import { useTranslations } from '@/lib/language-store';
 import { useScorecardStore } from '@/lib/scorecard-store';
+import { useTournamentStore } from '@/lib/tournament-store';
 import { getTournamentsForUserList } from '@/lib/tournament-service';
 import type { GMAnnouncement, UserProfile } from '@/types';
 
@@ -151,6 +152,7 @@ export function MemberHubContent({
     if (accessToken) {
       await signOut(accessToken);
     }
+    await useTournamentStore.getState().clearPersistedSession();
     await clearAuth();
     router.replace('/login');
   };

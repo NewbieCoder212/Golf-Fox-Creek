@@ -91,10 +91,13 @@ export default function TournamentGamblingDenScreen() {
       teamName: team.team_name,
       players: team.player_ids.map((pid) => {
         const member = members.find((m) => m.id === pid);
+        const handicapIndex = member?.handicap_index ?? 0;
+        const roundFormat = flattenRoundFormats(tournament.round_schedule)[0] ?? 'scramble';
         return {
           id: pid,
           name: member?.full_name ?? 'Player',
-          handicapIndex: member?.handicap_index ?? 0,
+          handicapIndex,
+          playingHandicap: getPlayingHandicap(handicapIndex, roundFormat),
         };
       }),
     });

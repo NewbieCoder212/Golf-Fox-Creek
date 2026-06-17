@@ -554,6 +554,10 @@ export interface Tournament {
   rounds_count: number;
   /** Players from each team in a foursome (default 2 = 2v2). */
   players_per_match: number;
+  handicap_use_index?: boolean;
+  handicap_allowance_pct?: number;
+  /** When true, match holes use net best-ball; default gross. */
+  match_use_net_scoring?: boolean;
   display_token?: string;
   participant_invites_sent_at?: string | null;
   created_at: string;
@@ -566,6 +570,9 @@ export interface TournamentInsert {
   round_schedule: TournamentDaySchedule[];
   rounds_count: number;
   players_per_match?: number;
+  handicap_use_index?: boolean;
+  handicap_allowance_pct?: number;
+  match_use_net_scoring?: boolean;
 }
 
 export type TournamentRosterStatus = 'draft' | 'ready';
@@ -599,6 +606,9 @@ export interface TournamentPlayer {
   tournament_id: string;
   display_name: string;
   handicap_index: number | null;
+  handicap_use_index?: boolean | null;
+  handicap_allowance_pct?: number | null;
+  manual_handicap?: string | null;
   user_id: string | null;
   email: string | null;
   invite_email_sent_at: string | null;
@@ -609,6 +619,9 @@ export interface TournamentPlayerInsert {
   tournament_id: string;
   display_name: string;
   handicap_index?: number | null;
+  handicap_use_index?: boolean | null;
+  handicap_allowance_pct?: number | null;
+  manual_handicap?: string | null;
   user_id?: string | null;
   email?: string | null;
 }
@@ -618,6 +631,8 @@ export interface TournamentHoleScore {
   par: number;
   gross: number;
   net: number;
+  /** True when the player explicitly entered this hole (not a par placeholder). */
+  entered?: boolean;
 }
 
 export interface TournamentScore {

@@ -9,6 +9,7 @@ interface TournamentScorecardToolbarProps {
   roundNumber: number;
   isDirty: boolean;
   teeTimeLabel?: string | null;
+  matchStatusLabel?: string | null;
   onRoundChange: (round: number) => void;
 }
 
@@ -17,6 +18,7 @@ export function TournamentScorecardToolbar({
   roundNumber,
   isDirty,
   teeTimeLabel,
+  matchStatusLabel,
   onRoundChange,
 }: TournamentScorecardToolbarProps) {
   return (
@@ -31,6 +33,11 @@ export function TournamentScorecardToolbar({
             {teeTimeLabel ? ` · Tee ${teeTimeLabel}` : ''}
           </Text>
         </View>
+        {matchStatusLabel ? (
+          <View className="bg-lime-900/40 rounded-full px-2.5 py-1 mr-2">
+            <Text className="text-lime-300 text-[10px] font-bold">{matchStatusLabel}</Text>
+          </View>
+        ) : null}
         {isDirty ? (
           <View className="bg-amber-900/40 rounded-full px-2 py-1">
             <Text className="text-amber-300 text-[10px] font-semibold">UNSYNCED</Text>

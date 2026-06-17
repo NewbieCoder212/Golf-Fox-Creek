@@ -46,7 +46,7 @@ export interface FoxCreekPaperScorecardProps {
   teamLabel?: string;
   teamScores?: Record<number, number>;
   onTeamScoreChange?: (hole: number, score: number) => void;
-  bestBallByHole?: Record<number, string>;
+  bestBallByHole?: Record<number, string | string[]>;
   highlightedPlayerTee?: ScorecardTeeName;
 }
 
@@ -683,7 +683,10 @@ export function FoxCreekPaperScorecard({
                       }
 
                       const gross = scores[player.id]?.[col.hole] ?? null;
-                      const isBest = bestBallByHole?.[col.hole] === player.id;
+                      const countingIds = bestBallByHole?.[col.hole];
+                      const isBest = Array.isArray(countingIds)
+                        ? countingIds.includes(player.id)
+                        : countingIds === player.id;
 
                       return (
                         <ScoreCell

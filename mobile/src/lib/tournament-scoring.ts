@@ -18,19 +18,110 @@ export interface GrossHoleInput {
 export interface PlayerGrossScores {
   playerId: string;
   handicapIndex: number;
+  /** When set, used instead of deriving from handicap index + format allowance. */
+  playingHandicap?: number;
   holes: GrossHoleInput[];
 }
 
 const DEFAULT_TEE: TeeName = 'White';
 const DEFAULT_GENDER: 'mens' | 'womens' = 'mens';
 
-/** Golf Canada playing handicap allowances by format. */
+/** Golf Canada playing handicap allowances by format (fallback when no tournament default). */
 export const HANDICAP_ALLOWANCES: Record<TournamentFormat, number> = {
   singles: 1.0,
   best_ball: 0.85,
   scramble: 1.0,
   alternate_shot: 1.0,
 };
+
+export type HandicapAllowancePct = 75 | 85 | 100;
+
+export interface TournamentHandicapDefaults {
+  handicap_use_index: boolean;
+  handicap_allowance_pct: HandicapAllowancePct;
+}
+
+export interface PlayerHandicapOverrides {
+  handicap_use_index?: boolean | null;
+  handicap_allowance_pct?: HandicapAllowancePct | null;
+  handicap_index?: number | null;
+  manual_handicap?: string | null;
+}
+
+/** Parse free-text manual handicap (e.g. "12", "12.5", "12/18"). */
+export function parseManualHandicap(value: string | null | undefined): number {
+  if (!value?.trim()) return 0;
+  const match = value.trim().match(/[\d.]+/);
+  if (!match) return 0;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function resolveAllowancePct(
+  playerOverride: number | null | undefined,
+  tournamentDefault: number | null | undefined,
+  format: TournamentFormat
+): HandicapAllowancePct {
+  const pct = playerOverride ?? tournamentDefault;
+  if (pct === 75 || pct === 85 || pct === 100) return pct;
+  const fallback = Math.round((HANDICAP_ALLOWANCES[format] ?? 1) * 100);
+  if (fallback === 75 || fallback === 85) return fallback as HandicapAllowancePct;
+  return 100;
+}
+
+/**
+ * Resolve playing handicap from tournament defaults and optional per-player overrides.
+ */
+export function resolvePlayerHandicap(params: {
+  handicapIndex: number | null | undefined;
+  manualHandicap?: string | null;
+  useIndex: boolean;
+  allowancePct: HandicapAllowancePct;
+  teePlayed?: TeeName;
+  gender?: 'mens' | 'womens';
+}): number {
+  const {
+    handicapIndex,
+    manualHandicap,
+    useIndex,
+    allowancePct,
+    teePlayed = DEFAULT_TEE,
+    gender = DEFAULT_GENDER,
+  } = params;
+  const multiplier = allowancePct / 100;
+
+  if (useIndex) {
+    const courseHcp = getCourseHandicapFromIndex(handicapIndex ?? 0, teePlayed, gender);
+    return Math.round(courseHcp * multiplier);
+  }
+
+  return Math.round(parseManualHandicap(manualHandicap) * multiplier);
+}
+
+export function resolvePlayerHandicapFromConfig(params: {
+  tournament: TournamentHandicapDefaults;
+  player: PlayerHandicapOverrides;
+  format: TournamentFormat;
+  teePlayed?: TeeName;
+  gender?: 'mens' | 'womens';
+}): number {
+  const useIndex =
+    params.player.handicap_use_index ?? params.tournament.handicap_use_index;
+  const allowancePct = resolveAllowancePct(
+    params.player.handicap_allowance_pct,
+    params.tournament.handicap_allowance_pct,
+    params.format
+  );
+
+  return resolvePlayerHandicap({
+    handicapIndex: params.player.handicap_index,
+    manualHandicap: params.player.manual_handicap,
+    useIndex,
+    allowancePct,
+    teePlayed: params.teePlayed,
+    gender: params.gender,
+  });
+}
 
 export interface PlayerHoleDetail {
   hole: number;
@@ -122,10 +213,32 @@ export function buildSinglesHoleScores(
   handicapIndex: number,
   teePlayed: TeeName = DEFAULT_TEE,
   gender: 'mens' | 'womens' = DEFAULT_GENDER,
-  format: TournamentFormat = 'singles'
+  format: TournamentFormat = 'singles',
+  playingHandicapOverride?: number,
+  includeUnplayedHoles: boolean = true
 ): TournamentHoleScore[] {
   const holeData = getFoxCreekHoleData();
-  const playingHandicap = getPlayingHandicap(handicapIndex, format, teePlayed, gender);
+  const playingHandicap =
+    playingHandicapOverride ??
+    getPlayingHandicap(handicapIndex, format, teePlayed, gender);
+
+  if (!includeUnplayedHoles) {
+    return grossByHole
+      .map((entry) => {
+        const hole = holeData.find((h) => h.hole === entry.hole);
+        if (!hole) return null;
+        const strokes = getStrokesOnHole(playingHandicap, hole.handicapIndex);
+        return {
+          hole: entry.hole,
+          par: hole.par,
+          gross: entry.gross,
+          net: entry.gross - strokes,
+          entered: true,
+        };
+      })
+      .filter((row): row is TournamentHoleScore => row !== null)
+      .sort((a, b) => a.hole - b.hole);
+  }
 
   return holeData.map((hole) => {
     const grossEntry = grossByHole.find((h) => h.hole === hole.hole);
@@ -147,25 +260,43 @@ export function buildSinglesHoleScores(
 export function buildBestBallHoleScores(
   players: PlayerGrossScores[],
   teePlayed: TeeName = DEFAULT_TEE,
-  gender: 'mens' | 'womens' = DEFAULT_GENDER
+  gender: 'mens' | 'womens' = DEFAULT_GENDER,
+  includeUnplayedHoles: boolean = true
 ): TournamentHoleScore[] {
   const holeData = getFoxCreekHoleData();
   const playerCards = players.map((player) =>
-    buildSinglesHoleScores(player.holes, player.handicapIndex, teePlayed, gender, 'best_ball')
+    buildSinglesHoleScores(
+      player.holes,
+      player.handicapIndex,
+      teePlayed,
+      gender,
+      'best_ball',
+      player.playingHandicap,
+      includeUnplayedHoles
+    )
   );
 
-  return holeData.map((hole, index) => {
-    const nets = playerCards.map((card) => card[index]?.net ?? hole.par);
-    const grosses = playerCards.map((card) => card[index]?.gross ?? hole.par);
-    const bestNetIndex = nets.indexOf(Math.min(...nets));
+  return holeData
+    .map((hole) => {
+      const rows = playerCards.map((card) => card.find((row) => row.hole === hole.holeNumber) ?? null);
+      const played = rows.filter((row): row is TournamentHoleScore => row !== null);
 
-    return {
-      hole: hole.hole,
-      par: hole.par,
-      gross: grosses[bestNetIndex] ?? hole.par,
-      net: Math.min(...nets),
-    };
-  });
+      if (!includeUnplayedHoles && played.length === 0) {
+        return null;
+      }
+
+      const nets = rows.map((row) => row?.net ?? hole.par);
+      const grosses = rows.map((row) => row?.gross ?? hole.par);
+      const bestNetIndex = nets.indexOf(Math.min(...nets));
+
+      return {
+        hole: hole.holeNumber,
+        par: hole.par,
+        gross: grosses[bestNetIndex] ?? hole.par,
+        net: Math.min(...nets),
+      };
+    })
+    .filter((row): row is TournamentHoleScore => row !== null);
 }
 
 export function buildBestBallPlayerDetails(
@@ -181,7 +312,8 @@ export function buildBestBallPlayerDetails(
       player.handicapIndex,
       teePlayed,
       gender,
-      'best_ball'
+      'best_ball',
+      player.playingHandicap
     ),
   }));
 
@@ -190,12 +322,14 @@ export function buildBestBallPlayerDetails(
   for (const { playerId, cards } of playerCards) {
     result[playerId] = holeData.map((hole, index) => {
       const card = cards[index];
-      const playingHandicap = getPlayingHandicap(
-        players.find((p) => p.playerId === playerId)?.handicapIndex ?? 0,
-        'best_ball',
-        teePlayed,
-        gender
-      );
+      const playingHandicap =
+        players.find((p) => p.playerId === playerId)?.playingHandicap ??
+        getPlayingHandicap(
+          players.find((p) => p.playerId === playerId)?.handicapIndex ?? 0,
+          'best_ball',
+          teePlayed,
+          gender
+        );
       const strokes = getStrokesOnHole(playingHandicap, hole.handicapIndex);
       const net = card?.net ?? hole.par;
       const allNets = playerCards.map(
@@ -252,6 +386,8 @@ export function buildTournamentHoleScores(params: {
   handicapIndex?: number;
   teePlayed?: TeeName;
   gender?: 'mens' | 'womens';
+  /** When false, only holes with explicit gross entry are included (sync / match scoring). */
+  includeUnplayedHoles?: boolean;
 }): TournamentHoleScore[] {
   const {
     format,
@@ -261,13 +397,22 @@ export function buildTournamentHoleScores(params: {
     handicapIndex = 0,
     teePlayed = DEFAULT_TEE,
     gender = DEFAULT_GENDER,
+    includeUnplayedHoles = true,
   } = params;
 
   switch (format) {
     case 'singles':
-      return buildSinglesHoleScores(grossByHole, handicapIndex, teePlayed, gender, 'singles');
+      return buildSinglesHoleScores(
+        grossByHole,
+        handicapIndex,
+        teePlayed,
+        gender,
+        'singles',
+        undefined,
+        includeUnplayedHoles
+      );
     case 'best_ball':
-      return buildBestBallHoleScores(players, teePlayed, gender);
+      return buildBestBallHoleScores(players, teePlayed, gender, includeUnplayedHoles);
     case 'scramble':
     case 'alternate_shot': {
       const teamHandicap =

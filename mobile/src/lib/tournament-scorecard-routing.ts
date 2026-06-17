@@ -2,7 +2,7 @@ import type { Tournament, TournamentMatchGroup, TournamentTeamSide } from '@/typ
 import { getTournamentById } from './tournament-service';
 import { getTournamentMatchGroups } from './tournament-match-service';
 import { getTournamentRosterPlayerIdsForUser } from './tournament-player-service';
-import { getMatchGroupFormat, isSinglesFormat } from './tournament-labels';
+import { getMatchGroupFormat, isSideScopedTeamFormat } from './tournament-labels';
 
 /** Pick the round for today's calendar day within the tournament schedule. */
 export function getActiveRoundNumber(
@@ -76,7 +76,7 @@ export function buildTournamentScorecardPath(params: {
     const format = getMatchGroupFormat(match.group, params.tournament);
     search.set('matchGroupId', match.group.id);
     search.set('round', String(match.group.round_number));
-    if (!isSinglesFormat(format)) {
+    if (isSideScopedTeamFormat(format)) {
       search.set('side', match.side);
     }
   } else {

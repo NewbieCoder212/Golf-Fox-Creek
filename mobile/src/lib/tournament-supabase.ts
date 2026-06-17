@@ -53,7 +53,7 @@ function parseSupabaseError(status: number, errorText: string): string {
   try {
     const parsed = JSON.parse(errorText) as { message?: string; code?: string };
     if (parsed.message?.includes('row-level security')) {
-      return 'Database permissions blocked this action. Run supabase/migrations/20260619000000_tournament_rls_dev_open.sql in Supabase.';
+      return 'Database permissions blocked score sync. Run supabase/migrations/20260707000000_tournament_scorecard_member_writes.sql in the Supabase SQL editor.';
     }
     if (parsed.message?.includes('tournament_players') && parsed.code === '42P01') {
       return 'Missing tournament_players table. Run supabase/migrations/20260621000000_tournament_players.sql in Supabase.';

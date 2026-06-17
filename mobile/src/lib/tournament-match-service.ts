@@ -59,8 +59,13 @@ async function supabaseRequest<T>(
     });
 
     if (!response.ok) {
-      console.log(`[TournamentMatch] Error ${response.status}:`, await response.text());
+      const errorText = await response.text();
+      console.log(`[TournamentMatch] Error ${response.status}:`, errorText);
       return null;
+    }
+
+    if (response.status === 204) {
+      return [] as T;
     }
 
     return response.json();
@@ -68,6 +73,13 @@ async function supabaseRequest<T>(
     console.log('[TournamentMatch] Request failed:', err);
     return null;
   }
+}
+
+function requireMatchMutation<T>(result: T | null, action: string): T {
+  if (result === null) {
+    throw new Error(`Failed to ${action}. Check database permissions or log in again.`);
+  }
+  return result;
 }
 
 export async function getTournamentMatchGroups(
@@ -174,28 +186,36 @@ export async function syncMatchHoleResults(params: {
   roundNumber: number;
   format: TournamentFormat;
   scores: TournamentScore[];
+  useNetScoring?: boolean;
 }): Promise<TournamentMatchHoleResult[]> {
   const rows = computeMatchHoleResults(
     params.matchGroup,
     params.roundNumber,
     params.format,
-    params.scores
+    params.scores,
+    { useNetScoring: params.useNetScoring ?? false }
   );
 
-  await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
-    method: 'DELETE',
-    query: {
-      match_group_id: `eq.${params.matchGroup.id}`,
-      round_number: `eq.${params.roundNumber}`,
-    },
-  });
+  await requireMatchMutation(
+    await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+      method: 'DELETE',
+      query: {
+        match_group_id: `eq.${params.matchGroup.id}`,
+        round_number: `eq.${params.roundNumber}`,
+      },
+    }),
+    'clear prior match hole results'
+  );
 
   if (rows.length === 0) return [];
 
-  const saved = await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
-    method: 'POST',
-    body: rows as unknown as Record<string, unknown>[],
-  });
+  const saved = requireMatchMutation(
+    await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+      method: 'POST',
+      body: rows as unknown as Record<string, unknown>[],
+    }),
+    'save match hole results'
+  );
 
   const holeResults = saved ?? [];
   await computeAndSaveMatchResults({
@@ -203,6 +223,7 @@ export async function syncMatchHoleResults(params: {
     format: params.format,
     scores: params.scores,
     holeResults,
+    useNetScoring: params.useNetScoring ?? false,
   });
 
   return holeResults;
@@ -213,18 +234,22 @@ export async function computeAndSaveMatchResults(params: {
   format: TournamentFormat;
   scores: TournamentScore[];
   holeResults: TournamentMatchHoleResult[];
+  useNetScoring?: boolean;
 }): Promise<TournamentMatchGroup | null> {
   const points = computeMatchPoints(params);
 
-  const result = await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
-    method: 'PATCH',
-    query: { id: `eq.${params.matchGroup.id}` },
-    body: {
-      match_winner: points.match_winner,
-      match_points_a: points.match_points_a,
-      match_points_b: points.match_points_b,
-    },
-  });
+  const result = requireMatchMutation(
+    await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+      method: 'PATCH',
+      query: { id: `eq.${params.matchGroup.id}` },
+      body: {
+        match_winner: points.match_winner,
+        match_points_a: points.match_points_a,
+        match_points_b: points.match_points_b,
+      },
+    }),
+    'update match points'
+  );
 
   return result?.[0] ?? null;
 }

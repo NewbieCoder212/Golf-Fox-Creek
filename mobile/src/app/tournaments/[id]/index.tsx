@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -30,7 +30,6 @@ import {
 } from '@/lib/tournament-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
-  formatLabel,
   formatTournamentDates,
   tournamentHasSinglesRound,
 } from '@/lib/tournament-labels';
@@ -50,13 +49,18 @@ import {
 } from '@/lib/tournament-scorecard-routing';
 import { cn } from '@/lib/cn';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
-import { TournamentLiveStandingsPanel } from '@/components/TournamentLiveStandingsPanel';
 import { TournamentTeamsRosterTab } from '@/components/TournamentTeamsRosterTab';
 
-type DetailTab = 'leaderboard' | 'teams' | 'matches' | 'teeTimes';
+type DetailTab = 'schedule' | 'matches' | 'teams';
+
+function parseTabParam(param: string | string[] | undefined): DetailTab | null {
+  const raw = Array.isArray(param) ? param[0] : param;
+  if (raw === 'teams' || raw === 'schedule' || raw === 'matches') return raw;
+  return null;
+}
 
 export default function TournamentDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const user = useMemberAuthStore((s) => s.user);
@@ -71,8 +75,13 @@ export default function TournamentDetailScreen() {
   const viewAllTournaments = isManager;
   const managerAccessToken = adminAccessToken ?? memberAccessToken;
 
-  const [tab, setTab] = useState<DetailTab>('leaderboard');
+  const [tab, setTab] = useState<DetailTab>(() => parseTabParam(tabParam) ?? 'schedule');
   const [isOpeningScorecard, setIsOpeningScorecard] = useState(false);
+
+  useEffect(() => {
+    const parsed = parseTabParam(tabParam);
+    if (parsed) setTab(parsed);
+  }, [tabParam]);
 
   const { data: tournament, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['tournament', id],
@@ -184,8 +193,11 @@ export default function TournamentDetailScreen() {
 
   return (
     <View className="flex-1 bg-[#0c0c0c]">
-      <View style={{ paddingTop: insets.top }} className="bg-[#141414] border-b border-neutral-800">
-        <View className="flex-row items-center px-4 py-3">
+      <View
+        style={{ paddingTop: insets.top, flexShrink: 0 }}
+        className="bg-[#141414] border-b border-neutral-800"
+      >
+        <View className="flex-row items-center px-4 py-2">
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -199,49 +211,66 @@ export default function TournamentDetailScreen() {
         </View>
 
         <View className="px-5 pb-4">
-          <Text className="text-white text-2xl font-bold">{tournament.name}</Text>
-          <Text className="text-neutral-400 text-sm mt-1">
-            {formatTournamentDates(tournament.start_date, tournament.end_date)}
-          </Text>
-          <View className="flex-row flex-wrap gap-2 mt-3">
-            {tournament.round_schedule.map((day, dayIndex) => (
-              <View
-                key={`${tournament.id}-day-${dayIndex}`}
-                className="bg-lime-900/30 border border-lime-700/40 rounded-full px-3 py-1"
-              >
-                <Text className="text-lime-400 text-xs font-semibold">
-                  Day {dayIndex + 1}:{' '}
-                  {day.formats.map((format) => formatLabel(format)).join(', ')}
-                </Text>
-              </View>
-            ))}
-            <View className="bg-neutral-800 rounded-full px-3 py-1">
-              <Text className="text-neutral-400 text-xs font-medium">
-                {tournament.rounds_count} rounds
+          {myMatchAssignment ? (
+            <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-3">
+              <Text className="text-lime-400 text-sm font-semibold">
+                Your group · Tee {formatTeeTimeLabel(myMatchAssignment.group.tee_time)} · Hole{' '}
+                {myMatchAssignment.group.starting_hole}
+              </Text>
+              <Text className="text-neutral-500 text-xs mt-1">
+                Scorecard opens with your foursome and pairings
               </Text>
             </View>
-          </View>
-          {isManager && tournament.display_token ? (
-            <View className="mt-4">
-              <TournamentCopyTvLinkButton
-                tournamentId={tournament.id}
-                displayToken={tournament.display_token}
-              />
-            </View>
           ) : null}
+          <Pressable
+            onPress={handleEnterScores}
+            disabled={!canEnterScores || isOpeningScorecard}
+            className={cn(
+              'flex-row items-center justify-center rounded-xl py-4',
+              canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
+            )}
+          >
+            {isOpeningScorecard ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <ClipboardList size={20} color="#fff" />
+                <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+              </>
+            )}
+          </Pressable>
         </View>
+
+        <View className="px-5 pb-3">
+          <Text className="text-white text-xl font-bold">{tournament.name}</Text>
+          <Text className="text-neutral-400 text-sm mt-0.5">
+            {formatTournamentDates(tournament.start_date, tournament.end_date)}
+          </Text>
+        </View>
+
+        {isManager && tournament.display_token ? (
+          <View className="px-5 pb-3">
+            <TournamentCopyTvLinkButton
+              tournamentId={tournament.id}
+              displayToken={tournament.display_token}
+              compact
+            />
+          </View>
+        ) : null}
 
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          className="mx-5 mb-4"
+          className="mx-5 mb-3"
+          style={{ flexGrow: 0 }}
           contentContainerStyle={{ gap: 8 }}
         >
           {[
-            { key: 'leaderboard' as const, label: 'Standings', Icon: Trophy },
+            { key: 'schedule' as const, label: 'Schedule', Icon: Clock },
+            ...(isManager
+              ? [{ key: 'matches' as const, label: 'Matches', Icon: Swords }]
+              : []),
             { key: 'teams' as const, label: 'Teams', Icon: Users },
-            { key: 'matches' as const, label: 'Matches', Icon: Swords },
-            { key: 'teeTimes' as const, label: 'Tee Times', Icon: Clock },
           ].map(({ key, label, Icon }) => (
             <Pressable
               key={key}
@@ -270,36 +299,49 @@ export default function TournamentDetailScreen() {
         </ScrollView>
       </View>
 
+      {tab === 'teams' ? (
+        <View
+          className="flex-1"
+          style={{ flex: 1, minHeight: 0, paddingBottom: insets.bottom + 8 }}
+        >
+          <TournamentTeamsRosterTab
+            tournamentId={id!}
+            tournament={tournament}
+            teams={teams}
+            members={members}
+            tournamentPlayers={tournamentPlayers}
+            playerNameById={playerNameById}
+            isManager={isManager}
+            userId={user?.id}
+            accessToken={managerAccessToken}
+            layout="hero"
+            introText={
+              isManager
+                ? 'Managers can also build rosters from Admin → Tournaments → Teams. No onboarding emails are sent from this screen.'
+                : undefined
+            }
+          />
+        </View>
+      ) : (
       <ScrollView
         className="flex-1"
+        style={{ flex: 1, minHeight: 0 }}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#a3e635" />
         }
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        contentContainerStyle={{
+          paddingTop: 16,
+          paddingBottom: insets.bottom + 24,
+        }}
       >
-        {tab === 'leaderboard' ? (
-          <View className="mx-5">
-            <TournamentLiveStandingsPanel tournamentId={id!} showSponsorBanner />
-          </View>
-        ) : tab === 'teams' ? (
-          <View className="mx-5">
-            <TournamentTeamsRosterTab
-              tournamentId={id!}
-              tournament={tournament}
-              teams={teams}
-              members={members}
-              tournamentPlayers={tournamentPlayers}
-              playerNameById={playerNameById}
-              isManager={isManager}
-              userId={user?.id}
-              accessToken={managerAccessToken}
-              introText={
-                isManager
-                  ? 'Managers can also build rosters from Admin → Tournaments → Teams. No onboarding emails are sent from this screen.'
-                  : undefined
-              }
-            />
-          </View>
+        {tab === 'schedule' ? (
+          <TournamentTeeTimesTab
+            tournamentId={id!}
+            tournament={tournament}
+            teams={teams}
+            playerNameById={playerNameById}
+            matchGroups={matchGroups}
+          />
         ) : tab === 'matches' ? (
           <TournamentMatchGroupsTab
             tournamentId={id!}
@@ -309,50 +351,9 @@ export default function TournamentDetailScreen() {
             playerNameById={playerNameById}
             isManager={isManager}
           />
-        ) : tab === 'teeTimes' ? (
-          <TournamentTeeTimesTab
-            tournamentId={id!}
-            tournament={tournament}
-            teams={teams}
-            members={members}
-            isManager={isManager}
-          />
         ) : null}
       </ScrollView>
-
-      <View
-        style={{ paddingBottom: insets.bottom + 12 }}
-        className="absolute bottom-0 left-0 right-0 bg-[#141414] border-t border-neutral-800 px-5 pt-4"
-      >
-        {myMatchAssignment && (
-          <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-3 py-2 mb-3">
-            <Text className="text-lime-400 text-xs font-semibold">
-              Your group · Tee {formatTeeTimeLabel(myMatchAssignment.group.tee_time)} · Hole{' '}
-              {myMatchAssignment.group.starting_hole}
-            </Text>
-            <Text className="text-neutral-500 text-[11px] mt-0.5">
-              Scorecard opens with your foursome and pairings
-            </Text>
-          </View>
-        )}
-        <Pressable
-          onPress={handleEnterScores}
-          disabled={!canEnterScores || isOpeningScorecard}
-          className={cn(
-            'flex-row items-center justify-center rounded-xl py-3.5',
-            canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
-          )}
-        >
-          {isOpeningScorecard ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <ClipboardList size={18} color="#fff" />
-              <Text className="text-white font-bold ml-2">Enter Scores</Text>
-            </>
-          )}
-        </Pressable>
-      </View>
+      )}
     </View>
   );
 }

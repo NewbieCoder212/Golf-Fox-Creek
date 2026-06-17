@@ -12,7 +12,6 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 import { useScorecardStore } from '@/lib/scorecard-store';
 import { SponsorBanner } from '@/components/SponsorBanner';
-import { useTopTabBarHeight } from '@/components/navigation/TopTabBar';
 import { getTurnMessaging, getDefaultTurnMessagingSettings } from '@/lib/supabase';
 import { FoxCreekPaperScorecard } from '@/components/FoxCreekPaperScorecard';
 import { ScorecardAssistPanel } from '@/components/ScorecardAssistPanel';
@@ -78,7 +77,6 @@ const WARNING_THRESHOLD = 12 * 60; // 12 minutes - yellow warning
 
 export default function ScorecardScreen() {
   const insets = useSafeAreaInsets();
-  const topTabBarHeight = useTopTabBarHeight();
   const router = useRouter();
   const t = useTranslations();
   const { id: tournamentId, matchGroupId, round, side } = useLocalSearchParams<{
@@ -678,7 +676,7 @@ export default function ScorecardScreen() {
         </Animated.View>
       )}
 
-      <View style={{ paddingTop: topTabBarHeight }} className="bg-[#0c0c0c] border-b border-neutral-800">
+      <View style={{ paddingTop: insets.top }} className="bg-[#0c0c0c] border-b border-neutral-800">
         <View className="flex-row items-center justify-between px-4 py-2">
           <Pressable
             onPress={handleGoToMainMenu}

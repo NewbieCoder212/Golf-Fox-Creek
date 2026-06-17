@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { Plus, Shield, UserPlus, X } from 'lucide-react-native';
+import { Image } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -31,7 +32,6 @@ import {
 import {
   canCaptainManageRoster,
   canManageTeamRoster,
-  getTeamRosterStatusLabel,
 } from '@/lib/tournament-roster-utils';
 import { getTeamSideDisplayName, tournamentNeedsTeams } from '@/lib/tournament-labels';
 import { updateTournamentTeam } from '@/lib/tournament-service';
@@ -44,6 +44,199 @@ const modalInputClassName =
   'bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 text-white text-base';
 const modalInputStyle = { color: '#ffffff' };
 
+function HeroTeamPlayerList({
+  playerIds,
+  playerNameById,
+}: {
+  playerIds: string[];
+  playerNameById: Record<string, string>;
+}) {
+  const playerCount = playerIds.length;
+  const useTwoColumns = playerCount >= 4;
+  const splitAt = Math.ceil(playerCount / 2);
+  const leftColumn = useTwoColumns ? playerIds.slice(0, splitAt) : playerIds;
+  const rightColumn = useTwoColumns ? playerIds.slice(splitAt) : [];
+  const nameSize = playerCount > 12 ? 9 : playerCount > 8 ? 10 : 11;
+
+  const renderName = (playerId: string) => (
+    <View
+      key={playerId}
+      style={{
+        paddingVertical: 3,
+        paddingHorizontal: 2,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(38, 38, 38, 0.9)',
+      }}
+    >
+      <Text
+        style={{
+          color: '#e5e5e5',
+          fontSize: nameSize,
+          fontWeight: '500',
+          lineHeight: nameSize + 3,
+        }}
+        numberOfLines={2}
+      >
+        {playerNameById[playerId] ?? 'Player'}
+      </Text>
+    </View>
+  );
+
+  if (playerCount === 0) {
+    return (
+      <Text style={{ color: '#525252', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+        No players yet
+      </Text>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={{ flexGrow: 1, paddingBottom: 4 }}
+      showsVerticalScrollIndicator={false}
+      nestedScrollEnabled
+    >
+      <View style={{ flexDirection: 'row', gap: 4 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>{leftColumn.map(renderName)}</View>
+        {useTwoColumns ? (
+          <View style={{ flex: 1, minWidth: 0 }}>{rightColumn.map(renderName)}</View>
+        ) : null}
+      </View>
+    </ScrollView>
+  );
+}
+
+function HeroTeamPanel({
+  team,
+  teams,
+  playerNameById,
+  members,
+  isManager,
+  userId,
+  onManageRoster,
+}: {
+  team: TournamentTeam;
+  teams: TournamentTeam[];
+  playerNameById: Record<string, string>;
+  members: RosterMemberOption[];
+  isManager: boolean;
+  userId?: string;
+  onManageRoster: (team: TournamentTeam) => void;
+}) {
+  const captainName = team.captain_user_id
+    ? members.find((member) => member.id === team.captain_user_id)?.full_name ?? null
+    : null;
+  const canManageRoster = canManageTeamRoster(team, { isManager, userId });
+  const sideLabel = getTeamSideDisplayName(team.side ?? 'side_a', teams);
+  const isSideA = (team.side ?? 'side_a') === 'side_a';
+
+  return (
+    <View
+      style={{
+        width: '50%',
+        flex: 1,
+        minWidth: 0,
+        paddingHorizontal: 4,
+      }}
+    >
+      <View
+        style={{
+          flex: 1,
+          borderWidth: 2,
+          borderColor: isSideA ? 'rgba(132, 204, 22, 0.45)' : 'rgba(82, 82, 82, 0.9)',
+          borderRadius: 16,
+          overflow: 'hidden',
+          backgroundColor: '#141414',
+        }}
+      >
+        <View
+          style={{
+            paddingHorizontal: 10,
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: isSideA ? 'rgba(132, 204, 22, 0.25)' : 'rgba(64, 64, 64, 0.9)',
+            backgroundColor: isSideA ? 'rgba(26, 46, 5, 0.55)' : 'rgba(23, 23, 23, 0.9)',
+            alignItems: 'center',
+          }}
+        >
+          {team.logo_url ? (
+            <Image
+              source={{ uri: team.logo_url }}
+              style={{ width: 48, height: 48, borderRadius: 24, marginBottom: 6 }}
+              resizeMode="cover"
+            />
+          ) : (
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                marginBottom: 6,
+                borderWidth: 2,
+                borderColor: isSideA ? 'rgba(132, 204, 22, 0.5)' : 'rgba(82, 82, 82, 0.9)',
+                backgroundColor: isSideA ? 'rgba(26, 46, 5, 0.6)' : '#262626',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#a3e635', fontSize: 22, fontWeight: '700' }}>
+                {team.team_name.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <Text
+            style={{
+              color: 'rgba(163, 230, 53, 0.85)',
+              fontSize: 10,
+              fontWeight: '700',
+              letterSpacing: 1.2,
+              textTransform: 'uppercase',
+            }}
+          >
+            {sideLabel}
+          </Text>
+          <Text
+            style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 2, textAlign: 'center' }}
+            numberOfLines={2}
+          >
+            {team.team_name}
+          </Text>
+          {captainName ? (
+            <Text style={{ color: '#737373', fontSize: 11, marginTop: 4 }} numberOfLines={1}>
+              Capt. {captainName}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={{ flex: 1, paddingHorizontal: 4, paddingVertical: 4, minHeight: 0 }}>
+          <HeroTeamPlayerList playerIds={team.player_ids} playerNameById={playerNameById} />
+        </View>
+
+        {canManageRoster ? (
+          <Pressable
+            onPress={() => onManageRoster(team)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 10,
+              borderTopWidth: 1,
+              borderTopColor: isSideA ? 'rgba(132, 204, 22, 0.25)' : 'rgba(64, 64, 64, 0.9)',
+              backgroundColor: isSideA ? 'rgba(26, 46, 5, 0.35)' : 'rgba(23, 23, 23, 0.7)',
+            }}
+          >
+            <UserPlus size={14} color="#a3e635" />
+            <Text style={{ color: '#a3e635', fontSize: 12, fontWeight: '600', marginLeft: 6 }}>
+              {isManager ? 'Manage' : 'Roster'}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 interface TournamentTeamsRosterTabProps {
   tournamentId: string;
   tournament: Tournament;
@@ -55,6 +248,7 @@ interface TournamentTeamsRosterTabProps {
   userId?: string;
   accessToken?: string | null;
   introText?: string;
+  layout?: 'default' | 'hero';
 }
 
 export function TournamentTeamsRosterTab({
@@ -68,6 +262,7 @@ export function TournamentTeamsRosterTab({
   userId,
   accessToken,
   introText,
+  layout = 'default',
 }: TournamentTeamsRosterTabProps) {
   const queryClient = useQueryClient();
   const [showTeamModal, setShowTeamModal] = useState(false);
@@ -357,15 +552,100 @@ export function TournamentTeamsRosterTab({
     });
   };
 
+  const renderTeamColumn = (team: TournamentTeam, index: number) => {
+    const captainName = team.captain_user_id
+      ? members.find((member) => member.id === team.captain_user_id)?.full_name ?? 'Captain'
+      : null;
+    const canManageRoster = canManageTeamRoster(team, { isManager, userId });
+    const sideLabel = getTeamSideDisplayName(team.side ?? 'side_a', teams);
+    const isHero = layout === 'hero';
+
+    if (isHero) {
+      return (
+        <HeroTeamPanel
+          key={team.id}
+          team={team}
+          teams={teams}
+          playerNameById={playerNameById}
+          members={members}
+          isManager={isManager}
+          userId={userId}
+          onManageRoster={openManageRoster}
+        />
+      );
+    }
+
+    return (
+      <Animated.View
+        key={team.id}
+        entering={FadeInDown.delay(index * 50).duration(300)}
+        className="flex-1 bg-[#141414] border border-neutral-800 rounded-xl p-3 min-w-0"
+      >
+        {team.logo_url ? (
+          <Image
+            source={{ uri: team.logo_url }}
+            style={{ width: 48, height: 48, borderRadius: 24, alignSelf: 'center' }}
+            resizeMode="cover"
+          />
+        ) : (
+          <View className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-700 items-center justify-center self-center">
+            <Text className="text-lime-400 font-display text-lg">
+              {team.team_name.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <Text className="text-fox-lime text-[10px] font-body-bold uppercase tracking-widest text-center mt-3">
+          {sideLabel}
+        </Text>
+        <Text className="text-white font-bold text-sm text-center mt-1" numberOfLines={2}>
+          {team.team_name}
+        </Text>
+        {captainName ? (
+          <Text className="text-neutral-500 text-[10px] text-center mt-2">Capt. {captainName}</Text>
+        ) : null}
+        <ScrollView
+          className="mt-3 pt-3 border-t border-neutral-800"
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+        >
+          {team.player_ids.length === 0 ? (
+            <Text className="text-neutral-600 text-sm text-center">No players yet</Text>
+          ) : (
+            team.player_ids.map((playerId) => (
+              <Text
+                key={playerId}
+                className="text-neutral-200 text-xs text-center py-1"
+                numberOfLines={1}
+              >
+                {playerNameById[playerId] ?? 'Player'}
+              </Text>
+            ))
+          )}
+        </ScrollView>
+        {canManageRoster ? (
+          <Pressable
+            onPress={() => openManageRoster(team)}
+            className="flex-row items-center justify-center mt-3 pt-2 border-t border-neutral-800 active:opacity-80"
+          >
+            <UserPlus size={12} color="#a3e635" />
+            <Text className="text-lime-400 font-semibold text-[10px] ml-1.5">
+              {isManager ? 'Manage' : 'Roster'}
+            </Text>
+          </Pressable>
+        ) : null}
+      </Animated.View>
+    );
+  };
+
   return (
-    <View>
-      {introText ? (
+    <View style={layout === 'hero' ? { flex: 1, width: '100%', paddingTop: 8 } : undefined}>
+      {introText && layout !== 'hero' ? (
         <View className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-3 mb-3">
           <Text className="text-neutral-300 text-sm">{introText}</Text>
         </View>
       ) : null}
 
-      {myCaptainTeam && canCaptainManageRoster(myCaptainTeam, userId) ? (
+      {myCaptainTeam && canCaptainManageRoster(myCaptainTeam, userId) && layout !== 'hero' ? (
         <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-3">
           <View className="flex-row items-center">
             <Shield size={16} color="#a3e635" />
@@ -391,51 +671,21 @@ export function TournamentTeamsRosterTab({
         </Pressable>
       ) : null}
 
-      {teams.map((team, index) => {
-        const captainName = team.captain_user_id
-          ? members.find((member) => member.id === team.captain_user_id)?.full_name ?? 'Captain'
-          : null;
-        const canManageRoster = canManageTeamRoster(team, { isManager, userId });
-
-        return (
-          <Animated.View
-            key={team.id}
-            entering={FadeInDown.delay(index * 50).duration(300)}
-            className="bg-[#141414] border border-neutral-800 rounded-xl p-4 mb-3"
-          >
-            <View className="flex-row items-center justify-between">
-              <Text className="text-white font-bold text-base">{team.team_name}</Text>
-              <View className="bg-neutral-900 border border-neutral-700 rounded-full px-2 py-0.5">
-                <Text className="text-neutral-300 text-[10px] font-bold uppercase">
-                  {getTeamRosterStatusLabel(team)}
-                </Text>
-              </View>
-            </View>
-            {captainName ? (
-              <Text className="text-neutral-500 text-xs mt-2">Captain: {captainName}</Text>
-            ) : isManager ? (
-              <Text className="text-amber-500/90 text-xs mt-2">Captain optional for now</Text>
-            ) : null}
-            <Text className="text-neutral-500 text-xs mt-2 uppercase tracking-widest">Players</Text>
-            {team.player_ids.map((playerId) => (
-              <Text key={playerId} className="text-neutral-300 text-sm mt-1">
-                • {playerNameById[playerId] ?? 'Player'}
-              </Text>
-            ))}
-            {canManageRoster ? (
-              <Pressable
-                onPress={() => openManageRoster(team)}
-                className="flex-row items-center mt-3 pt-3 border-t border-neutral-800 active:opacity-80"
-              >
-                <UserPlus size={14} color="#a3e635" />
-                <Text className="text-lime-400 font-semibold text-sm ml-2">
-                  {isManager ? 'Manage Team' : 'Manage Players'}
-                </Text>
-              </Pressable>
-            ) : null}
-          </Animated.View>
-        );
-      })}
+      {sideATeam && sideBTeam ? (
+        layout === 'hero' ? (
+          <View style={{ flex: 1, flexDirection: 'row', width: '100%', alignItems: 'stretch' }}>
+            {renderTeamColumn(sideATeam, 0)}
+            {renderTeamColumn(sideBTeam, 1)}
+          </View>
+        ) : (
+          <View className="flex-row gap-3 mb-3">
+            {renderTeamColumn(sideATeam, 0)}
+            {renderTeamColumn(sideBTeam, 1)}
+          </View>
+        )
+      ) : (
+        teams.map((team, index) => renderTeamColumn(team, index))
+      )}
 
       {!tournamentNeedsTeams(tournament) && teams.length === 0 ? (
         <Text className="text-neutral-500 text-sm text-center mt-2 px-4">

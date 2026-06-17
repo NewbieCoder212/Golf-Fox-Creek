@@ -7,7 +7,6 @@ import * as Haptics from 'expo-haptics';
 
 import { SponsorBanner } from '@/components/SponsorBanner';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
-import { TournamentLiveMatchGrids } from '@/components/TournamentLiveMatchGrids';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import {
   buildMatchPointsLeaderboard,
@@ -30,6 +29,7 @@ interface TournamentLiveStandingsPanelProps {
   displayToken?: string | null;
   showTvLink?: boolean;
   showSponsorBanner?: boolean;
+  compact?: boolean;
 }
 
 export function TournamentLiveStandingsPanel({
@@ -37,6 +37,7 @@ export function TournamentLiveStandingsPanel({
   displayToken,
   showTvLink = false,
   showSponsorBanner = false,
+  compact = false,
 }: TournamentLiveStandingsPanelProps) {
   const [leaderboardMode, setLeaderboardMode] = useState<'gross' | 'net'>('net');
 
@@ -53,14 +54,14 @@ export function TournamentLiveStandingsPanel({
     refetchInterval: 15_000,
   });
 
-  const { data: scores = [], isFetching: scoresFetching, dataUpdatedAt } = useQuery({
+  const { data: scores = [], isPending: scoresPending, dataUpdatedAt } = useQuery({
     queryKey: ['tournamentScores', tournamentId],
     queryFn: () => getTournamentScores(tournamentId),
     enabled: Boolean(tournamentId),
     refetchInterval: 15_000,
   });
 
-  const { data: matchGroups = [], isFetching: groupsFetching } = useQuery({
+  const { data: matchGroups = [] } = useQuery({
     queryKey: ['tournamentMatchGroups', tournamentId],
     queryFn: () => getTournamentMatchGroups(tournamentId),
     enabled: Boolean(tournamentId),
@@ -86,8 +87,6 @@ export function TournamentLiveStandingsPanel({
     [teams, matchGroups]
   );
 
-  const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
-
   const leaderboard = useMemo(
     () => buildTournamentLeaderboard(scores, leaderboardMode),
     [scores, leaderboardMode]
@@ -103,7 +102,7 @@ export function TournamentLiveStandingsPanel({
     [tournamentPlayers, members]
   );
 
-  const isLiveRefreshing = scoresFetching || groupsFetching;
+  const isInitialLoad = scoresPending;
   const lastUpdated =
     dataUpdatedAt > 0 ? formatClubTime(new Date(dataUpdatedAt).toISOString(), true) : null;
 
@@ -115,7 +114,7 @@ export function TournamentLiveStandingsPanel({
           <Text className="text-lime-400 text-[10px] font-semibold ml-1.5 uppercase tracking-wider">
             Live
           </Text>
-          {isLiveRefreshing ? (
+          {isInitialLoad ? (
             <ActivityIndicator size="small" color="#a3e635" style={{ marginLeft: 6 }} />
           ) : null}
         </View>
@@ -152,18 +151,20 @@ export function TournamentLiveStandingsPanel({
             matchesWon: row.matchesWon,
           }))}
           subtitle="Team Matchup"
+          compact={compact}
+          minimal={compact}
           className="mb-3"
         />
-      ) : null}
+      ) : (
+        <View className="py-8 items-center bg-[#141414] rounded-2xl border border-neutral-800 mb-3">
+          <Text className="text-neutral-400 text-sm text-center px-4">
+            Teams not configured yet. Check the Teams tab.
+          </Text>
+        </View>
+      )}
 
-      <TournamentLiveMatchGrids
-        matchGroups={matchGroups}
-        scores={scores}
-        teamNameById={teamNameById}
-        playerNameById={playerNameById}
-        useNetScoring={matchUseNetScoring}
-      />
-
+      {!compact ? (
+        <>
       <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2 mt-1">
         Stroke Standings
       </Text>
@@ -240,6 +241,8 @@ export function TournamentLiveStandingsPanel({
           </Animated.View>
         ))
       )}
+        </>
+      ) : null}
     </View>
   );
 }

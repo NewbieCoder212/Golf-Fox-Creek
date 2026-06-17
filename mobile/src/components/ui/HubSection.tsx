@@ -9,6 +9,7 @@ interface HubSectionProps extends ViewProps {
   onActionPress?: () => void;
   className?: string;
   panelClassName?: string;
+  dense?: boolean;
   children: React.ReactNode;
 }
 
@@ -18,13 +19,14 @@ export function HubSection({
   onActionPress,
   className,
   panelClassName,
+  dense = false,
   children,
   ...props
 }: HubSectionProps) {
   return (
-    <View className={cn('mt-6', className)} {...props}>
+    <View className={cn(dense ? 'mt-2' : 'mt-6', className)} {...props}>
       {title ? (
-        <View className="px-5 mb-3">
+        <View className={cn('px-5', dense ? 'mb-2' : 'mb-3')}>
           <SectionLabel
             label={title}
             actionLabel={actionLabel}

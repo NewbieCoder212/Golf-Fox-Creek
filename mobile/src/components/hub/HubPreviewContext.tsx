@@ -13,9 +13,6 @@ export type HubPreviewScenario =
 export const HUB_PREVIEW_SCENARIOS: { id: HubPreviewScenario; label: string }[] = [
   { id: 'live', label: 'Live' },
   { id: 'default', label: 'Idle' },
-  { id: 'roundInProgress', label: 'Round Active' },
-  { id: 'continueRound', label: 'Continue Round' },
-  { id: 'turnPaused', label: 'Turn Break' },
 ];
 
 /** Geofence-only scenarios — kept in type/overrides for when geofencing is re-enabled */

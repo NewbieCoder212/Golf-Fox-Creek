@@ -30,7 +30,7 @@ export const translations = {
     // Header
     memberHub: 'Member Hub',
     foxCreek: 'Fox Creek',
-    homeCourseTagline: 'Digital scorecard · Tournaments · Match play',
+    homeCourseTagline: 'Generation Cup · Fox Creek',
     todayAtCourse: 'Today at the Course',
     yourRound: 'Your Round',
     play: 'Play',
@@ -44,6 +44,19 @@ export const translations = {
     goodAfternoon: 'Good afternoon',
     goodEvening: 'Good evening',
     logOut: 'Log out',
+
+    // Tournament hub
+    tournamentStandings: 'Tournament Standings',
+    viewTeams: 'View teams',
+    enterTodaysMatch: "Enter today's match",
+    tapToEnterTournament: 'Tap here to enter your tournament',
+    noPairingToday: 'No pairing for today\'s round',
+    contactCaptain: 'Contact your captain if you think this is a mistake.',
+    noEventAssigned: 'No event assigned yet',
+    noMatchToday: 'No match scheduled for today',
+    tournamentStarts: 'Tournament starts',
+    tournamentEnded: 'Tournament has ended — thanks for playing!',
+    hole: 'Hole',
 
     // Stats
     handicap: 'Handicap',
@@ -116,7 +129,7 @@ export const translations = {
     // Header
     memberHub: 'Espace Membre',
     foxCreek: 'Fox Creek',
-    homeCourseTagline: 'Carte de pointage · Tournois · Match play',
+    homeCourseTagline: 'Generation Cup · Fox Creek',
     todayAtCourse: "Aujourd'hui au parcours",
     yourRound: 'Votre partie',
     play: 'Jouer',
@@ -130,6 +143,19 @@ export const translations = {
     goodAfternoon: 'Bon après-midi',
     goodEvening: 'Bonsoir',
     logOut: 'Se déconnecter',
+
+    // Tournament hub
+    tournamentStandings: 'Classement du tournoi',
+    viewTeams: 'Voir les équipes',
+    enterTodaysMatch: 'Entrer dans le match du jour',
+    tapToEnterTournament: 'Appuyez ici pour entrer au tournoi',
+    noPairingToday: 'Aucun appariement pour la ronde du jour',
+    contactCaptain: 'Contactez votre capitaine si vous pensez qu\'il s\'agit d\'une erreur.',
+    noEventAssigned: 'Aucun événement assigné',
+    noMatchToday: 'Aucun match prévu aujourd\'hui',
+    tournamentStarts: 'Le tournoi commence',
+    tournamentEnded: 'Le tournoi est terminé — merci d\'avoir joué!',
+    hole: 'Trou',
 
     // Stats
     handicap: 'Handicap',

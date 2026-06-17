@@ -518,13 +518,14 @@ export function TournamentMatchGroupsTab({
 
   return (
     <View className="mx-5 mt-2">
-      <View className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-3 mb-4">
-        <Text className="text-neutral-300 text-sm">
-          Set tee times here first, then assign players when matches are announced. Saved tee-time
-          slots persist even with empty player slots. This is the source of truth for when each
-          foursome plays.
-        </Text>
-      </View>
+      {isManager ? (
+        <View className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-3 mb-4">
+          <Text className="text-neutral-300 text-sm">
+            Set tee times here first, then assign players when matches are announced. Saved tee-time
+            slots persist even with empty player slots.
+          </Text>
+        </View>
+      ) : null}
 
       <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">Round</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
@@ -600,15 +601,19 @@ export function TournamentMatchGroupsTab({
         </Text>
       </View>
 
-      <TournamentFormatRulesCard formatId={roundFormat} settings={formatSettings} compact />
+      {isManager ? (
+        <>
+          <TournamentFormatRulesCard formatId={roundFormat} settings={formatSettings} compact />
 
-      <Text className="text-neutral-500 text-xs uppercase tracking-widest mt-5 mb-2">
-        Roster pools
-      </Text>
-      <View className="flex-row gap-3 mb-4">
-        {renderPoolColumn('a', sideATeam, sideAName)}
-        {renderPoolColumn('b', sideBTeam, sideBName)}
-      </View>
+          <Text className="text-neutral-500 text-xs uppercase tracking-widest mt-5 mb-2">
+            Roster pools
+          </Text>
+          <View className="flex-row gap-3 mb-4">
+            {renderPoolColumn('a', sideATeam, sideAName)}
+            {renderPoolColumn('b', sideBTeam, sideBName)}
+          </View>
+        </>
+      ) : null}
 
       {isManager && activeSlot ? (
         <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-3 py-2 mb-3">
@@ -620,7 +625,9 @@ export function TournamentMatchGroupsTab({
       ) : null}
 
       <View className="flex-row items-center justify-between mb-2">
-        <Text className="text-neutral-500 text-xs uppercase tracking-widest">Pairings board</Text>
+        <Text className="text-neutral-500 text-xs uppercase tracking-widest">
+          {isManager ? 'Pairings board' : 'Match pairings'}
+        </Text>
         {isManager ? (
           <View className="flex-row gap-2">
             <Pressable
@@ -737,7 +744,9 @@ export function TournamentMatchGroupsTab({
                           key={`${row.clientKey}-a-${index}`}
                           label={
                             playerId
-                              ? memberNameById[playerId]?.split(' ')[0] ?? 'Player'
+                              ? isManager
+                                ? memberNameById[playerId]?.split(' ')[0] ?? 'Player'
+                                : memberNameById[playerId] ?? 'Player'
                               : isSinglesFormat(groupFormat)
                                 ? `Match ${index + 1}`
                                 : `Slot ${index + 1}`
@@ -769,7 +778,9 @@ export function TournamentMatchGroupsTab({
                           key={`${row.clientKey}-b-${index}`}
                           label={
                             playerId
-                              ? memberNameById[playerId]?.split(' ')[0] ?? 'Player'
+                              ? isManager
+                                ? memberNameById[playerId]?.split(' ')[0] ?? 'Player'
+                                : memberNameById[playerId] ?? 'Player'
                               : isSinglesFormat(groupFormat)
                                 ? `Match ${index + 1}`
                                 : `Slot ${index + 1}`

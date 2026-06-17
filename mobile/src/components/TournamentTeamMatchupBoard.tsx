@@ -18,6 +18,7 @@ interface TournamentTeamMatchupBoardProps {
   subtitle?: string;
   className?: string;
   compact?: boolean;
+  minimal?: boolean;
 }
 
 function TeamLogo({ uri, size }: { uri: string | null | undefined; size: number }) {
@@ -53,6 +54,7 @@ export function TournamentTeamMatchupBoard({
   subtitle,
   className,
   compact = false,
+  minimal = false,
 }: TournamentTeamMatchupBoardProps) {
   const sideA = getTeamBySide(teams, 'side_a');
   const sideB = getTeamBySide(teams, 'side_b');
@@ -67,7 +69,7 @@ export function TournamentTeamMatchupBoard({
     );
   }
 
-  const logoSize = compact ? 64 : 88;
+  const logoSize = minimal ? 44 : compact ? 64 : 88;
   const statA = sideA ? findStat(teamStats, sideA.id) : undefined;
   const statB = sideB ? findStat(teamStats, sideB.id) : undefined;
 
@@ -76,21 +78,35 @@ export function TournamentTeamMatchupBoard({
       {team ? (
         <>
           <TeamLogo uri={team.logo_url} size={logoSize} />
-          <Text className="text-fox-lime text-[10px] font-body-bold uppercase tracking-widest mt-3">
+          <Text className={cn('text-fox-lime text-[10px] font-body-bold uppercase tracking-widest', minimal ? 'mt-2' : 'mt-3')}>
             {label}
           </Text>
           <Text
-            className={cn('text-white font-display text-center mt-1', compact ? 'text-sm' : 'text-base')}
+            className={cn(
+              'text-white font-display text-center mt-1',
+              minimal ? 'text-xs' : compact ? 'text-sm' : 'text-base'
+            )}
             numberOfLines={2}
           >
             {team.team_name}
           </Text>
           {stat?.matchPoints != null ? (
-            <Text className="text-lime-400 font-display text-2xl mt-2">{stat.matchPoints}</Text>
+            <Text
+              className={cn(
+                'text-lime-400 font-display mt-2',
+                minimal ? 'text-lg' : 'text-2xl'
+              )}
+            >
+              {stat.matchPoints}
+            </Text>
           ) : stat?.holesWon != null ? (
-            <Text className="text-white font-display text-2xl mt-2">{stat.holesWon}</Text>
+            <Text
+              className={cn('text-white font-display mt-2', minimal ? 'text-lg' : 'text-2xl')}
+            >
+              {stat.holesWon}
+            </Text>
           ) : null}
-          {stat?.matchesWon != null ? (
+          {stat?.matchesWon != null && !minimal ? (
             <Text className="text-neutral-500 text-[10px] font-body mt-1">
               {stat.matchesWon} match win{stat.matchesWon !== 1 ? 's' : ''}
             </Text>
@@ -107,20 +123,25 @@ export function TournamentTeamMatchupBoard({
 
   return (
     <View className={cn('bg-fox-surface rounded-2xl border border-lime-700/30 overflow-hidden', className)}>
-      {subtitle ? (
+      {subtitle && !minimal ? (
         <View className="px-4 py-2 border-b border-fox-border/60">
           <Text className="text-neutral-500 text-[10px] uppercase tracking-widest font-body-semibold text-center">
             {subtitle}
           </Text>
         </View>
       ) : null}
-      <View className="flex-row items-center px-3 py-5">
+      <View className={cn('flex-row items-center px-3', minimal ? 'py-2.5' : 'py-5')}>
         {renderTeam(sideA, 'Team A', statA)}
         <View className="items-center px-2">
-          <View className="w-10 h-10 rounded-full bg-fox-surface-elevated border border-fox-border items-center justify-center">
-            <Swords size={18} color="#a3e635" strokeWidth={1.5} />
+          <View
+            className={cn(
+              'rounded-full bg-fox-surface-elevated border border-fox-border items-center justify-center',
+              minimal ? 'w-8 h-8' : 'w-10 h-10'
+            )}
+          >
+            <Swords size={minimal ? 14 : 18} color="#a3e635" strokeWidth={1.5} />
           </View>
-          <Text className="text-neutral-600 text-[10px] font-body-bold mt-1">VS</Text>
+          {!minimal ? <Text className="text-neutral-600 text-[10px] font-body-bold mt-1">VS</Text> : null}
         </View>
         {renderTeam(sideB, 'Team B', statB)}
       </View>

@@ -107,7 +107,7 @@ function HubPreviewScreenContent() {
           <View className="flex-1 ml-3">
             <Text className="text-white text-base font-body-semibold">Member Hub Preview</Text>
             <Text className="text-neutral-500 text-xs mt-0.5">
-              Live content · simulate scorecard states on the home screen
+              Live tournament hub · hero, match CTA, standings
             </Text>
           </View>
         </View>

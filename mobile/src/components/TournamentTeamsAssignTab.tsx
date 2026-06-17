@@ -20,11 +20,15 @@ import {
   removePlayerFromTeam,
 } from '@/lib/tournament-player-service';
 import {
+  buildCaptainTeamUpdate,
   getUnassignedPlayers,
+  isTeamCaptainPlayer,
   playerIdsEqual,
+  resolveCaptainDisplayName,
   resolveParticipantEmail,
   resolveTeamParticipants,
   sanitizeTeamPlayerIds,
+  validateCaptainPlayerOnTeam,
 } from '@/lib/tournament-participant-utils';
 import { updateTournamentTeam } from '@/lib/tournament-service';
 import { getTeamSideDisplayName, tournamentNeedsTeams } from '@/lib/tournament-labels';
@@ -38,7 +42,7 @@ interface TournamentTeamsAssignTabProps {
   tournament: Tournament;
   teams: TournamentTeam[];
   participants: TournamentPlayer[];
-  members: Array<{ id: string; email?: string | null }>;
+  members: Array<{ id: string; email?: string | null; full_name?: string | null }>;
   accessToken: string;
 }
 
@@ -57,6 +61,7 @@ export function TournamentTeamsAssignTab({
   const [inlineTeamName, setInlineTeamName] = useState('');
   const [teamName, setTeamName] = useState('');
   const [teamSide, setTeamSide] = useState<TournamentTeamSide>('side_a');
+  const [editingCaptainPlayerId, setEditingCaptainPlayerId] = useState<string | null>(null);
 
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
@@ -198,16 +203,62 @@ export function TournamentTeamsAssignTab({
     onError: (error: Error) => Alert.alert('Remove failed', error.message),
   });
 
+  const updateCaptainMutation = useMutation({
+    mutationFn: async (params: { teamId: string; player: TournamentPlayer }) => {
+      const result = await updateTournamentTeam(
+        params.teamId,
+        buildCaptainTeamUpdate(params.player, members, memberEmailByUserId),
+        { tournamentId, accessToken }
+      );
+      return requireData(result, 'Could not update captain');
+    },
+    onSuccess: (updatedTeam) => {
+      setEditingTeam((current) => (current?.id === updatedTeam.id ? updatedTeam : current));
+      setEditingCaptainPlayerId(updatedTeam.captain_player_id);
+      refresh();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error, variables) => {
+      const team = teams.find((entry) => entry.id === variables.teamId);
+      setEditingCaptainPlayerId(team?.captain_player_id ?? null);
+      Alert.alert('Could not update captain', error.message);
+    },
+  });
+
   const openCreate = () => {
     setEditingTeam(null);
     setTeamName('');
+    setEditingCaptainPlayerId(null);
     setTeamSide(sideATeam ? 'side_b' : 'side_a');
     setShowModal(true);
   };
 
   const openAssign = (team: TournamentTeam) => {
     setEditingTeam(team);
+    setEditingCaptainPlayerId(team.captain_player_id);
     setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingTeam(null);
+    setEditingCaptainPlayerId(null);
+  };
+
+  const selectEditingCaptain = (player: TournamentPlayer) => {
+    if (!activeEditingTeam) return;
+    if (!validateCaptainPlayerOnTeam(activeEditingTeam, player, participants)) {
+      Alert.alert(
+        'Cannot set captain',
+        `${player.display_name} must be on this team before they can be captain.`
+      );
+      return;
+    }
+    setEditingCaptainPlayerId(player.id);
+    updateCaptainMutation.mutate({
+      teamId: activeEditingTeam.id,
+      player,
+    });
   };
 
   const activeEditingTeam = editingTeam
@@ -229,8 +280,8 @@ export function TournamentTeamsAssignTab({
     <View>
       <View className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-3 mb-4">
         <Text className="text-neutral-300 text-sm">
-          Step 2: Create team names, then assign people from your participant list. Unassigned
-          players: {unassigned.length}.
+          Step 2: Create team names, assign a captain, then add people from your participant list.
+          Unassigned players: {unassigned.length}.
         </Text>
       </View>
 
@@ -251,6 +302,12 @@ export function TournamentTeamsAssignTab({
         const isSavingName =
           saveNameMutation.isPending && saveNameMutation.variables?.teamId === team.id;
         const teamRoster = resolveTeamParticipants(team, participants);
+        const captainName = resolveCaptainDisplayName(
+          team,
+          teamRoster,
+          members,
+          memberEmailByUserId
+        );
 
         return (
         <View
@@ -314,7 +371,15 @@ export function TournamentTeamsAssignTab({
               </Pressable>
             </View>
           )}
-          <Text className="text-neutral-500 text-xs mt-1 mb-2">
+          <Text className="text-neutral-500 text-xs mt-1 mb-1">
+            Captain:{' '}
+            {captainName ? (
+              <Text className="text-lime-400/90">{captainName}</Text>
+            ) : (
+              <Text className="text-neutral-600">Not assigned</Text>
+            )}
+          </Text>
+          <Text className="text-neutral-500 text-xs mb-2">
             {teamRoster.length} player{teamRoster.length !== 1 ? 's' : ''}
           </Text>
           {teamRoster.map((player) => (
@@ -331,7 +396,7 @@ export function TournamentTeamsAssignTab({
             className="flex-row items-center mt-3 pt-3 border-t border-neutral-800 active:opacity-80"
           >
             <UserPlus size={14} color="#a3e635" />
-            <Text className="text-lime-400 font-semibold text-sm ml-2">Assign from participant list</Text>
+            <Text className="text-lime-400 font-semibold text-sm ml-2">Manage team</Text>
           </Pressable>
         </View>
         );
@@ -344,7 +409,7 @@ export function TournamentTeamsAssignTab({
               <Text className="text-white text-xl font-bold">
                 {editingTeam ? 'Manage Team' : 'Add Team'}
               </Text>
-              <Pressable onPress={() => setShowModal(false)}>
+              <Pressable onPress={closeModal}>
                 <X size={22} color="#737373" />
               </Pressable>
             </View>
@@ -389,11 +454,69 @@ export function TournamentTeamsAssignTab({
                         </Pressable>
                       ))}
                   </View>
+                  <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
+                    Captain (optional)
+                  </Text>
+                  <Text className="text-neutral-600 text-xs mb-4">
+                    After creating the team, add players and set the captain in Manage team.
+                  </Text>
                 </>
               ) : null}
 
               {activeEditingTeam ? (
                 <>
+                  <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-1">
+                    Captain
+                  </Text>
+                  <Text className="text-neutral-600 text-xs mb-3">
+                    Tap anyone on this team to set them as captain.
+                  </Text>
+                  {editingTeamRoster.length === 0 ? (
+                    <Text className="text-neutral-500 text-sm mb-4">
+                      Add players to the team first, then pick a captain below.
+                    </Text>
+                  ) : (
+                    <View className="mb-4">
+                      {editingTeamRoster.map((player) => {
+                        const isSelected = activeEditingTeam
+                          ? isTeamCaptainPlayer(
+                              activeEditingTeam,
+                              player,
+                              members,
+                              memberEmailByUserId
+                            ) || editingCaptainPlayerId === player.id
+                          : false;
+
+                        return (
+                          <Pressable
+                            key={player.id}
+                            onPress={() => selectEditingCaptain(player)}
+                            disabled={updateCaptainMutation.isPending}
+                            className={cn(
+                              'flex-row items-center justify-between px-4 py-3 rounded-xl mb-2 border',
+                              isSelected
+                                ? 'bg-lime-900/30 border-lime-600'
+                                : 'bg-[#0c0c0c] border-neutral-800 active:opacity-80'
+                            )}
+                          >
+                            <Text
+                              className={
+                                isSelected
+                                  ? 'text-lime-400 font-semibold'
+                                  : 'text-white font-medium'
+                              }
+                            >
+                              {player.display_name}
+                            </Text>
+                            <Text className="text-neutral-500 text-sm">
+                              {isSelected ? 'Captain' : 'Tap to select'}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+
                   <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
                     On this team
                   </Text>
@@ -402,7 +525,7 @@ export function TournamentTeamsAssignTab({
                   ) : (
                     editingTeamRoster.map((player) => (
                         <View
-                          key={player.id}
+                          key={`roster-${player.id}`}
                           className="flex-row items-center justify-between bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 mb-2"
                         >
                           <Text className="text-white font-medium">{player.display_name}</Text>

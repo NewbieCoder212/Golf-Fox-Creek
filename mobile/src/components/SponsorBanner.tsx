@@ -110,27 +110,40 @@ async function openActionUrl(url: string) {
 function SponsorAdFooterStrip({
   ad,
   hasAction,
+  compact = false,
 }: {
   ad: AdPlacement;
   hasAction: boolean;
+  compact?: boolean;
 }) {
   return (
-    <View className="border-t border-neutral-800 px-4 py-3.5">
+    <View className={cn('border-t border-neutral-800 px-4', compact ? 'py-2' : 'py-3.5')}>
       <View className="flex-row items-center">
         <View className="flex-1 pr-3">
           <Text className="text-neutral-500 text-[10px] font-body-semibold uppercase tracking-[0.12em]">
             {ad.sponsor_name}
           </Text>
-          <Text className="text-white font-body-semibold text-sm mt-1" numberOfLines={3}>
+          <Text
+            className={cn(
+              'text-white font-body-semibold mt-0.5',
+              compact ? 'text-xs' : 'text-sm mt-1'
+            )}
+            numberOfLines={compact ? 1 : 3}
+          >
             {ad.banner_text}
           </Text>
-          {hasAction ? (
+          {hasAction && !compact ? (
             <Text className="text-lime-400/90 text-xs font-body mt-1.5">Tap to open offer</Text>
           ) : null}
         </View>
         {hasAction ? (
-          <View className="w-8 h-8 rounded-full bg-lime-400/10 items-center justify-center">
-            <ChevronRight size={18} color="#a3e635" strokeWidth={2} />
+          <View
+            className={cn(
+              'rounded-full bg-lime-400/10 items-center justify-center',
+              compact ? 'w-7 h-7' : 'w-8 h-8'
+            )}
+          >
+            <ChevronRight size={compact ? 16 : 18} color="#a3e635" strokeWidth={2} />
           </View>
         ) : null}
       </View>
@@ -262,6 +275,10 @@ function SponsorAdCard({
   }
 
   if (variant === 'footer') {
+    const imageHeight = compact ? 38 : 52;
+    const whitePadding = compact ? 'px-4 pt-2.5 pb-3' : 'px-6 pt-4 pb-5';
+    const sponsoredMargin = compact ? 'mb-1.5' : 'mb-3';
+
     return (
       <Animated.View entering={FadeInDown.duration(400)} className={className}>
         <Pressable
@@ -269,17 +286,22 @@ function SponsorAdCard({
           disabled={!hasAction}
           className={cardShell}
         >
-          <View className="bg-white px-6 pt-4 pb-5 items-center">
-            <Text className="self-start text-[10px] font-body-semibold uppercase tracking-[0.18em] text-neutral-400 mb-3">
+          <View className={cn('bg-white items-center', whitePadding)}>
+            <Text
+              className={cn(
+                'self-start text-[10px] font-body-semibold uppercase tracking-[0.18em] text-neutral-400',
+                sponsoredMargin
+              )}
+            >
               Sponsored
             </Text>
             <Image
               source={{ uri: ad.image_url }}
-              style={{ width: '100%', height: 52, maxWidth: 280 }}
+              style={{ width: '100%', height: imageHeight, maxWidth: compact ? 240 : 280 }}
               resizeMode="contain"
             />
           </View>
-          <SponsorAdFooterStrip ad={ad} hasAction={hasAction} />
+          <SponsorAdFooterStrip ad={ad} hasAction={hasAction} compact={compact} />
         </Pressable>
       </Animated.View>
     );

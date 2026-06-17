@@ -33,6 +33,12 @@ import {
   canCaptainManageRoster,
   canManageTeamRoster,
 } from '@/lib/tournament-roster-utils';
+import {
+  buildCaptainTeamUpdate,
+  isTeamCaptainPlayer,
+  resolveCaptainDisplayName,
+  resolveTeamParticipants,
+} from '@/lib/tournament-participant-utils';
 import { getTeamSideDisplayName, tournamentNeedsTeams } from '@/lib/tournament-labels';
 import { updateTournamentTeam } from '@/lib/tournament-service';
 import { requireData } from '@/lib/tournament-supabase';
@@ -124,9 +130,11 @@ function HeroTeamPanel({
   userId?: string;
   onManageRoster: (team: TournamentTeam) => void;
 }) {
-  const captainName = team.captain_user_id
-    ? members.find((member) => member.id === team.captain_user_id)?.full_name ?? null
-    : null;
+  const captainName = team.captain_player_id
+    ? playerNameById[team.captain_player_id] ?? null
+    : team.captain_user_id
+      ? members.find((member) => member.id === team.captain_user_id)?.full_name ?? null
+      : null;
   const canManageRoster = canManageTeamRoster(team, { isManager, userId });
   const sideLabel = getTeamSideDisplayName(team.side ?? 'side_a', teams);
   const isSideA = (team.side ?? 'side_a') === 'side_a';
@@ -270,7 +278,7 @@ export function TournamentTeamsRosterTab({
   const [teamName, setTeamName] = useState('');
   const [teamSide, setTeamSide] = useState<TournamentTeamSide>('side_a');
   const [captainUserId, setCaptainUserId] = useState<string | null>(null);
-  const [editingCaptainUserId, setEditingCaptainUserId] = useState<string | null>(null);
+  const [editingCaptainPlayerId, setEditingCaptainPlayerId] = useState<string | null>(null);
   const [rosterDraft, setRosterDraft] = useState<RosterDraftEntry[]>([]);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerHandicap, setNewPlayerHandicap] = useState('');
@@ -279,6 +287,9 @@ export function TournamentTeamsRosterTab({
   const sideBTeam = getTeamBySide(teams, 'side_b');
   const canAddTeam = !sideATeam || !sideBTeam;
   const myCaptainTeam = teams.find((team) => team.captain_user_id === userId) ?? null;
+  const memberEmailByUserId = Object.fromEntries(
+    members.filter((member) => member.email).map((member) => [member.id, member.email as string])
+  );
 
   const patchTeamInCache = (updatedTeam: TournamentTeam) => {
     queryClient.setQueryData(['tournamentTeams', tournamentId], (old: TournamentTeam[] | undefined) =>
@@ -347,17 +358,17 @@ export function TournamentTeamsRosterTab({
   });
 
   const updateCaptainMutation = useMutation({
-    mutationFn: async (params: { teamId: string; captainUserId: string }) => {
+    mutationFn: async (params: { teamId: string; player: TournamentPlayer }) => {
       const result = await updateTournamentTeam(
         params.teamId,
-        { captain_user_id: params.captainUserId },
-        { tournamentId, accessToken }
+        buildCaptainTeamUpdate(params.player, members, memberEmailByUserId),
+        { tournamentId, accessToken: accessToken ?? undefined }
       );
       return requireData(result, 'Could not update captain');
     },
     onSuccess: (updatedTeam) => {
       patchTeamInCache(updatedTeam);
-      setEditingCaptainUserId(updatedTeam.captain_user_id);
+      setEditingCaptainPlayerId(updatedTeam.captain_player_id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: Error) => {
@@ -404,7 +415,7 @@ export function TournamentTeamsRosterTab({
     setEditingTeam(null);
     setTeamName('');
     setCaptainUserId(null);
-    setEditingCaptainUserId(null);
+    setEditingCaptainPlayerId(null);
     setRosterDraft([]);
     setNewPlayerName('');
     setNewPlayerHandicap('');
@@ -479,7 +490,7 @@ export function TournamentTeamsRosterTab({
     if (!canManageTeamRoster(team, { isManager, userId })) return;
     setEditingTeam(team);
     setTeamName(team.team_name);
-    setEditingCaptainUserId(team.captain_user_id);
+    setEditingCaptainPlayerId(team.captain_player_id);
     setNewPlayerName('');
     setNewPlayerHandicap('');
     setShowTeamModal(true);
@@ -502,12 +513,14 @@ export function TournamentTeamsRosterTab({
     ? resolveRosterEntries(activeEditingTeam.player_ids, tournamentPlayers, members)
     : [];
 
-  const selectEditingCaptain = (memberId: string) => {
+  const selectEditingCaptain = (playerId: string) => {
     if (!activeEditingTeam) return;
-    setEditingCaptainUserId(memberId);
+    const player = tournamentPlayers.find((entry) => entry.id === playerId);
+    if (!player) return;
+    setEditingCaptainPlayerId(player.id);
     updateCaptainMutation.mutate({
       teamId: activeEditingTeam.id,
-      captainUserId: memberId,
+      player,
     });
   };
 
@@ -553,9 +566,13 @@ export function TournamentTeamsRosterTab({
   };
 
   const renderTeamColumn = (team: TournamentTeam, index: number) => {
-    const captainName = team.captain_user_id
-      ? members.find((member) => member.id === team.captain_user_id)?.full_name ?? 'Captain'
-      : null;
+    const teamRoster = resolveTeamParticipants(team, tournamentPlayers);
+    const captainName = resolveCaptainDisplayName(
+      team,
+      teamRoster,
+      members,
+      memberEmailByUserId
+    );
     const canManageRoster = canManageTeamRoster(team, { isManager, userId });
     const sideLabel = getTeamSideDisplayName(team.side ?? 'side_a', teams);
     const isHero = layout === 'hero';
@@ -837,39 +854,56 @@ export function TournamentTeamsRosterTab({
                     Captain (optional)
                   </Text>
                   <Text className="text-neutral-600 text-xs mb-3">
-                    Tap a club member below to set captain. Names come from member profiles — they
-                    are not edited here.
+                    Tap anyone on this team to set them as captain.
                   </Text>
-                  <View className="mb-4">
-                    {members.map((member) => (
-                      <Pressable
-                        key={member.id}
-                        onPress={() => selectEditingCaptain(member.id)}
-                        disabled={updateCaptainMutation.isPending}
-                        className={cn(
-                          'flex-row items-center justify-between px-4 py-3 rounded-xl mb-2 border',
-                          editingCaptainUserId === member.id
-                            ? 'bg-lime-900/30 border-lime-600'
-                            : 'bg-[#0c0c0c] border-neutral-800 active:opacity-80'
-                        )}
-                      >
-                        <View>
-                          <Text
-                            className={
-                              editingCaptainUserId === member.id
-                                ? 'text-lime-400 font-semibold'
-                                : 'text-white font-medium'
-                            }
+                  {editingTeamRoster.length === 0 ? (
+                    <Text className="text-neutral-500 text-sm mb-4">
+                      Add players to the team first, then pick a captain.
+                    </Text>
+                  ) : (
+                    <View className="mb-4">
+                      {editingTeamRoster.map((player) => {
+                        const rosterPlayer = tournamentPlayers.find((entry) => entry.id === player.id);
+                        const isSelected =
+                          (activeEditingTeam &&
+                            rosterPlayer &&
+                            isTeamCaptainPlayer(
+                              activeEditingTeam,
+                              rosterPlayer,
+                              members,
+                              memberEmailByUserId
+                            )) ||
+                          editingCaptainPlayerId === player.id;
+
+                        return (
+                          <Pressable
+                            key={player.id}
+                            onPress={() => selectEditingCaptain(player.id)}
+                            disabled={updateCaptainMutation.isPending || !rosterPlayer}
+                            className={cn(
+                              'flex-row items-center justify-between px-4 py-3 rounded-xl mb-2 border',
+                              isSelected
+                                ? 'bg-lime-900/30 border-lime-600'
+                                : 'bg-[#0c0c0c] border-neutral-800 active:opacity-80'
+                            )}
                           >
-                            {member.full_name}
-                          </Text>
-                        </View>
-                        <Text className="text-neutral-500 text-sm">
-                          {editingCaptainUserId === member.id ? 'Selected' : 'Tap to select'}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                            <Text
+                              className={
+                                isSelected
+                                  ? 'text-lime-400 font-semibold'
+                                  : 'text-white font-medium'
+                              }
+                            >
+                              {player.display_name}
+                            </Text>
+                            <Text className="text-neutral-500 text-sm">
+                              {isSelected ? 'Captain' : 'Tap to select'}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
                 </>
               ) : editingTeam && activeEditingTeam ? (
                 <View className="bg-[#0c0c0c] border border-neutral-800 rounded-xl p-4 mb-4">

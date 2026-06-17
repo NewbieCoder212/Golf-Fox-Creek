@@ -1,4 +1,3 @@
-import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
 import type { TournamentServiceResult } from './tournament-supabase';
@@ -6,13 +5,12 @@ import type { TournamentServiceResult } from './tournament-supabase';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+async function readUriAsBytes(localUri: string): Promise<Uint8Array> {
+  const response = await fetch(localUri);
+  if (!response.ok) {
+    throw new Error(`Failed to read image file (${response.status})`);
   }
-  return bytes;
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 function guessContentType(uri: string): string {
@@ -56,10 +54,7 @@ export async function uploadTeamLogoImage(
   const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(fileExt) ? fileExt : 'jpg';
   const filePath = `${teamId}/${Date.now()}.${safeExt === 'jpeg' ? 'jpg' : safeExt}`;
 
-  const base64 = await FileSystem.readAsStringAsync(localUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  const bytes = base64ToUint8Array(base64);
+  const bytes = await readUriAsBytes(localUri);
   const contentType = guessContentType(localUri);
 
   const response = await fetch(`${supabaseUrl}/storage/v1/object/team-logos/${filePath}`, {

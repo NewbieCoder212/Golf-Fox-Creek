@@ -134,7 +134,12 @@ export async function updateTournamentPlayer(
     body.email = updates.email.trim().toLowerCase();
   }
 
-  if (context?.tournamentId && context.accessToken) {
+  const usesBackendProfileFields =
+    updates.display_name !== undefined ||
+    updates.email !== undefined ||
+    updates.handicap_index !== undefined;
+
+  if (context?.tournamentId && context.accessToken && usesBackendProfileFields) {
     const backendResult = await updateTournamentParticipantViaBackend({
       tournamentId: context.tournamentId,
       playerId,
@@ -150,7 +155,10 @@ export async function updateTournamentPlayer(
         handicap_index: updates.handicap_index,
       },
     });
-    if (backendResult.data) {
+    if (backendResult.data && !('user_id' in updates) &&
+        updates.handicap_use_index === undefined &&
+        updates.handicap_allowance_pct === undefined &&
+        updates.manual_handicap === undefined) {
       return { data: backendResult.data, error: null };
     }
     if (backendResult.error && !backendResult.error.includes('Could not reach')) {

@@ -58,6 +58,7 @@ export async function updateTournamentTeamViaBackend(params: {
   updates: {
     team_name?: string;
     captain_user_id?: string | null;
+    captain_player_id?: string | null;
     player_ids?: string[];
   };
 }): Promise<UpdateTournamentTeamResult> {
@@ -170,6 +171,7 @@ export async function updateTournamentParticipantViaBackend(params: {
     display_name?: string;
     email?: string | null;
     handicap_index?: number | null;
+    user_id?: string | null;
   };
 }): Promise<UpdateTournamentTeamResult & { data: TournamentPlayer | null }> {
   try {

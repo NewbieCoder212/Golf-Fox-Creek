@@ -330,8 +330,9 @@ export function getAdPreviewConfig(
     return isBannerLayout({ image_layout: imageLayout })
       ? {
           screenLabel: 'Home tab',
-          locationHint: 'Sticky banner at the bottom of the home screen',
+          locationHint: 'Sticky banner at the bottom of the home screen (compact height)',
           variant: 'footer',
+          compact: true,
         }
       : {
           screenLabel: 'Home tab',
@@ -436,7 +437,7 @@ export const AD_PLACEMENT_GUIDES: Record<AdPlacementType, AdPlacementGuide> = {
   member_hub: {
     summary: 'Home screen — highest daily visibility for all members.',
     tips: [
-      'Banner = sticky strip pinned to the bottom of Home.',
+      'Banner = sticky banner pinned to the bottom of Home (compact height).',
       'Portrait or Square = “Sponsored” card in the home feed (best for flyers).',
       'Keep banner text short — members glance at this between tabs.',
     ],
@@ -615,6 +616,8 @@ const VARIANT_MIN_HEIGHT: Record<AdPreviewVariant, number> = {
   default: 160,
 };
 
+const COMPACT_FOOTER_MIN_HEIGHT = 118;
+
 export function resolveAdDisplayVariant(
   placementType: AdPlacementType,
   ad: Pick<AdPlacement, 'image_layout'>,
@@ -640,6 +643,7 @@ export function getRotationMinHeight(
         if (layout === 'portrait') return 440;
       }
       const base = VARIANT_MIN_HEIGHT[variant] ?? 160;
+      if (variant === 'footer' && compact) return COMPACT_FOOTER_MIN_HEIGHT;
       return compact && variant === 'default' ? 120 : base;
     })
   );

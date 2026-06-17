@@ -163,7 +163,7 @@ export function MemberHubContent({
 
       {hasStickyFooterAd ? (
         <View
-          className="bg-fox-background border-t border-fox-border/40 pt-3"
+          className="bg-fox-background border-t border-fox-border/30 pt-2"
           style={{ paddingBottom: Math.max(insets.bottom, 8) }}
         >
           <HubAdBanner embedded />

@@ -20,6 +20,7 @@ import {
 } from '@/lib/tournament-scoring';
 import {
   getTeamForPlayer,
+  inferParticipantUserId,
   isValidEmail,
   resolveParticipantEmail,
 } from '@/lib/tournament-participant-utils';
@@ -97,6 +98,10 @@ export function TournamentParticipantsTab({
         display_name: displayName,
         email: emailValue,
         handicap_index: Number.isFinite(hi) ? hi : null,
+        user_id: inferParticipantUserId(members, {
+          email: emailValue,
+          display_name: displayName,
+        }),
       });
       return requireData(result, 'Could not add participant');
     },
@@ -223,6 +228,10 @@ export function TournamentParticipantsTab({
             ? null
             : (editAllowancePct as HandicapAllowancePct),
           manual_handicap: editInheritHandicap || editUseIndex ? null : editManualHandicap.trim() || null,
+          user_id: inferParticipantUserId(members, {
+            email: emailValue,
+            display_name: displayName,
+          }),
         },
         { tournamentId, accessToken }
       );

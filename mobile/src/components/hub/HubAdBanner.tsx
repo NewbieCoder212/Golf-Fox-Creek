@@ -19,6 +19,7 @@ export function HubAdBanner({ embedded = false }: HubAdBannerProps) {
       ads={bannerAds}
       placementType="member_hub"
       variant="footer"
+      compact
       className={embedded ? 'mx-5 mb-1' : 'mx-5 mt-8 mb-8'}
     />
   );

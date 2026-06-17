@@ -109,7 +109,7 @@ export function TournamentLeaderboardCard({
         </View>
       ) : null}
 
-      <View className={cn(hubEmbedded ? 'p-2 relative' : 'p-3 relative')}>
+      <View className="p-3 relative">
         {groupsFetching && hubEmbedded ? (
           <View className="absolute top-2 right-2 z-10">
             <ActivityIndicator size="small" color="#a3e635" />
@@ -121,6 +121,7 @@ export function TournamentLeaderboardCard({
           subtitle={hubEmbedded ? undefined : 'Team Matchup'}
           compact={compact}
           minimal={hubEmbedded}
+          hubEmbedded={hubEmbedded}
           className="border-0 bg-transparent"
         />
         {standings.length === 0 ? (

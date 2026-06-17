@@ -590,6 +590,7 @@ export interface TournamentTeam {
   player_ids: string[];
   logo_url: string | null;
   captain_user_id: string | null;
+  captain_player_id: string | null;
   roster_status: TournamentRosterStatus;
   roster_ready_at: string | null;
   roster_ready_by: string | null;
@@ -603,6 +604,7 @@ export interface TournamentTeamInsert {
   player_ids: string[];
   logo_url?: string | null;
   captain_user_id?: string | null;
+  captain_player_id?: string | null;
   roster_status?: TournamentRosterStatus;
 }
 

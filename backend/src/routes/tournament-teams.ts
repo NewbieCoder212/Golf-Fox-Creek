@@ -29,6 +29,7 @@ type TeamRow = {
   side: 'side_a' | 'side_b' | null;
   player_ids: string[];
   captain_user_id: string | null;
+  captain_player_id?: string | null;
   roster_status: 'draft' | 'ready';
   onboard_email_sent_at: string | null;
 };
@@ -132,6 +133,11 @@ tournamentTeamsRouter.patch(
         typeof body.captain_user_id === 'string' ? body.captain_user_id : null;
     }
 
+    if ('captain_player_id' in body) {
+      updates.captain_player_id =
+        typeof body.captain_player_id === 'string' ? body.captain_player_id : null;
+    }
+
     if ('player_ids' in body) {
       if (!Array.isArray(body.player_ids)) {
         return c.json({ error: 'player_ids must be an array' }, 400);
@@ -153,7 +159,17 @@ tournamentTeamsRouter.patch(
     );
 
     if (!patchResult.ok) {
-      return c.json({ error: 'Team was not updated' }, 500);
+      const details = getErrorMessage(patchResult.data as Record<string, unknown>);
+      console.error('[TournamentTeams] PATCH failed:', details);
+      return c.json(
+        {
+          error:
+            details.includes('captain_player_id') && details.includes('column')
+              ? 'Database missing captain_player_id column. Run migration 20260716000000_tournament_team_captain_player.sql'
+              : `Team was not updated: ${details}`,
+        },
+        500
+      );
     }
 
     const updated = Array.isArray(patchResult.data) ? patchResult.data[0] : null;
@@ -217,10 +233,11 @@ tournamentTeamsRouter.patch(
       display_name?: string;
       email?: string | null;
       handicap_index?: number | null;
+      user_id?: string | null;
     }>();
 
     const playerResult = await adminFetch<TournamentPlayerRow[]>(
-      `/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id`
+      `/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id,user_id,email`
     );
     if (!playerResult.ok || !playerResult.data?.[0]) {
       return c.json({ error: 'Participant not found' }, 404);
@@ -243,6 +260,24 @@ tournamentTeamsRouter.patch(
     }
     if (body.handicap_index !== undefined) {
       updates.handicap_index = body.handicap_index;
+    }
+    if (body.user_id !== undefined) {
+      updates.user_id = typeof body.user_id === 'string' ? body.user_id : null;
+    }
+
+    const existingPlayer = playerResult.data[0];
+    const resolvedEmail =
+      typeof updates.email === 'string'
+        ? updates.email
+        : existingPlayer.email?.trim().toLowerCase() ?? null;
+
+    if (!updates.user_id && resolvedEmail) {
+      const profileResult = await adminFetch<Array<{ id: string }>>(
+        `/rest/v1/user_profiles?email=eq.${encodeURIComponent(resolvedEmail)}&select=id&limit=1`
+      );
+      if (profileResult.ok && profileResult.data?.[0]?.id) {
+        updates.user_id = profileResult.data[0].id;
+      }
     }
 
     if (Object.keys(updates).length === 0) {
@@ -562,7 +597,7 @@ tournamentTeamsRouter.post(
 
     const team = teamResult.data[0];
 
-    if (!team.captain_user_id) {
+    if (!team.captain_user_id && !team.captain_player_id) {
       return c.json({ error: 'Assign a captain before marking the roster ready' }, 400);
     }
     if (!team.player_ids?.length) {

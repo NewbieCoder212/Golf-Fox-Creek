@@ -19,20 +19,25 @@ interface TournamentTeamMatchupBoardProps {
   className?: string;
   compact?: boolean;
   minimal?: boolean;
+  hubEmbedded?: boolean;
 }
 
-function TeamLogo({ uri, size }: { uri: string | null | undefined; size: number }) {
-  if (uri) {
-    return (
-      <Image
-        source={{ uri }}
-        style={{ width: size, height: size, borderRadius: size / 2 }}
-        resizeMode="cover"
-      />
-    );
-  }
-
-  return (
+function TeamLogo({
+  uri,
+  size,
+  prominent = false,
+}: {
+  uri: string | null | undefined;
+  size: number;
+  prominent?: boolean;
+}) {
+  const logo = uri ? (
+    <Image
+      source={{ uri }}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      resizeMode="cover"
+    />
+  ) : (
     <View
       style={{ width: size, height: size, borderRadius: size / 2 }}
       className="bg-fox-surface-elevated border border-fox-border items-center justify-center"
@@ -40,6 +45,22 @@ function TeamLogo({ uri, size }: { uri: string | null | undefined; size: number 
       <Text className="text-neutral-500 font-display" style={{ fontSize: size * 0.34 }}>
         ?
       </Text>
+    </View>
+  );
+
+  if (!prominent) return logo;
+
+  return (
+    <View
+      style={{
+        padding: 4,
+        borderRadius: (size + 8) / 2,
+        borderWidth: 2,
+        borderColor: 'rgba(163, 230, 53, 0.45)',
+        backgroundColor: 'rgba(163, 230, 53, 0.06)',
+      }}
+    >
+      {logo}
     </View>
   );
 }
@@ -55,6 +76,7 @@ export function TournamentTeamMatchupBoard({
   className,
   compact = false,
   minimal = false,
+  hubEmbedded = false,
 }: TournamentTeamMatchupBoardProps) {
   const sideA = getTeamBySide(teams, 'side_a');
   const sideB = getTeamBySide(teams, 'side_b');
@@ -69,7 +91,7 @@ export function TournamentTeamMatchupBoard({
     );
   }
 
-  const logoSize = minimal ? 44 : compact ? 64 : 88;
+  const logoSize = hubEmbedded ? 100 : minimal ? 44 : compact ? 64 : 88;
   const statA = sideA ? findStat(teamStats, sideA.id) : undefined;
   const statB = sideB ? findStat(teamStats, sideB.id) : undefined;
 
@@ -77,14 +99,14 @@ export function TournamentTeamMatchupBoard({
     <View className="flex-1 items-center px-2">
       {team ? (
         <>
-          <TeamLogo uri={team.logo_url} size={logoSize} />
+          <TeamLogo uri={team.logo_url} size={logoSize} prominent={hubEmbedded} />
           <Text className={cn('text-fox-lime text-[10px] font-body-bold uppercase tracking-widest', minimal ? 'mt-2' : 'mt-3')}>
             {label}
           </Text>
           <Text
             className={cn(
               'text-white font-display text-center mt-1',
-              minimal ? 'text-xs' : compact ? 'text-sm' : 'text-base'
+              hubEmbedded ? 'text-sm' : minimal ? 'text-xs' : compact ? 'text-sm' : 'text-base'
             )}
             numberOfLines={2}
           >
@@ -114,7 +136,7 @@ export function TournamentTeamMatchupBoard({
         </>
       ) : (
         <View className="items-center opacity-50">
-          <TeamLogo uri={null} size={logoSize} />
+          <TeamLogo uri={null} size={logoSize} prominent={hubEmbedded} />
           <Text className="text-neutral-500 text-xs font-body mt-3">{label} — TBD</Text>
         </View>
       )}
@@ -130,7 +152,7 @@ export function TournamentTeamMatchupBoard({
           </Text>
         </View>
       ) : null}
-      <View className={cn('flex-row items-center px-3', minimal ? 'py-2.5' : 'py-5')}>
+      <View className={cn('flex-row items-center px-3', hubEmbedded ? 'py-4' : minimal ? 'py-2.5' : 'py-5')}>
         {renderTeam(sideA, 'Team A', statA)}
         <View className="items-center px-2">
           <View

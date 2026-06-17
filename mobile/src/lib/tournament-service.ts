@@ -240,6 +240,7 @@ export async function getTournamentTeams(tournamentId: string): Promise<Tourname
   return unwrapList(result).map((team) => ({
     ...team,
     captain_user_id: team.captain_user_id ?? null,
+    captain_player_id: team.captain_player_id ?? null,
     roster_status: team.roster_status ?? 'draft',
     roster_ready_at: team.roster_ready_at ?? null,
     roster_ready_by: team.roster_ready_by ?? null,
@@ -255,7 +256,15 @@ export async function getTournamentTeamById(teamId: string): Promise<TournamentT
     single: true,
   });
 
-  return unwrapSingle(result);
+  const team = unwrapSingle(result);
+  if (!team) return null;
+
+  return {
+    ...team,
+    captain_user_id: team.captain_user_id ?? null,
+    captain_player_id: team.captain_player_id ?? null,
+    roster_status: team.roster_status ?? 'draft',
+  };
 }
 
 export async function getTeamsForPlayer(
@@ -330,13 +339,18 @@ export async function updateTournamentTeam(
   }
 
   const managerToken = context?.accessToken ?? getManagerAccessToken();
+  const isCaptainUpdate = 'captain_player_id' in updates;
+
   const canUseBackend =
     Boolean(context?.tournamentId && managerToken) &&
     !('roster_status' in updates) &&
     !('roster_ready_at' in updates) &&
     !('roster_ready_by' in updates) &&
     !('onboard_email_sent_at' in updates) &&
-    ('team_name' in updates || 'captain_user_id' in updates || 'player_ids' in updates);
+    ('team_name' in updates ||
+      'captain_user_id' in updates ||
+      'captain_player_id' in updates ||
+      'player_ids' in updates);
 
   if (canUseBackend && context?.tournamentId && managerToken) {
     const backendResult = await updateTournamentTeamViaBackend({
@@ -346,6 +360,9 @@ export async function updateTournamentTeam(
       updates: {
         ...(typeof updates.team_name === 'string' ? { team_name: updates.team_name } : {}),
         ...('captain_user_id' in updates ? { captain_user_id: updates.captain_user_id ?? null } : {}),
+        ...('captain_player_id' in updates
+          ? { captain_player_id: updates.captain_player_id ?? null }
+          : {}),
         ...('player_ids' in updates && Array.isArray(updates.player_ids)
           ? { player_ids: updates.player_ids }
           : {}),
@@ -353,11 +370,21 @@ export async function updateTournamentTeam(
     });
 
     if (backendResult.data) {
-      return { data: backendResult.data, error: null };
+      const sentCaptainPlayerId =
+        'captain_player_id' in updates ? updates.captain_player_id ?? null : undefined;
+      if (
+        sentCaptainPlayerId === undefined ||
+        backendResult.data.captain_player_id === sentCaptainPlayerId
+      ) {
+        return { data: backendResult.data, error: null };
+      }
     }
 
-    if (backendResult.error && !backendResult.error.includes('Could not reach')) {
-      return { data: null, error: backendResult.error };
+    if (isCaptainUpdate && backendResult.error) {
+      const unreachable = backendResult.error === 'Could not reach tournament service';
+      if (!unreachable) {
+        return { data: null, error: backendResult.error };
+      }
     }
   }
 
@@ -365,6 +392,7 @@ export async function updateTournamentTeam(
     method: 'PATCH',
     query: { id: `eq.${teamId}` },
     body: updates as unknown as Record<string, unknown>,
+    accessToken: managerToken,
   });
 
   if (result.error) return result;

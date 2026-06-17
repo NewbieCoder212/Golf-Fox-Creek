@@ -52,6 +52,9 @@ export type TournamentServiceResult<T> = { data: T; error: null } | TournamentSe
 function parseSupabaseError(status: number, errorText: string): string {
   try {
     const parsed = JSON.parse(errorText) as { message?: string; code?: string };
+    if (parsed.message?.includes('captain_player_id') && parsed.code === '42703') {
+      return 'Missing captain_player_id column. Run supabase/migrations/20260716000000_tournament_team_captain_player.sql in the Supabase SQL editor.';
+    }
     if (parsed.message?.includes('row-level security')) {
       return 'Database permissions blocked score sync. Run supabase/migrations/20260707000000_tournament_scorecard_member_writes.sql in the Supabase SQL editor.';
     }
@@ -88,13 +91,14 @@ export async function tournamentSupabaseRequest<T>(
     query?: Record<string, string>;
     body?: Record<string, unknown> | Record<string, unknown>[];
     single?: boolean;
+    accessToken?: string | null;
   } = {}
 ): Promise<TournamentServiceResult<T>> {
   if (!isTournamentSupabaseConfigured()) {
     return { data: null, error: 'Supabase is not configured' };
   }
 
-  const { method = 'GET', query = {}, body, single = false } = options;
+  const { method = 'GET', query = {}, body, single = false, accessToken } = options;
   const url = new URL(`${supabaseUrl}/rest/v1/${table}`);
   Object.entries(query).forEach(([key, value]) => url.searchParams.append(key, value));
 
@@ -114,7 +118,7 @@ export async function tournamentSupabaseRequest<T>(
   };
 
   try {
-    const primaryToken = getAccessToken();
+    const primaryToken = accessToken ?? getAccessToken();
     let response = await fetchWithToken(url.toString(), init, primaryToken);
 
     const isMutation = method !== 'GET';

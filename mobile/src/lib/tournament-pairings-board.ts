@@ -7,7 +7,6 @@ import type {
 import { buildClubTeeTimeIso } from './club-timezone';
 import { formatTeeAssignmentTime } from './tournament-tee-service';
 import {
-  deleteTournamentMatchGroup,
   saveTournamentMatchGroup,
 } from './tournament-match-service';
 
@@ -95,6 +94,27 @@ export function formatPairingRowTeeLabel(teeTime: string): string {
   return teeTime;
 }
 
+export function countFilledPlayers(ids: string[]): number {
+  return ids.filter(Boolean).length;
+}
+
+export function isPairingRowComplete(row: PairingRowDraft, playersPerMatch: number): boolean {
+  return (
+    countFilledPlayers(row.sideAPlayerIds) === playersPerMatch &&
+    countFilledPlayers(row.sideBPlayerIds) === playersPerMatch
+  );
+}
+
+export function isPairingRowTeeSlotOnly(row: PairingRowDraft): boolean {
+  return (
+    countFilledPlayers(row.sideAPlayerIds) === 0 && countFilledPlayers(row.sideBPlayerIds) === 0
+  );
+}
+
+function isValidTeeTimeHm(value: string): boolean {
+  return /^\d{1,2}:\d{2}$/.test(value.trim());
+}
+
 export async function savePairingRowsBatch(params: {
   tournament: Tournament;
   roundNumber: number;
@@ -113,35 +133,25 @@ export async function savePairingRowsBatch(params: {
     }
     seenGroupNumbers.add(row.groupNumber);
 
-    const filledA = row.sideAPlayerIds.filter(Boolean).length;
-    const filledB = row.sideBPlayerIds.filter(Boolean).length;
-    const isEmpty = filledA === 0 && filledB === 0;
+    const filledA = countFilledPlayers(row.sideAPlayerIds);
+    const filledB = countFilledPlayers(row.sideBPlayerIds);
 
-    if (isEmpty) {
-      if (row.groupId) {
-        const deleted = await deleteTournamentMatchGroup(row.groupId);
-        if (!deleted) {
-          throw new Error(`Could not delete empty pairing row ${row.groupNumber}`);
-        }
+    if (!isValidTeeTimeHm(row.teeTime)) {
+      throw new Error(`Group ${row.groupNumber} needs a valid tee time (e.g. 08:00).`);
+    }
+
+    if (filledA > params.playersPerMatch || filledB > params.playersPerMatch) {
+      throw new Error(`Group ${row.groupNumber} has too many players on one side.`);
+    }
+
+    if (filledA > 0 || filledB > 0) {
+      const assignedElsewhere = getAssignedPlayerIdsInDraftRows(params.rows, row.clientKey);
+      const duplicate = [...row.sideAPlayerIds, ...row.sideBPlayerIds]
+        .filter(Boolean)
+        .find((id) => assignedElsewhere.has(id));
+      if (duplicate) {
+        throw new Error('A player appears in more than one pairing row.');
       }
-      continue;
-    }
-
-    if (
-      filledA !== params.playersPerMatch ||
-      filledB !== params.playersPerMatch
-    ) {
-      throw new Error(
-        `Group ${row.groupNumber} needs ${params.playersPerMatch} players per side before saving.`
-      );
-    }
-
-    const assignedElsewhere = getAssignedPlayerIdsInDraftRows(params.rows, row.clientKey);
-    const duplicate = [...row.sideAPlayerIds, ...row.sideBPlayerIds]
-      .filter(Boolean)
-      .find((id) => assignedElsewhere.has(id));
-    if (duplicate) {
-      throw new Error('A player appears in more than one pairing row.');
     }
 
     const saved = await saveTournamentMatchGroup({

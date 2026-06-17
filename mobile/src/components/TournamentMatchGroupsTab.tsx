@@ -42,6 +42,8 @@ import {
   formatPairingRowTeeLabel,
   getAssignedPlayerIdsInDraftRows,
   incrementTeeTimeHm,
+  isPairingRowComplete,
+  isPairingRowTeeSlotOnly,
   matchGroupsToPairingRows,
   savePairingRowsBatch,
   type PairingRowDraft,
@@ -518,8 +520,9 @@ export function TournamentMatchGroupsTab({
     <View className="mx-5 mt-2">
       <View className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-3 mb-4">
         <Text className="text-neutral-300 text-sm">
-          Set tee times and pairings here on the Matches tab. This is the source of truth for when
-          each foursome plays — not the member Tee Times tab.
+          Set tee times here first, then assign players when matches are announced. Saved tee-time
+          slots persist even with empty player slots. This is the source of truth for when each
+          foursome plays.
         </Text>
       </View>
 
@@ -527,7 +530,20 @@ export function TournamentMatchGroupsTab({
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
         <View className="flex-row gap-2">
           {Array.from({ length: tournament.rounds_count }, (_, i) => i + 1).map((n) => {
-            const savedCount = allMatchGroups.filter((group) => group.round_number === n).length;
+            const savedGroups = allMatchGroups.filter((group) => group.round_number === n);
+            const completeCount = savedGroups.filter((group) =>
+              isPairingRowComplete(
+                {
+                  clientKey: group.id,
+                  groupNumber: group.group_number,
+                  teeTime: '',
+                  startingHole: '',
+                  sideAPlayerIds: group.side_a_player_ids,
+                  sideBPlayerIds: group.side_b_player_ids,
+                },
+                playersPerMatch
+              )
+            ).length;
             return (
               <Pressable
                 key={n}
@@ -556,9 +572,12 @@ export function TournamentMatchGroupsTab({
                 >
                   {formatRoundPickerLabel(tournament, n)}
                 </Text>
-                {savedCount > 0 ? (
+                {savedGroups.length > 0 ? (
                   <Text className="text-neutral-500 text-[10px] mt-1">
-                    {savedCount} pairing{savedCount !== 1 ? 's' : ''} saved
+                    {savedGroups.length} tee time{savedGroups.length !== 1 ? 's' : ''}
+                    {completeCount > 0
+                      ? ` · ${completeCount} paired`
+                      : ' · players TBD'}
                   </Text>
                 ) : null}
               </Pressable>
@@ -573,7 +592,10 @@ export function TournamentMatchGroupsTab({
           {formatLabelFromSettings(roundFormat, formatSettings)}
         </Text>
         <Text className="text-neutral-400 text-sm mt-1">
-          {playersPerMatch}v{playersPerMatch} foursomes ·{' '}
+          {isSinglesFormat(roundFormat)
+            ? `${playersPerMatch} paired 1v1 match${playersPerMatch !== 1 ? 'es' : ''} per tee time`
+            : `${playersPerMatch}v${playersPerMatch} foursomes`}
+          {' · '}
           {formatScoringHintFromSettings(roundFormat, formatSettings)}
         </Text>
       </View>
@@ -634,6 +656,8 @@ export function TournamentMatchGroupsTab({
             ? getMatchGroupFormat(savedGroup, tournament)
             : roundFormat;
           const wins = row.groupId ? holeWinsByGroupId[row.groupId] : undefined;
+          const pairingComplete = isPairingRowComplete(row, playersPerMatch);
+          const teeSlotOnly = isPairingRowTeeSlotOnly(row);
 
           return (
             <View
@@ -678,6 +702,24 @@ export function TournamentMatchGroupsTab({
                 ) : null}
               </View>
 
+              {row.groupId ? (
+                <View className="mb-3">
+                  {pairingComplete ? (
+                    <Text className="text-lime-500 text-[10px] font-semibold uppercase tracking-widest">
+                      Pairing complete
+                    </Text>
+                  ) : teeSlotOnly ? (
+                    <Text className="text-amber-500/90 text-[10px] font-semibold uppercase tracking-widest">
+                      Tee time saved · assign players when announced
+                    </Text>
+                  ) : (
+                    <Text className="text-amber-500/90 text-[10px] font-semibold uppercase tracking-widest">
+                      Partial pairing · {playersPerMatch} per side needed
+                    </Text>
+                  )}
+                </View>
+              ) : null}
+
               <View className="flex-row gap-3">
                 <View className="flex-1">
                   <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-1">
@@ -696,7 +738,9 @@ export function TournamentMatchGroupsTab({
                           label={
                             playerId
                               ? memberNameById[playerId]?.split(' ')[0] ?? 'Player'
-                              : `Slot ${index + 1}`
+                              : isSinglesFormat(groupFormat)
+                                ? `Match ${index + 1}`
+                                : `Slot ${index + 1}`
                           }
                           filled={Boolean(playerId)}
                           active={isActive}
@@ -726,7 +770,9 @@ export function TournamentMatchGroupsTab({
                           label={
                             playerId
                               ? memberNameById[playerId]?.split(' ')[0] ?? 'Player'
-                              : `Slot ${index + 1}`
+                              : isSinglesFormat(groupFormat)
+                                ? `Match ${index + 1}`
+                                : `Slot ${index + 1}`
                           }
                           filled={Boolean(playerId)}
                           active={isActive}
@@ -761,7 +807,7 @@ export function TournamentMatchGroupsTab({
                 </View>
               ) : null}
 
-              {row.groupId ? (
+              {row.groupId && pairingComplete ? (
                 <View className="flex-row gap-2 mt-3">
                   {isSinglesFormat(groupFormat) ? (
                     <Pressable
@@ -808,7 +854,7 @@ export function TournamentMatchGroupsTab({
             ) : (
               <>
                 <Save size={16} color="#fff" />
-                <Text className="text-white font-bold ml-2">Save pairings</Text>
+                <Text className="text-white font-bold ml-2">Save tee times & pairings</Text>
               </>
             )}
           </Pressable>

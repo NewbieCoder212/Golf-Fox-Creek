@@ -35,14 +35,14 @@ export const DEFAULT_TOURNAMENT_FORMATS_SETTINGS: TournamentFormatsSettings = {
     {
       id: 'singles',
       label: 'Head-to-Head Singles (Match Play)',
-      scoring_hint: '1v1 hole-by-hole — Up, Down, or All Square',
+      scoring_hint: '2 per side — paired 1v1 matches at each tee time (A1 vs B1, A2 vs B2)',
       how_it_works:
-        'Ryder Cup style: you play a direct game against exactly one opponent, hole by hole. You and your opponent play your own balls. The player with the lowest score on a hole wins that hole and goes "1 Up." Tied holes are halved. The match ends when one player is up by more holes than remain (e.g. 3 Up with 2 to play is "3 & 2").',
+        'Same tee time: two players from each team. Slot 1 on Team A plays slot 1 on Team B head-to-head; slot 2 plays slot 2, and so on. Each pairing is its own 1v1 match — lowest score wins the hole (Up, Down, or All Square). Tied holes are halved.',
       the_score:
-        'Scores are tracked as Up, Down, or All Square (tied), rather than total strokes.',
+        'Each 1v1 pairing tracked as Up, Down, or All Square. Team match points sum wins across all pairings at that tee time.',
       scoring_mode: 'head_to_head_match_play',
       enabled: true,
-      default_players_per_match: 1,
+      default_players_per_match: 2,
       team_scorecard: false,
     },
     {

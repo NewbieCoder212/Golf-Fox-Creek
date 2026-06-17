@@ -34,7 +34,7 @@ export const FORMAT_MATCH_SCORING_HINTS: Record<string, string> = {
   scramble: 'One team score per side — lower net wins the hole',
   best_ball: 'Best net among partners per side wins the hole',
   alternate_shot: 'One team score per side — lower net wins the hole',
-  singles: 'Each player scores — paired 1v1 matches within the foursome',
+  singles: '2 players per side — slot 1 vs slot 1, slot 2 vs slot 2 (1v1 each)',
   match_play: 'Match play scoring — lower net wins the hole',
 };
 

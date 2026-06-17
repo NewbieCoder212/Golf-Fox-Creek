@@ -1,7 +1,8 @@
 {
   "installCommand": "bun install",
+  "buildCommand": "bun run vercel-build",
   "functions": {
-    "api/index.ts": {
+    "api/index.js": {
       "maxDuration": 30
     }
   },

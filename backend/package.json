@@ -7,7 +7,8 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "studio": "cloud-studio --port 3001 --hostname 0.0.0.0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vercel-build": "bun build ./src/vercel.ts --outfile ./api/index.js --target node --format esm --packages external"
   },
   "devDependencies": {
     "@types/bun": "latest",

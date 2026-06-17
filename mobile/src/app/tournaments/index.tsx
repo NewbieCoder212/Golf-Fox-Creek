@@ -19,7 +19,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { TournamentScheduleEditor } from '@/components/TournamentScheduleEditor';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
-import { useAdminAuthStore } from '@/lib/admin-auth-store';
+import { canAccessAdminRole } from '@/lib/admin-auth-bridge';
 import { getActiveFormatIds, formatLabelFromSettings } from '@/lib/tournament-format-settings';
 import { useTournamentFormatsSettings } from '@/lib/useTournamentFormatsSettings';
 import {
@@ -42,11 +42,7 @@ export default function TournamentsListScreen() {
   const activeFormatIds = getActiveFormatIds(formatSettings);
   const profile = useMemberAuthStore((s) => s.profile);
   const user = useMemberAuthStore((s) => s.user);
-  const canAccessAdmin = useAdminAuthStore((s) => s.canAccessAdmin);
-  const isManager =
-    profile?.role === 'manager' ||
-    profile?.role === 'super_admin' ||
-    canAccessAdmin();
+  const isManager = canAccessAdminRole(profile?.role);
   const viewAllTournaments = isManager;
 
   const [showCreate, setShowCreate] = useState(false);

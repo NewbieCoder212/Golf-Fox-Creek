@@ -17,6 +17,10 @@ export async function bridgeMemberAuthToAdmin(): Promise<boolean> {
   }
 
   if (!canAccessAdminRole(member.profile.role)) {
+    const admin = useAdminAuthStore.getState();
+    if (admin.isAuthenticated) {
+      await useAdminAuthStore.getState().clearAuth();
+    }
     return false;
   }
 

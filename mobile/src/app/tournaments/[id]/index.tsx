@@ -21,7 +21,7 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 
 import { useMemberAuthStore } from '@/lib/member-auth-store';
-import { useAdminAuthStore } from '@/lib/admin-auth-store';
+import { canAccessAdminRole } from '@/lib/admin-auth-bridge';
 import {
   getTeamsForPlayer,
   getTournamentById,
@@ -33,6 +33,7 @@ import {
   formatTournamentDates,
   tournamentHasSinglesRound,
 } from '@/lib/tournament-labels';
+import { TournamentMyMatchTab } from '@/components/TournamentMyMatchTab';
 import { TournamentTeeTimesTab } from '@/components/TournamentTeeTimesTab';
 import { TournamentMatchGroupsTab } from '@/components/TournamentMatchGroupsTab';
 import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
@@ -51,11 +52,11 @@ import { cn } from '@/lib/cn';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
 import { TournamentTeamsRosterTab } from '@/components/TournamentTeamsRosterTab';
 
-type DetailTab = 'schedule' | 'matches' | 'teams';
+type DetailTab = 'schedule' | 'match' | 'matches' | 'teams';
 
 function parseTabParam(param: string | string[] | undefined): DetailTab | null {
   const raw = Array.isArray(param) ? param[0] : param;
-  if (raw === 'teams' || raw === 'schedule' || raw === 'matches') return raw;
+  if (raw === 'teams' || raw === 'schedule' || raw === 'match' || raw === 'matches') return raw;
   return null;
 }
 
@@ -66,14 +67,9 @@ export default function TournamentDetailScreen() {
   const user = useMemberAuthStore((s) => s.user);
   const profile = useMemberAuthStore((s) => s.profile);
   const memberAccessToken = useMemberAuthStore((s) => s.accessToken);
-  const adminAccessToken = useAdminAuthStore((s) => s.accessToken);
-  const canAccessAdmin = useAdminAuthStore((s) => s.canAccessAdmin);
-  const isManager =
-    profile?.role === 'manager' ||
-    profile?.role === 'super_admin' ||
-    canAccessAdmin();
+  const isManager = canAccessAdminRole(profile?.role);
   const viewAllTournaments = isManager;
-  const managerAccessToken = adminAccessToken ?? memberAccessToken;
+  const managerAccessToken = memberAccessToken;
 
   const [tab, setTab] = useState<DetailTab>(() => parseTabParam(tabParam) ?? 'schedule');
   const [isOpeningScorecard, setIsOpeningScorecard] = useState(false);
@@ -267,8 +263,9 @@ export default function TournamentDetailScreen() {
         >
           {[
             { key: 'schedule' as const, label: 'Schedule', Icon: Clock },
+            { key: 'match' as const, label: 'Match', Icon: Swords },
             ...(isManager
-              ? [{ key: 'matches' as const, label: 'Matches', Icon: Swords }]
+              ? [{ key: 'matches' as const, label: 'Matches', Icon: ClipboardList }]
               : []),
             { key: 'teams' as const, label: 'Teams', Icon: Users },
           ].map(({ key, label, Icon }) => (
@@ -341,8 +338,20 @@ export default function TournamentDetailScreen() {
             teams={teams}
             playerNameById={playerNameById}
             matchGroups={matchGroups}
+            defaultRoundNumber={activeRoundNumber}
           />
-        ) : tab === 'matches' ? (
+        ) : tab === 'match' && user?.id ? (
+          <TournamentMyMatchTab
+            tournamentId={id!}
+            userId={user.id}
+            tournament={tournament}
+            teams={teams}
+            matchGroups={matchGroups}
+            rosterPlayerIds={myRosterPlayerIds}
+            playerNameById={playerNameById}
+            defaultRoundNumber={activeRoundNumber}
+          />
+        ) : tab === 'matches' && isManager ? (
           <TournamentMatchGroupsTab
             tournamentId={id!}
             tournament={tournament}

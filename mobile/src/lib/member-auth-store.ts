@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { UserProfile } from '@/types';
+import { useAdminAuthStore } from './admin-auth-store';
+
+function isAdminRole(role: string | undefined | null): boolean {
+  return role === 'manager' || role === 'super_admin';
+}
 
 const MEMBER_AUTH_STORAGE_KEY = '@foxcreek_member_auth';
 
@@ -70,6 +75,7 @@ export const useMemberAuthStore = create<MemberAuthState>((set, get) => ({
 
     try {
       await AsyncStorage.removeItem(MEMBER_AUTH_STORAGE_KEY);
+      await useAdminAuthStore.getState().clearAuth();
     } catch (err) {
       console.log('[MemberAuth] Failed to clear auth:', err);
     }
@@ -90,6 +96,12 @@ export const useMemberAuthStore = create<MemberAuthState>((set, get) => ({
           profile: data.profile,
           isLoading: false,
         });
+        if (!isAdminRole(data.profile?.role)) {
+          const admin = useAdminAuthStore.getState();
+          if (admin.isAuthenticated) {
+            await useAdminAuthStore.getState().clearAuth();
+          }
+        }
         return true;
       }
     } catch (err) {

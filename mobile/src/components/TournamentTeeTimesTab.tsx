@@ -17,6 +17,7 @@ import {
 } from '@/lib/tournament-schedule-slots';
 import { resolveFormatDefinition } from '@/lib/tournament-format-settings';
 import { useTournamentFormatsSettings } from '@/lib/useTournamentFormatsSettings';
+import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
 import type { Tournament, TournamentMatchGroup, TournamentTeam } from '@/types';
 import { cn } from '@/lib/cn';
 
@@ -26,6 +27,7 @@ interface TournamentTeeTimesTabProps {
   teams: TournamentTeam[];
   playerNameById: Record<string, string>;
   matchGroups?: TournamentMatchGroup[];
+  defaultRoundNumber?: number;
 }
 
 function formatPlayerName(
@@ -162,8 +164,11 @@ export function TournamentTeeTimesTab({
   teams,
   playerNameById,
   matchGroups: matchGroupsProp,
+  defaultRoundNumber,
 }: TournamentTeeTimesTabProps) {
-  const [roundNumber, setRoundNumber] = useState(1);
+  const [roundNumber, setRoundNumber] = useState(
+    defaultRoundNumber ?? getActiveRoundNumber(tournament)
+  );
 
   const { data: fetchedGroups = [], isPending } = useQuery({
     queryKey: ['tournamentMatchGroups', tournamentId],

@@ -1,14 +1,26 @@
-import { z } from "zod";
+import { z } from 'zod';
+
+function resolveBackendUrl(): string {
+  const fromEnv = process.env.BACKEND_URL?.trim();
+  if (fromEnv) return fromEnv;
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) return `https://${vercelUrl}`;
+  return 'http://localhost:3000';
+}
 
 /**
  * Environment variable schema using Zod
  * This ensures all required environment variables are present and valid
  */
 const envSchema = z.object({
-  // Server Configuration
-  PORT: z.string().optional().default("3000"),
+  PORT: z.string().optional().default('3000'),
   NODE_ENV: z.string().optional(),
-  BACKEND_URL: z.url("BACKEND_URL must be a valid URL").default("http://localhost:3000"), // Set via the Vibecode enviroment at run-time
+  BACKEND_URL: z
+    .preprocess(
+      (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      z.string().url().optional()
+    )
+    .optional(),
 });
 
 /**
@@ -17,15 +29,27 @@ const envSchema = z.object({
 function validateEnv() {
   try {
     const parsed = envSchema.parse(process.env);
-    console.log("✅ Environment variables validated successfully");
-    return parsed;
+    const env = {
+      ...parsed,
+      BACKEND_URL: parsed.BACKEND_URL ?? resolveBackendUrl(),
+    };
+    console.log('✅ Environment variables validated successfully');
+    return env;
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error("❌ Environment variable validation failed:");
-      error.issues.forEach((err: any) => {
-        console.error(`  - ${err.path.join(".")}: ${err.message}`);
+      console.error('❌ Environment variable validation failed:');
+      error.issues.forEach((err: z.ZodIssue) => {
+        console.error(`  - ${err.path.join('.')}: ${err.message}`);
       });
-      console.error("\nPlease check your .env file and ensure all required variables are set.");
+      if (process.env.VERCEL) {
+        console.warn('Using safe defaults on Vercel');
+        return {
+          PORT: process.env.PORT ?? '3000',
+          NODE_ENV: process.env.NODE_ENV,
+          BACKEND_URL: resolveBackendUrl(),
+        };
+      }
+      console.error('\nPlease check your .env file and ensure all required variables are set.');
       process.exit(1);
     }
     throw error;
@@ -40,7 +64,7 @@ export const env = validateEnv();
 /**
  * Type of the validated environment variables
  */
-export type Env = z.infer<typeof envSchema>;
+export type Env = typeof env;
 
 /**
  * Extend process.env with our environment variables

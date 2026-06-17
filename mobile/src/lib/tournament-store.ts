@@ -10,6 +10,7 @@ import type {
   TeeName,
   TournamentFormat,
   TournamentHoleScore,
+  TournamentScoreInsert,
   WageringGameType,
   WageringResults,
   WageringSettings,
@@ -29,8 +30,11 @@ import {
   saveTournamentScore,
 } from './tournament-service';
 import {
+  clearTournamentMatchScoresViaBackend,
+  syncTournamentMatchScoresViaBackend,
+} from './tournament-score-sync-service';
+import {
   getTournamentMatchGroups,
-  syncMatchHoleResults,
 } from './tournament-match-service';
 import {
   calculateSkinsResults,
@@ -131,6 +135,7 @@ interface TournamentStoreState {
   setPlayerGross: (playerId: string, hole: number, gross: number) => void;
   setTeamGross: (hole: number, gross: number) => void;
   loadExistingScores: () => Promise<void>;
+  clearMatchRoundScores: () => Promise<{ success: boolean; error?: string }>;
   getComputedHoleScores: () => TournamentHoleScore[];
   getPlayerHoleDetails: (playerId: string) => ReturnType<typeof buildBestBallPlayerDetails>[string] | null;
   getTotals: () => { total_gross: number; total_net: number };
@@ -150,12 +155,43 @@ interface TournamentStoreState {
   clearPersistedSession: () => Promise<void>;
 }
 
-function buildInitialGrossMap(): Record<number, number> {
+/** Only holes actually saved on a scorecard — never pad with par placeholders. */
+function grossMapFromSavedHoles(
+  holeScores: TournamentHoleScore[] | undefined
+): Record<number, number> {
   const map: Record<number, number> = {};
-  FOX_CREEK_DATA.holeData.forEach((h) => {
-    map[h.holeNumber] = h.par;
-  });
+  if (!holeScores?.length) return map;
+
+  for (const row of holeScores) {
+    if (row.entered === false) continue;
+    if (row.entered !== true && holeScores.length === 18) continue;
+    map[row.hole] = row.gross;
+  }
   return map;
+}
+
+function isLikelyParPlaceholderMap(map: Record<number, number>): boolean {
+  const entries = Object.entries(map);
+  if (entries.length !== 18) return false;
+  return FOX_CREEK_DATA.holeData.every(
+    (hole) => map[hole.holeNumber] === hole.par
+  );
+}
+
+function sanitizeGrossScoresState(
+  grossScores: Record<string, Record<number, number>>
+): Record<string, Record<number, number>> {
+  const sanitized: Record<string, Record<number, number>> = {};
+  for (const [playerId, holes] of Object.entries(grossScores)) {
+    sanitized[playerId] = isLikelyParPlaceholderMap(holes) ? {} : holes;
+  }
+  return sanitized;
+}
+
+function sanitizeTeamGrossScores(
+  teamGrossScores: Record<number, number>
+): Record<number, number> {
+  return isLikelyParPlaceholderMap(teamGrossScores) ? {} : teamGrossScores;
 }
 
 function buildEmptyPlayerGrossMaps(
@@ -168,6 +204,95 @@ function buildEmptyPlayerGrossMaps(
   return grossScores;
 }
 
+function buildScoreInsertPayloads(state: {
+  tournamentId: string;
+  format: TournamentFormat;
+  roundNumber: number;
+  players: TournamentStorePlayer[];
+  grossScores: Record<string, Record<number, number>>;
+  teamGrossScores: Record<number, number>;
+  teePlayed: TeeName;
+  teamId: string | null;
+  userId: string | null;
+  matchGroupId: string | null;
+  getComputedHoleScores: () => TournamentHoleScore[];
+}): TournamentScoreInsert[] {
+  const matchGroupId = state.matchGroupId;
+
+  if (state.format === 'singles' && state.players.length > 1) {
+    return state.players.map((player) => {
+      const holeScores = buildTournamentHoleScores({
+        format: 'singles',
+        grossByHole: Object.entries(state.grossScores[player.id] ?? {}).map(
+          ([hole, gross]) => ({ hole: Number(hole), gross })
+        ),
+        handicapIndex: player.handicapIndex,
+        teePlayed: state.teePlayed,
+        includeUnplayedHoles: false,
+      });
+      const totals = sumHoleScores(holeScores);
+      return {
+        tournament_id: state.tournamentId,
+        round_number: state.roundNumber,
+        hole_scores: holeScores,
+        ...totals,
+        user_id: player.tournamentPlayerId ? null : player.id,
+        tournament_player_id: player.tournamentPlayerId ?? null,
+        team_id: null,
+        match_group_id: matchGroupId,
+      };
+    });
+  }
+
+  if (state.format === 'best_ball' && state.players.length > 1) {
+    return state.players.map((player) => {
+      const holeScores = buildTournamentHoleScores({
+        format: 'singles',
+        grossByHole: Object.entries(state.grossScores[player.id] ?? {}).map(
+          ([hole, gross]) => ({ hole: Number(hole), gross })
+        ),
+        handicapIndex: player.handicapIndex,
+        teePlayed: state.teePlayed,
+        includeUnplayedHoles: false,
+      });
+      const totals = sumHoleScores(holeScores);
+      return {
+        tournament_id: state.tournamentId,
+        round_number: state.roundNumber,
+        hole_scores: holeScores,
+        ...totals,
+        user_id: player.tournamentPlayerId ? null : player.id,
+        tournament_player_id: player.tournamentPlayerId ?? null,
+        team_id: null,
+        match_group_id: matchGroupId,
+      };
+    });
+  }
+
+  const holeScores = state.getComputedHoleScores();
+  const totals = sumHoleScores(holeScores);
+  const singlePlayer = state.players[0];
+
+  return [
+    {
+      tournament_id: state.tournamentId,
+      round_number: state.roundNumber,
+      hole_scores: holeScores,
+      ...totals,
+      team_id: state.format === 'singles' ? null : state.teamId,
+      user_id:
+        state.format === 'singles'
+          ? singlePlayer?.tournamentPlayerId
+            ? null
+            : state.userId
+          : null,
+      tournament_player_id:
+        state.format === 'singles' ? singlePlayer?.tournamentPlayerId ?? null : null,
+      match_group_id: matchGroupId,
+    },
+  ];
+}
+
 function buildPlayerGrossScores(
   players: TournamentStorePlayer[],
   grossScores: Record<string, Record<number, number>>
@@ -176,7 +301,7 @@ function buildPlayerGrossScores(
     playerId: player.id,
     handicapIndex: player.handicapIndex,
     playingHandicap: player.playingHandicap,
-    holes: Object.entries(grossScores[player.id] ?? buildInitialGrossMap()).map(
+    holes: Object.entries(grossScores[player.id] ?? {}).map(
       ([hole, gross]) => ({
         hole: Number(hole),
         gross,
@@ -218,7 +343,7 @@ const initialState = {
   teePlayed: 'White' as TeeName,
   players: [] as TournamentStorePlayer[],
   grossScores: {} as Record<string, Record<number, number>>,
-  teamGrossScores: buildInitialGrossMap(),
+  teamGrossScores: {} as Record<number, number>,
   isDirty: false,
   isSyncing: false,
   lastSyncedAt: null as string | null,
@@ -348,7 +473,7 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       grossScores: {
         ...state.grossScores,
         [playerId]: {
-          ...(state.grossScores[playerId] ?? buildInitialGrossMap()),
+          ...(state.grossScores[playerId] ?? {}),
           [hole]: Math.max(1, gross),
         },
       },
@@ -394,11 +519,7 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
               s.user_id === player.id
           );
           if (!card?.hole_scores?.length) continue;
-          const map = buildInitialGrossMap();
-          card.hole_scores.forEach((h) => {
-            map[h.hole] = h.gross;
-          });
-          grossScores[player.id] = map;
+          grossScores[player.id] = grossMapFromSavedHoles(card.hole_scores);
         }
         set({ grossScores, isDirty: false });
         return;
@@ -413,14 +534,10 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
               s.user_id === player.id
           );
           if (!card?.hole_scores?.length) {
-            grossScores[player.id] = grossScores[player.id] ?? buildInitialGrossMap();
+            grossScores[player.id] = grossScores[player.id] ?? {};
             continue;
           }
-          const map = buildInitialGrossMap();
-          card.hole_scores.forEach((h) => {
-            map[h.hole] = h.gross;
-          });
-          grossScores[player.id] = map;
+          grossScores[player.id] = grossMapFromSavedHoles(card.hole_scores);
         }
         set({ grossScores, isDirty: false });
         return;
@@ -430,11 +547,7 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
         const card = scores.find((s) => s.team_id === state.teamId);
         if (!card?.hole_scores?.length) return;
 
-        const teamGross = buildInitialGrossMap();
-        card.hole_scores.forEach((h) => {
-          teamGross[h.hole] = h.gross;
-        });
-        set({ teamGrossScores: teamGross, isDirty: false });
+        set({ teamGrossScores: grossMapFromSavedHoles(card.hole_scores), isDirty: false });
       }
       return;
     }
@@ -482,10 +595,7 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       return;
     }
 
-    const teamGross = buildInitialGrossMap();
-    existing.hole_scores.forEach((h) => {
-      teamGross[h.hole] = h.gross;
-    });
+    const teamGross = grossMapFromSavedHoles(existing.hole_scores);
 
     if (state.format === 'singles' && state.userId) {
       set({
@@ -556,100 +666,39 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
     }
 
     const matchUseNetScoring = options?.matchUseNetScoring ?? false;
+    const scorePayloads = buildScoreInsertPayloads(state);
 
     set({ isSyncing: true });
 
     try {
       const matchGroupId = state.matchGroupId;
 
-      const savePlayerScore = async (payload: Parameters<typeof saveTournamentScore>[0]) => {
-        const result = await saveTournamentScore(payload);
-        if (result.error || !result.data) {
-          throw new Error(result.error ?? 'Failed to save player scores');
+      if (matchGroupId) {
+        const groups = await getTournamentMatchGroups(state.tournamentId);
+        const matchGroup = groups.find((g) => g.id === matchGroupId);
+        if (!matchGroup) {
+          throw new Error('Match pairing not found');
         }
-      };
 
-      if (state.format === 'singles' && state.players.length > 1) {
-        for (const player of state.players) {
-          const holeScores = buildTournamentHoleScores({
-            format: 'singles',
-            grossByHole: Object.entries(state.grossScores[player.id] ?? {}).map(
-              ([hole, gross]) => ({ hole: Number(hole), gross })
-            ),
-            handicapIndex: player.handicapIndex,
-            teePlayed: state.teePlayed,
-            includeUnplayedHoles: false,
-          });
-          const totals = sumHoleScores(holeScores);
-          await savePlayerScore({
-            tournament_id: state.tournamentId,
-            round_number: state.roundNumber,
-            hole_scores: holeScores,
-            ...totals,
-            user_id: player.tournamentPlayerId ? null : player.id,
-            tournament_player_id: player.tournamentPlayerId ?? null,
-            team_id: null,
-            match_group_id: matchGroupId,
-          });
-        }
-      } else if (state.format === 'best_ball' && state.players.length > 1) {
-        for (const player of state.players) {
-          const holeScores = buildTournamentHoleScores({
-            format: 'singles',
-            grossByHole: Object.entries(state.grossScores[player.id] ?? {}).map(
-              ([hole, gross]) => ({ hole: Number(hole), gross })
-            ),
-            handicapIndex: player.handicapIndex,
-            teePlayed: state.teePlayed,
-            includeUnplayedHoles: false,
-          });
-          const totals = sumHoleScores(holeScores);
-          await savePlayerScore({
-            tournament_id: state.tournamentId,
-            round_number: state.roundNumber,
-            hole_scores: holeScores,
-            ...totals,
-            user_id: player.tournamentPlayerId ? null : player.id,
-            tournament_player_id: player.tournamentPlayerId ?? null,
-            team_id: null,
-            match_group_id: matchGroupId,
-          });
+        const backendResult = await syncTournamentMatchScoresViaBackend({
+          tournamentId: state.tournamentId,
+          matchGroupId,
+          roundNumber: state.roundNumber,
+          format: state.format,
+          scores: scorePayloads,
+          useNetScoring: matchUseNetScoring,
+          matchGroup,
+        });
+
+        if (!backendResult.success) {
+          throw new Error(backendResult.error ?? 'Failed to save scores');
         }
       } else {
-        const holeScores = state.getComputedHoleScores();
-        const totals = sumHoleScores(holeScores);
-
-        const singlePlayer = state.players[0];
-        await savePlayerScore({
-          tournament_id: state.tournamentId,
-          round_number: state.roundNumber,
-          hole_scores: holeScores,
-          ...totals,
-          team_id: state.format === 'singles' ? null : state.teamId,
-          user_id:
-            state.format === 'singles'
-              ? singlePlayer?.tournamentPlayerId
-                ? null
-                : state.userId
-              : null,
-          tournament_player_id:
-            state.format === 'singles' ? singlePlayer?.tournamentPlayerId ?? null : null,
-          match_group_id: matchGroupId,
-        });
-      }
-
-      if (matchGroupId) {
-        const groups = await getTournamentMatchGroups(state.tournamentId!);
-        const matchGroup = groups.find((g) => g.id === matchGroupId);
-        if (matchGroup) {
-          const scores = await getScoresForMatchGroup(matchGroupId, state.roundNumber);
-          await syncMatchHoleResults({
-            matchGroup,
-            roundNumber: state.roundNumber,
-            format: state.format ?? 'scramble',
-            scores,
-            useNetScoring: matchUseNetScoring,
-          });
+        for (const payload of scorePayloads) {
+          const result = await saveTournamentScore(payload);
+          if (result.error || !result.data) {
+            throw new Error(result.error ?? 'Failed to save player scores');
+          }
         }
       }
 
@@ -688,7 +737,7 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
     const playerInputs: PlayerNetScores[] = state.players.map((player) => ({
       playerId: player.id,
       courseHandicap: player.playingHandicap,
-      grossByHole: Object.entries(state.grossScores[player.id] ?? buildInitialGrossMap()).map(
+      grossByHole: Object.entries(state.grossScores[player.id] ?? {}).map(
         ([hole, gross]) => ({ hole: Number(hole), gross })
       ),
     }));
@@ -709,6 +758,30 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
         state.wageringSettings as { point_values: Record<string, number> }
       ),
     });
+  },
+
+  clearMatchRoundScores: async () => {
+    const state = get();
+    if (!state.matchGroupId || !state.tournamentId) {
+      return { success: false, error: 'No match pairing loaded' };
+    }
+
+    const result = await clearTournamentMatchScoresViaBackend({
+      tournamentId: state.tournamentId,
+      matchGroupId: state.matchGroupId,
+      roundNumber: state.roundNumber,
+    });
+    if (!result.success) return result;
+
+    set({
+      grossScores: buildEmptyPlayerGrossMaps(state.players),
+      teamGrossScores: {},
+      currentHole: 1,
+      isDirty: false,
+      lastSyncedAt: null,
+    });
+    await get().persistSession();
+    return { success: true };
   },
 
   persistSession: async () => {
@@ -756,8 +829,8 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
         currentHole: data.currentHole,
         teePlayed: data.teePlayed,
         players: data.players,
-        grossScores: data.grossScores,
-        teamGrossScores: data.teamGrossScores,
+        grossScores: sanitizeGrossScoresState(data.grossScores),
+        teamGrossScores: sanitizeTeamGrossScores(data.teamGrossScores),
         isDirty: true,
       });
       return true;
@@ -766,10 +839,10 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
     }
   },
 
-  reset: () => set({ ...initialState, teamGrossScores: buildInitialGrossMap() }),
+  reset: () => set({ ...initialState, teamGrossScores: {} }),
   clearPersistedSession: async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
-    set({ ...initialState, teamGrossScores: buildInitialGrossMap() });
+    set({ ...initialState, teamGrossScores: {} });
   },
 }));
 

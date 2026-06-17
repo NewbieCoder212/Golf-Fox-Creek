@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import { View, Platform } from 'react-native';
 import { Home, Clock, Flag, Phone, ClipboardList, Users, Newspaper } from 'lucide-react-native';
 
@@ -60,6 +60,12 @@ export default function TabLayout() {
               <ClipboardList size={22} color={color} strokeWidth={focused ? 2.5 : 1.5} />
             </View>
           ),
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.navigate('/(tabs)/scorecard');
+          },
         }}
       />
       <Tabs.Screen

@@ -7,6 +7,7 @@ import { devAuthRouter } from "./routes/dev-auth";
 import { membersRouter } from "./routes/members";
 import { displayRouter } from "./routes/display";
 import { tournamentTeamsRouter } from "./routes/tournament-teams";
+import { tournamentScoresRouter } from "./routes/tournament-scores";
 import { logger } from "hono/logger";
 
 const app = new Hono();
@@ -41,6 +42,7 @@ app.route("/api/dev", devAuthRouter);
 app.route("/api/members", membersRouter);
 app.route("/api/display", displayRouter);
 app.route("/api/tournaments", tournamentTeamsRouter);
+app.route("/api/tournaments", tournamentScoresRouter);
 
 const port = Number(process.env.PORT) || 3000;
 

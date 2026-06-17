@@ -2,7 +2,7 @@ import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator } from 'rea
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Coffee, RotateCcw, Trophy, Timer, Target, Save, X, Trash2, Home } from 'lucide-react-native';
+import { Coffee, RotateCcw, Trophy, Timer, Target, Save, X, Trash2, Home, ClipboardList } from 'lucide-react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -199,21 +199,49 @@ export default function ScorecardScreen() {
     const result = await tournamentSession.handleSync();
     if (result.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        'Saved',
-        tournamentSession.activeMatchGroup
-          ? 'Scores saved. Match status updated.'
-          : 'Your tournament scores have been saved.'
-      );
+      if (tournamentSession.currentHole < 18) {
+        tournamentSession.setCurrentHole(tournamentSession.currentHole + 1);
+        await tournamentSession.persistSession();
+      }
       return;
     }
     Alert.alert('Save failed', result.error ?? 'Could not save scores.');
+  };
+
+  const handleClearTournamentScores = () => {
+    if (!tournamentSession.hasMatchPlay) return;
+
+    Alert.alert(
+      'Clear match scores?',
+      `This removes all saved scores and match status for round ${tournamentSession.roundNumber} in your pairing. Everyone in this match will need to re-enter scores.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear scores',
+          style: 'destructive',
+          onPress: async () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            const result = await tournamentSession.handleClearMatchScores();
+            if (result.success) {
+              Alert.alert('Cleared', 'Match scores reset. You can start fresh.');
+              return;
+            }
+            Alert.alert('Clear failed', result.error ?? 'Could not clear scores.');
+          },
+        },
+      ]
+    );
   };
 
   const hasRoundProgress = useMemo(
     () => isTracking || scores.some((hole) => hole.scores.some((score) => score !== null)),
     [isTracking, scores]
   );
+
+  const showCasualPaperScorecard = !isTournamentMode && (hasRoundProgress || showRoundSummary);
+  const showTournamentPaperScorecard =
+    isTournamentMode &&
+    (!tournamentSession.hasMatchPlay || tournamentViewTab === 'card');
 
   // Check for saved round on mount (casual only)
   useEffect(() => {
@@ -715,6 +743,7 @@ export default function ScorecardScreen() {
                 sideAName={tournamentSession.sideAName}
                 sideBName={tournamentSession.sideBName}
                 matchStatus={tournamentSession.matchStatus}
+                personalMatchStatus={tournamentSession.personalMatchStatus}
                 viewerSide={tournamentSession.viewerSide}
                 format={tournamentSession.format}
                 isTeamFormat={tournamentSession.isTeamFormat}
@@ -752,9 +781,7 @@ export default function ScorecardScreen() {
           <SponsorBanner placementType="scorecard_header" />
         </View>
 
-        {(!isTournamentMode ||
-          !tournamentSession.hasMatchPlay ||
-          tournamentViewTab === 'card') && (
+        {showCasualPaperScorecard || showTournamentPaperScorecard ? (
         <Animated.View entering={FadeIn.duration(400)} className="mx-4 mt-4">
           <FoxCreekPaperScorecard
             players={isTournamentMode ? tournamentSession.paperPlayers : paperPlayers}
@@ -783,7 +810,21 @@ export default function ScorecardScreen() {
             }
           />
         </Animated.View>
-        )}
+        ) : null}
+
+        {!isTournamentMode && !hasRoundProgress && !showRoundSummary ? (
+          <View className="mx-5 mt-6 mb-4 items-center">
+            <View className="w-16 h-16 rounded-full bg-[#141414] border border-neutral-800 items-center justify-center mb-4">
+              <ClipboardList size={28} color="#525252" />
+            </View>
+            <Text className="text-white text-lg font-bold text-center mb-2">No active scorecard</Text>
+            <Text className="text-neutral-500 text-sm text-center leading-relaxed mb-6">
+              {authUser
+                ? 'Open your scorecard from an event in My Events, or start a casual round below.'
+                : 'Start a round to fill in your paper scorecard.'}
+            </Text>
+          </View>
+        ) : null}
 
         <View className="mx-4 mt-4">
           <SponsorBanner
@@ -848,9 +889,59 @@ export default function ScorecardScreen() {
           style={{ paddingBottom: insets.bottom + 12 }}
           className="absolute bottom-0 left-0 right-0 bg-[#141414] border-t border-neutral-800 px-5 pt-4"
         >
+          {tournamentSession.isMatchComplete ? (
+            <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-3">
+              <Text className="text-lime-400 font-semibold text-sm">Match complete</Text>
+              <Text className="text-neutral-400 text-xs mt-1">
+                {tournamentSession.matchStatus.label} — standings updated.
+              </Text>
+              <View className="flex-row gap-2 mt-3">
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if (tournamentId) {
+                      router.push(`/tournaments/${tournamentId}` as never);
+                    }
+                  }}
+                  className="flex-1 bg-neutral-800 rounded-lg py-2.5 items-center active:opacity-80"
+                >
+                  <Text className="text-neutral-200 font-semibold text-sm">View standings</Text>
+                </Pressable>
+                {tournamentSession.nextRoundNumber ? (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      void tournamentSession.handleRoundChange(tournamentSession.nextRoundNumber!);
+                    }}
+                    className="flex-1 bg-lime-600 rounded-lg py-2.5 items-center active:opacity-80"
+                  >
+                    <Text className="text-white font-semibold text-sm">
+                      Round {tournamentSession.nextRoundNumber}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+          {tournamentSession.hasMatchPlay ? (
+            <Pressable
+              onPress={handleClearTournamentScores}
+              disabled={tournamentSession.isClearing || tournamentSession.isSyncing}
+              className="flex-row items-center justify-center py-3 mb-2 active:opacity-70"
+            >
+              {tournamentSession.isClearing ? (
+                <ActivityIndicator color="#a3a3a3" />
+              ) : (
+                <>
+                  <Trash2 size={16} color="#a3a3a3" />
+                  <Text className="text-neutral-400 font-medium text-sm ml-2">Clear match scores</Text>
+                </>
+              )}
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={handleTournamentSync}
-            disabled={tournamentSession.isSyncing}
+            disabled={tournamentSession.isSyncing || tournamentSession.isClearing}
             className="flex-row items-center justify-center bg-lime-600 rounded-xl py-4 active:opacity-80"
           >
             {tournamentSession.isSyncing ? (

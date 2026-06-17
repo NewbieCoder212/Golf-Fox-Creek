@@ -1,7 +1,7 @@
 import { View, Text, Pressable, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Mail, CheckCircle2, AlertCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { sendParticipantInvites } from '@/lib/tournament-team-service';
 import {
@@ -9,6 +9,8 @@ import {
   getAssignedPlayerIds,
   resolveParticipantEmail,
 } from '@/lib/tournament-participant-utils';
+import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
+import { formatRoundPickerLabel } from '@/lib/tournament-labels';
 import type { Tournament, TournamentPlayer, TournamentTeam } from '@/types';
 import { webPressHandler } from '@/lib/web-press';
 
@@ -31,6 +33,11 @@ export function TournamentPublishTab({
 }: TournamentPublishTabProps) {
   const queryClient = useQueryClient();
 
+  const { data: matchGroups = [] } = useQuery({
+    queryKey: ['tournamentMatchGroups', tournamentId],
+    queryFn: () => getTournamentMatchGroups(tournamentId),
+  });
+
   const memberEmailByUserId = Object.fromEntries(
     members.filter((m) => m.email).map((m) => [m.id, m.email as string])
   );
@@ -41,6 +48,26 @@ export function TournamentPublishTab({
   const assignedCount = getAssignedPlayerIds(teams, participants).size;
   const teamsWithPlayers = countTeamsWithResolvedPlayers(teams, participants);
   const alreadyInvited = participants.filter((p) => p.invite_email_sent_at).length;
+
+  const pairingsByRound = Array.from({ length: tournament.rounds_count }, (_, index) => {
+    const roundNumber = index + 1;
+    const savedGroups = matchGroups.filter((group) => group.round_number === roundNumber);
+    const completeGroups = savedGroups.filter(
+      (group) =>
+        group.side_a_player_ids.length > 0 &&
+        group.side_b_player_ids.length > 0 &&
+        Boolean(group.tee_time)
+    );
+    return {
+      roundNumber,
+      label: formatRoundPickerLabel(tournament, roundNumber),
+      ok: completeGroups.length > 0,
+      count: completeGroups.length,
+    };
+  });
+
+  const allRoundsHavePairings =
+    tournament.rounds_count > 0 && pairingsByRound.every((round) => round.ok);
 
   const sendMutation = useMutation({
     mutationFn: async () => {
@@ -104,6 +131,18 @@ export function TournamentPublishTab({
       ok: teamsWithPlayers >= Math.min(teams.length, 2),
       label: `${teamsWithPlayers} team(s) have at least one player`,
     },
+    {
+      ok: allRoundsHavePairings,
+      label: allRoundsHavePairings
+        ? `Match pairings saved for all ${tournament.rounds_count} round(s)`
+        : `Match pairings saved for ${pairingsByRound.filter((r) => r.ok).length}/${tournament.rounds_count} round(s)`,
+    },
+    ...pairingsByRound.map((round) => ({
+      ok: round.ok,
+      label: round.ok
+        ? `${round.label} — ${round.count} pairing(s)`
+        : `${round.label} — no pairings saved yet`,
+    })),
   ];
 
   const ready = checklist.every((item) => item.ok);

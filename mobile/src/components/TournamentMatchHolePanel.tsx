@@ -27,6 +27,7 @@ interface TournamentMatchHolePanelProps {
   sideAName: string;
   sideBName: string;
   matchStatus: MatchStatus;
+  personalMatchStatus?: MatchStatus | null;
   viewerSide?: TournamentTeamSide;
   format: TournamentFormat;
   isTeamFormat: boolean;
@@ -331,6 +332,7 @@ export function TournamentMatchHolePanel({
   sideAName,
   sideBName,
   matchStatus,
+  personalMatchStatus,
   viewerSide = 'side_a',
   format,
   isTeamFormat,
@@ -401,6 +403,11 @@ export function TournamentMatchHolePanel({
               ? `Standing after hole ${matchStatus.throughHole} · ${matchStatus.holesRemaining} left`
               : 'No holes decided yet'}
           </Text>
+          {personalMatchStatus ? (
+            <Text className="text-neutral-400 text-xs mt-1">
+              Your match: {personalMatchStatus.throughHole > 0 ? personalMatchStatus.label : 'AS'}
+            </Text>
+          ) : null}
         </View>
         {expanded ? (
           <ChevronUp size={18} color="#737373" />

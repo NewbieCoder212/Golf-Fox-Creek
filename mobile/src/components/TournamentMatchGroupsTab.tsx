@@ -31,6 +31,7 @@ import {
 } from '@/lib/tournament-format-settings';
 import { useTournamentFormatsSettings } from '@/lib/useTournamentFormatsSettings';
 import {
+  formatRoundPickerLabel,
   getMatchGroupFormat,
   getRoundFormat,
   getTeamSideDisplayName,
@@ -515,25 +516,54 @@ export function TournamentMatchGroupsTab({
 
   return (
     <View className="mx-5 mt-2">
+      <View className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-3 mb-4">
+        <Text className="text-neutral-300 text-sm">
+          Set tee times and pairings here on the Matches tab. This is the source of truth for when
+          each foursome plays — not the member Tee Times tab.
+        </Text>
+      </View>
+
       <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">Round</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
         <View className="flex-row gap-2">
-          {Array.from({ length: tournament.rounds_count }, (_, i) => i + 1).map((n) => (
-            <Pressable
-              key={n}
-              onPress={() => setRoundNumber(n)}
-              className={cn(
-                'px-4 py-2 rounded-lg border',
-                roundNumber === n
-                  ? 'bg-lime-900/40 border-lime-600'
-                  : 'bg-[#141414] border-neutral-800'
-              )}
-            >
-              <Text className={roundNumber === n ? 'text-lime-400 font-semibold' : 'text-neutral-500'}>
-                Round {n}
-              </Text>
-            </Pressable>
-          ))}
+          {Array.from({ length: tournament.rounds_count }, (_, i) => i + 1).map((n) => {
+            const savedCount = allMatchGroups.filter((group) => group.round_number === n).length;
+            return (
+              <Pressable
+                key={n}
+                onPress={() => setRoundNumber(n)}
+                className={cn(
+                  'px-4 py-2 rounded-lg border min-w-[140px]',
+                  roundNumber === n
+                    ? 'bg-lime-900/40 border-lime-600'
+                    : 'bg-[#141414] border-neutral-800'
+                )}
+              >
+                <Text
+                  className={cn(
+                    'text-xs font-semibold',
+                    roundNumber === n ? 'text-lime-400' : 'text-neutral-500'
+                  )}
+                >
+                  Round {n}
+                </Text>
+                <Text
+                  className={cn(
+                    'text-[10px] mt-0.5',
+                    roundNumber === n ? 'text-lime-400/80' : 'text-neutral-600'
+                  )}
+                  numberOfLines={2}
+                >
+                  {formatRoundPickerLabel(tournament, n)}
+                </Text>
+                {savedCount > 0 ? (
+                  <Text className="text-neutral-500 text-[10px] mt-1">
+                    {savedCount} pairing{savedCount !== 1 ? 's' : ''} saved
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
 

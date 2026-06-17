@@ -1,63 +1,35 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  Pressable,
   Image,
   ActivityIndicator,
   useWindowDimensions,
-  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trophy, Radio } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchTournamentDisplay, buildQrCodeUrl, buildTournamentMobileUrl } from '@/lib/display-service';
 import { useTournamentDisplayRealtime } from '@/hooks/useTournamentDisplayRealtime';
-import { formatTournamentDates } from '@/lib/tournament-labels';
+import { formatTournamentDates, formatRoundPickerLabel } from '@/lib/tournament-labels';
 import { formatClubTime } from '@/lib/club-timezone';
 import { TvSponsorCarousel, TvSponsorSlot } from '@/components/TvSponsorSlot';
-import type { DisplayStandingRow } from '@/types';
-import { cn } from '@/lib/cn';
-
-function StandingRow({ row, highlight }: { row: DisplayStandingRow; highlight: boolean }) {
-  return (
-    <View
-      className={cn(
-        'flex-row items-center px-4 py-3 border-b border-neutral-800/80',
-        highlight && 'bg-lime-950/20'
-      )}
-    >
-      <View
-        className={cn(
-          'w-10 h-10 rounded-full items-center justify-center mr-4',
-          row.rank === 1 ? 'bg-yellow-500/20' : 'bg-neutral-800'
-        )}
-      >
-        <Text
-          className={cn('font-bold text-base', row.rank === 1 ? 'text-yellow-400' : 'text-neutral-400')}
-        >
-          {row.rank}
-        </Text>
-      </View>
-      <View className="flex-1 mr-3">
-        <Text className="text-white font-semibold text-lg" numberOfLines={1}>
-          {row.name}
-        </Text>
-        <Text className="text-neutral-500 text-sm mt-0.5">{row.detail}</Text>
-      </View>
-      <Text className="text-lime-400 font-bold text-3xl">{row.score}</Text>
-    </View>
-  );
-}
+import { TournamentLiveMatchGrids } from '@/components/TournamentLiveMatchGrids';
+import { getTournamentById, getTournamentScores, getTournamentTeams } from '@/lib/tournament-service';
+import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
+import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
+import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 
 export default function TournamentTvDisplayScreen() {
   const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
-  const [scoreMode, setScoreMode] = useState<'net' | 'gross'>('net');
+  const queryClient = useQueryClient();
+
+  const displayEnabled = Boolean(id && token);
 
   const {
     data,
@@ -69,23 +41,90 @@ export default function TournamentTvDisplayScreen() {
   } = useQuery({
     queryKey: ['tournamentDisplay', id, token],
     queryFn: () => fetchTournamentDisplay(id!, token!),
-    enabled: Boolean(id && token),
+    enabled: displayEnabled,
     staleTime: 15_000,
+    refetchInterval: 15_000,
   });
+
+  const matchDataEnabled = displayEnabled && Boolean(data);
+
+  const { data: tournament } = useQuery({
+    queryKey: ['tournament', id],
+    queryFn: () => getTournamentById(id!),
+    enabled: matchDataEnabled,
+    refetchInterval: 15_000,
+  });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ['tournamentTeams', id],
+    queryFn: () => getTournamentTeams(id!),
+    enabled: matchDataEnabled,
+    refetchInterval: 15_000,
+  });
+
+  const { data: scores = [], isFetching: scoresFetching } = useQuery({
+    queryKey: ['tournamentScores', id],
+    queryFn: () => getTournamentScores(id!),
+    enabled: matchDataEnabled,
+    refetchInterval: 15_000,
+  });
+
+  const { data: matchGroups = [], isFetching: groupsFetching } = useQuery({
+    queryKey: ['tournamentMatchGroups', id],
+    queryFn: () => getTournamentMatchGroups(id!),
+    enabled: matchDataEnabled,
+    refetchInterval: 15_000,
+  });
+
+  const { data: tournamentPlayers = [] } = useQuery({
+    queryKey: ['tournamentPlayers', id],
+    queryFn: () => getTournamentPlayers(id!),
+    enabled: matchDataEnabled,
+    refetchInterval: 15_000,
+  });
+
+  const teamNameById = useMemo(
+    () => Object.fromEntries(teams.map((team) => [team.id, team.team_name])),
+    [teams]
+  );
+
+  const { nameById: playerNameById } = useMemo(
+    () => buildTournamentPlayerMaps(tournamentPlayers, []),
+    [tournamentPlayers]
+  );
+
+  const displayRound = useMemo(() => {
+    if (!tournament) return 1;
+    return getTvDisplayRoundNumber(tournament, matchGroups);
+  }, [tournament, matchGroups]);
+
+  const roundLabel = useMemo(() => {
+    if (!tournament) return `Round ${displayRound}`;
+    return formatRoundPickerLabel(tournament, displayRound);
+  }, [tournament, displayRound]);
+
+  const currentRoundMatchGroups = useMemo(
+    () => matchGroups.filter((group) => group.round_number === displayRound),
+    [matchGroups, displayRound]
+  );
+
+  const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
+  const isMatchDataRefreshing = scoresFetching || groupsFetching;
 
   const handleRealtimeUpdate = useCallback(() => {
     void refetch();
-  }, [refetch]);
+    if (!id) return;
+    void queryClient.invalidateQueries({ queryKey: ['tournamentScores', id] });
+    void queryClient.invalidateQueries({ queryKey: ['tournamentMatchGroups', id] });
+    void queryClient.invalidateQueries({ queryKey: ['tournamentTeams', id] });
+    void queryClient.invalidateQueries({ queryKey: ['tournamentPlayers', id] });
+    void queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+  }, [refetch, queryClient, id]);
 
   useTournamentDisplayRealtime(id, handleRealtimeUpdate);
 
-  const standings = useMemo(
-    () => (scoreMode === 'net' ? data?.netStandings : data?.grossStandings) ?? [],
-    [data, scoreMode]
-  );
-
   const mobileUrl = id ? buildTournamentMobileUrl(id) : '';
-  const qrUrl = mobileUrl ? buildQrCodeUrl(mobileUrl, isLandscape ? 160 : 140) : '';
+  const qrUrl = mobileUrl ? buildQrCodeUrl(mobileUrl, 72) : '';
 
   if (!token) {
     return (
@@ -122,90 +161,76 @@ export default function TournamentTvDisplayScreen() {
   const lastUpdated = formatClubTime(new Date(dataUpdatedAt).toISOString(), true);
 
   return (
-    <View className="flex-1 bg-[#0c0c0c]" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
+    <View
+      className="flex-1 bg-[#0c0c0c] overflow-hidden"
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+    >
       {/* Header */}
-      <View className="px-6 py-4 border-b border-neutral-800 bg-[#111111]">
+      <View className="px-5 py-2 border-b border-neutral-800 bg-[#111111]">
         <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center flex-1 mr-4">
+          <View className="flex-row items-center flex-1 mr-3 min-w-0">
             {data.sponsors.header_left[0] && isLandscape ? (
-              <View className="w-44 mr-4">
+              <View className="w-28 mr-3">
                 <TvSponsorSlot sponsor={data.sponsors.header_left[0]} variant="header" />
               </View>
             ) : null}
-            <View className="flex-1">
-              <Text className="text-lime-400 text-xs font-semibold uppercase tracking-[0.25em]">
+            <View className="flex-1 min-w-0">
+              <Text className="text-lime-400 text-[10px] font-semibold uppercase tracking-[0.2em]">
                 Fox Creek Golf Club
               </Text>
-              <Text className="text-white text-3xl font-bold mt-1" numberOfLines={2}>
+              <Text className="text-white text-xl font-bold" numberOfLines={1}>
                 {data.tournament.name}
               </Text>
-              <Text className="text-neutral-400 text-base mt-1">
+              <Text className="text-lime-400 text-sm font-semibold mt-0.5" numberOfLines={1}>
+                {roundLabel}
+              </Text>
+              <Text className="text-neutral-500 text-xs" numberOfLines={1}>
                 {formatTournamentDates(data.tournament.start_date, data.tournament.end_date)}
               </Text>
             </View>
           </View>
 
-          <View className="items-end">
-            <View className="flex-row items-center bg-lime-950/40 border border-lime-700/30 rounded-full px-3 py-1.5">
-              <Radio size={14} color="#a3e635" />
-              <Text className="text-lime-400 text-xs font-semibold ml-1.5 uppercase tracking-wider">
+          <View className="items-end shrink-0">
+            <View className="flex-row items-center bg-lime-950/40 border border-lime-700/30 rounded-full px-2.5 py-1">
+              <Radio size={12} color="#a3e635" />
+              <Text className="text-lime-400 text-[10px] font-semibold ml-1 uppercase tracking-wider">
                 Live
               </Text>
-              {isFetching ? (
-                <ActivityIndicator size="small" color="#a3e635" style={{ marginLeft: 8 }} />
+              {isFetching || isMatchDataRefreshing ? (
+                <ActivityIndicator size="small" color="#a3e635" style={{ marginLeft: 6 }} />
               ) : null}
             </View>
-            <Text className="text-neutral-600 text-xs mt-2">Updated {lastUpdated}</Text>
+            <Text className="text-neutral-600 text-[10px] mt-1">Updated {lastUpdated}</Text>
           </View>
         </View>
       </View>
 
-      <View className={cn('flex-1 flex-row', !isLandscape && 'flex-col')}>
-        {/* Leaderboard column */}
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
-          <View className="px-6 pt-5 pb-2 flex-row items-center justify-between">
-            <View className="flex-row items-center">
-              <Trophy size={22} color="#a3e635" />
-              <Text className="text-white text-xl font-bold ml-2">Standings</Text>
-            </View>
-            <View className="flex-row bg-neutral-900 rounded-lg border border-neutral-800 p-0.5">
-              {(['net', 'gross'] as const).map((mode) => (
-                <Pressable
-                  key={mode}
-                  onPress={() => setScoreMode(mode)}
-                  className={cn(
-                    'px-4 py-2 rounded-md',
-                    scoreMode === mode && 'bg-lime-600'
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      'text-xs font-bold uppercase tracking-wider',
-                      scoreMode === mode ? 'text-white' : 'text-neutral-500'
-                    )}
-                  >
-                    {mode}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+      {/* Main — fixed viewport, no page scroll */}
+      <View className="flex-1 flex-row min-h-0 px-4 py-3 gap-3">
+        {/* Standings */}
+        <View className="w-[260px] shrink-0">
+          <View className="flex-row items-center mb-2">
+            <Trophy size={16} color="#a3e635" />
+            <Text className="text-white text-sm font-bold ml-1.5">Standings</Text>
           </View>
 
           {hasMatchPoints ? (
-            <View className="mx-6 mb-4 bg-[#141414] rounded-2xl border border-lime-700/30 overflow-hidden">
-              <Text className="text-neutral-500 text-xs uppercase tracking-widest px-4 pt-4 pb-2">
+            <View className="bg-[#141414] rounded-xl border border-lime-700/30 overflow-hidden mb-2">
+              <Text className="text-neutral-500 text-[10px] uppercase tracking-widest px-3 pt-2 pb-1">
                 Match Points
               </Text>
               {data.matchPoints.map((row) => (
                 <View
                   key={`${row.rank}-${row.teamName}`}
-                  className="flex-row items-center px-4 py-3 border-t border-neutral-800/80"
+                  className="flex-row items-center px-3 py-2 border-t border-neutral-800/80"
                 >
-                  <Text className="text-neutral-500 w-8 font-bold">{row.rank}</Text>
-                  <Text className="text-white font-semibold flex-1 text-lg">{row.teamName}</Text>
-                  <Text className="text-lime-400 font-bold text-2xl mr-3">{row.matchPoints}</Text>
-                  <Text className="text-neutral-600 text-xs">
-                    {row.matchesWon}W / {row.matchesPlayed}
+                  <Text className="text-neutral-500 w-6 text-xs font-bold">{row.rank}</Text>
+                  <Text className="text-white font-semibold flex-1 text-sm" numberOfLines={1}>
+                    {row.teamName}
+                  </Text>
+                  <Text className="text-lime-400 font-bold text-lg mr-2">{row.matchPoints}</Text>
+                  <Text className="text-neutral-600 text-[10px]">
+                    {row.matchesWon}W/{row.matchesPlayed}
                   </Text>
                 </View>
               ))}
@@ -213,48 +238,54 @@ export default function TournamentTvDisplayScreen() {
           ) : null}
 
           {data.matchPlay ? (
-            <View className="mx-6 mb-4 bg-[#141414] rounded-2xl border border-neutral-800 p-4">
-              <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-3 text-center">
+            <View className="bg-[#141414] rounded-xl border border-neutral-800 p-3">
+              <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-2 text-center">
                 Team Match Play
               </Text>
               <View className="flex-row items-center justify-between">
                 <View className="flex-1 items-center">
-                  <Text className="text-lime-400 text-xs font-bold uppercase">{data.matchPlay.sideAName}</Text>
-                  <Text className="text-white text-4xl font-bold mt-1">{data.matchPlay.sideAHoles}</Text>
+                  <Text className="text-lime-400 text-[10px] font-bold uppercase" numberOfLines={1}>
+                    {data.matchPlay.sideAName}
+                  </Text>
+                  <Text className="text-white text-2xl font-bold">{data.matchPlay.sideAHoles}</Text>
                 </View>
-                <Text className="text-neutral-600 text-lg font-bold px-4">vs</Text>
+                <Text className="text-neutral-600 text-sm font-bold px-2">vs</Text>
                 <View className="flex-1 items-center">
-                  <Text className="text-lime-400 text-xs font-bold uppercase">{data.matchPlay.sideBName}</Text>
-                  <Text className="text-white text-4xl font-bold mt-1">{data.matchPlay.sideBHoles}</Text>
+                  <Text className="text-lime-400 text-[10px] font-bold uppercase" numberOfLines={1}>
+                    {data.matchPlay.sideBName}
+                  </Text>
+                  <Text className="text-white text-2xl font-bold">{data.matchPlay.sideBHoles}</Text>
                 </View>
               </View>
             </View>
           ) : null}
 
-          <View className="mx-6 bg-[#141414] rounded-2xl border border-neutral-800 overflow-hidden">
-            {standings.length === 0 ? (
-              <View className="py-16 items-center">
-                <Text className="text-neutral-500 text-lg">No scores yet</Text>
-                <Text className="text-neutral-600 text-sm mt-2">Standings update automatically</Text>
-              </View>
-            ) : (
-              standings.map((row) => (
-                <StandingRow key={`${row.rank}-${row.name}`} row={row} highlight={row.rank <= 3} />
-              ))
-            )}
-          </View>
-
-          {!isLandscape && data.sponsors.sidebar.length > 0 ? (
-            <View className="px-6 mt-4">
-              <TvSponsorCarousel sponsors={data.sponsors.sidebar} />
+          {!hasMatchPoints && !data.matchPlay && currentRoundMatchGroups.length === 0 ? (
+            <View className="py-8 items-center bg-[#141414] rounded-xl border border-neutral-800">
+              <Text className="text-neutral-500 text-sm">No scores yet</Text>
             </View>
           ) : null}
-        </ScrollView>
+        </View>
 
-        {/* Sidebar sponsors (landscape) */}
+        {/* Current round match scorecards */}
+        <View className="flex-1 min-w-0 min-h-0">
+          <TournamentLiveMatchGrids
+            matchGroups={matchGroups}
+            scores={scores}
+            teamNameById={teamNameById}
+            playerNameById={playerNameById}
+            useNetScoring={matchUseNetScoring}
+            variant="tv-compact"
+            roundNumber={displayRound}
+            hideTitle
+            layout="tv-row"
+          />
+        </View>
+
+        {/* Sponsors */}
         {isLandscape && data.sponsors.sidebar.length > 0 ? (
-          <View className="w-72 border-l border-neutral-800 bg-[#111111] p-4 justify-center">
-            <Text className="text-neutral-600 text-[10px] uppercase tracking-widest mb-3">
+          <View className="w-40 shrink-0 border-l border-neutral-800 pl-3 justify-center">
+            <Text className="text-neutral-600 text-[9px] uppercase tracking-widest mb-2">
               Presented by
             </Text>
             <TvSponsorCarousel sponsors={data.sponsors.sidebar} />
@@ -262,22 +293,22 @@ export default function TournamentTvDisplayScreen() {
         ) : null}
       </View>
 
-      {/* Footer + QR */}
-      <View className="border-t border-neutral-800 bg-[#111111] px-6 py-4">
-        <View className="flex-row items-end justify-between">
-          <View className="flex-1 mr-4">
+      {/* Footer */}
+      <View className="border-t border-neutral-800 bg-[#111111] px-5 py-2">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1 mr-3 min-w-0">
             {data.sponsors.footer.length > 0 ? (
               <TvSponsorCarousel sponsors={data.sponsors.footer} variant="footer" />
             ) : (
-              <Text className="text-neutral-600 text-sm">Fox Creek Golf Club · Dieppe, NB</Text>
+              <Text className="text-neutral-600 text-xs">Fox Creek Golf Club · Dieppe, NB</Text>
             )}
           </View>
 
           {qrUrl ? (
-            <View className="items-center">
-              <Image source={{ uri: qrUrl }} style={{ width: 100, height: 100 }} />
-              <Text className="text-neutral-500 text-[10px] mt-1 text-center max-w-[120px]">
-                Scan for tournament in app
+            <View className="flex-row items-center shrink-0">
+              <Image source={{ uri: qrUrl }} style={{ width: 56, height: 56 }} />
+              <Text className="text-neutral-500 text-[9px] ml-2 max-w-[80px]">
+                Scan for app
               </Text>
             </View>
           ) : null}

@@ -121,11 +121,7 @@ export function TournamentRosterEditor({
             >
               <Text className="text-white font-medium">{member.full_name}</Text>
               <Text className="text-neutral-500 text-sm">
-                {onRoster
-                  ? 'Added'
-                  : member.email
-                    ? member.email
-                    : `${member.handicap_index?.toFixed(1) ?? '--'} HI`}
+                {onRoster ? 'Added' : `${member.handicap_index?.toFixed(1) ?? '--'} HI`}
               </Text>
             </Pressable>
           );

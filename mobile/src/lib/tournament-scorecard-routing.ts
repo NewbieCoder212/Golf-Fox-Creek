@@ -2,7 +2,7 @@ import type { Tournament, TournamentMatchGroup, TournamentTeamSide } from '@/typ
 import { getTournamentById } from './tournament-service';
 import { getTournamentMatchGroups } from './tournament-match-service';
 import { getTournamentRosterPlayerIdsForUser } from './tournament-player-service';
-import { getMatchGroupFormat, isSideScopedTeamFormat } from './tournament-labels';
+import { getMatchGroupFormat, isFoursomePlayerScorecardFormat, isSideScopedTeamFormat } from './tournament-labels';
 
 /** Pick the round for today's calendar day within the tournament schedule. */
 export function getActiveRoundNumber(
@@ -26,6 +26,25 @@ export function getActiveRoundNumber(
   }
 
   return tournament.rounds_count;
+}
+
+export function isTournamentActiveToday(startDate: string, endDate: string): boolean {
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+  const today = new Date();
+  return today >= start && today <= end;
+}
+
+export function pickHubLeaderboardTournamentId<
+  T extends { id: string; start_date: string; end_date: string }
+>(tournaments: T[]): string | undefined {
+  const active = tournaments.filter((tournament) =>
+    isTournamentActiveToday(tournament.start_date, tournament.end_date)
+  );
+  if (active.length > 0) return active[0].id;
+  return tournaments[0]?.id;
 }
 
 export function findMatchGroupForRosterPlayer(
@@ -76,7 +95,7 @@ export function buildTournamentScorecardPath(params: {
     const format = getMatchGroupFormat(match.group, params.tournament);
     search.set('matchGroupId', match.group.id);
     search.set('round', String(match.group.round_number));
-    if (isSideScopedTeamFormat(format)) {
+    if (isSideScopedTeamFormat(format) || isFoursomePlayerScorecardFormat(format)) {
       search.set('side', match.side);
     }
   } else {

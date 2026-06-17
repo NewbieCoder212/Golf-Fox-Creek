@@ -323,12 +323,34 @@ export function computeMatchHoleResults(
     let sideBValue: number | null;
 
     if (isSinglesFormat(format)) {
-      sideAValue = useNetScoring
-        ? bestNetForPlayers(matchGroup.side_a_player_ids, scores, hole)
-        : bestGrossForPlayers(matchGroup.side_a_player_ids, scores, hole);
-      sideBValue = useNetScoring
-        ? bestNetForPlayers(matchGroup.side_b_player_ids, scores, hole)
-        : bestGrossForPlayers(matchGroup.side_b_player_ids, scores, hole);
+      const pairCount = Math.min(
+        matchGroup.side_a_player_ids.length,
+        matchGroup.side_b_player_ids.length
+      );
+      let subAWins = 0;
+      let subBWins = 0;
+      let anyPlayed = false;
+
+      for (let i = 0; i < pairCount; i++) {
+        const playerAId = matchGroup.side_a_player_ids[i];
+        const playerBId = matchGroup.side_b_player_ids[i];
+        const valueA = useNetScoring
+          ? playerNetForHole(playerAId, scores, hole)
+          : playerGrossForHoleScore(playerAId, scores, hole);
+        const valueB = useNetScoring
+          ? playerNetForHole(playerBId, scores, hole)
+          : playerGrossForHoleScore(playerBId, scores, hole);
+        if (valueA === null || valueB === null) continue;
+
+        anyPlayed = true;
+        const winner = resolveHoleWinner(valueA, valueB);
+        if (winner === 'side_a') subAWins += 1;
+        else if (winner === 'side_b') subBWins += 1;
+      }
+
+      if (!anyPlayed) continue;
+      sideAValue = subAWins;
+      sideBValue = subBWins;
     } else if (format === 'best_ball') {
       sideAValue = useNetScoring
         ? bestNetForPlayers(matchGroup.side_a_player_ids, scores, hole)
@@ -354,6 +376,39 @@ export function computeMatchHoleResults(
       side_a_net: sideAValue,
       side_b_net: sideBValue,
       hole_winner: resolveHoleWinner(sideAValue, sideBValue),
+    });
+  }
+
+  return results;
+}
+
+/** Head-to-head hole results for one singles pairing within a foursome. */
+export function computeSinglesPairHoleResults(
+  matchGroup: TournamentMatchGroup,
+  roundNumber: number,
+  playerAId: string,
+  playerBId: string,
+  scores: TournamentScore[],
+  useNetScoring: boolean
+): Omit<TournamentMatchHoleResult, 'id'>[] {
+  const results: Omit<TournamentMatchHoleResult, 'id'>[] = [];
+
+  for (const hole of HOLES) {
+    const valueA = useNetScoring
+      ? playerNetForHole(playerAId, scores, hole)
+      : playerGrossForHoleScore(playerAId, scores, hole);
+    const valueB = useNetScoring
+      ? playerNetForHole(playerBId, scores, hole)
+      : playerGrossForHoleScore(playerBId, scores, hole);
+    if (valueA === null || valueB === null) continue;
+
+    results.push({
+      match_group_id: matchGroup.id,
+      round_number: roundNumber,
+      hole,
+      side_a_net: valueA,
+      side_b_net: valueB,
+      hole_winner: resolveHoleWinner(valueA, valueB),
     });
   }
 
@@ -405,6 +460,41 @@ function subMatchHoleWins(
   }
 
   return { side_a, side_b };
+}
+
+export const TOURNAMENT_MATCH_HOLES = HOLES;
+
+export function getPlayerHoleScoreValue(
+  playerId: string,
+  scores: TournamentScore[],
+  hole: number,
+  useNetScoring: boolean
+): number | null {
+  return useNetScoring
+    ? playerNetForHole(playerId, scores, hole)
+    : playerGrossForHoleScore(playerId, scores, hole);
+}
+
+export function getSideBestBallHoleScore(
+  playerIds: string[],
+  scores: TournamentScore[],
+  hole: number,
+  useNetScoring: boolean
+): number | null {
+  return useNetScoring
+    ? bestNetForPlayers(playerIds, scores, hole)
+    : bestGrossForPlayers(playerIds, scores, hole);
+}
+
+export function getTeamSideHoleScore(
+  teamId: string,
+  scores: TournamentScore[],
+  hole: number,
+  useNetScoring: boolean
+): number | null {
+  return useNetScoring
+    ? teamNetForSide(teamId, scores, hole)
+    : teamGrossForSide(teamId, scores, hole);
 }
 
 function pointsFromWinTally(aWins: number, bWins: number): {

@@ -39,6 +39,7 @@ export function TournamentLeaderboardCard({
     queryKey: ['tournamentMatchGroups', tournamentId],
     queryFn: () => getTournamentMatchGroups(tournamentId),
     enabled: Boolean(tournamentId),
+    refetchInterval: 15000,
   });
 
   const standings = buildMatchPointsLeaderboard(teams, matchGroups);

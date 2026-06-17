@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HubHeroWelcome } from '@/components/hub/HubHeroWelcome';
 import { HubMemberToolbar } from '@/components/hub/HubMemberToolbar';
 import { HubContextCard, useHubRoundContext } from '@/components/hub/HubContextCard';
+import { HubTournamentMatchCTA } from '@/components/hub/HubTournamentMatchCTA';
 import { HubMyEventsStrip } from '@/components/hub/HubMyEventsStrip';
 import { HubAdBanner, HubAdFeedCards } from '@/components/hub/HubAdBanner';
 import { useTopTabBarHeight } from '@/components/navigation/TopTabBar';
@@ -32,6 +33,7 @@ import { getGMAnnouncement, getUserProfile, isSupabaseConfigured, signOut } from
 import { useTranslations } from '@/lib/language-store';
 import { useScorecardStore } from '@/lib/scorecard-store';
 import { useTournamentStore } from '@/lib/tournament-store';
+import { pickHubLeaderboardTournamentId } from '@/lib/tournament-scorecard-routing';
 import { getTournamentsForUserList } from '@/lib/tournament-service';
 import type { GMAnnouncement, UserProfile } from '@/types';
 
@@ -113,7 +115,7 @@ export function MemberHubContent({
     staleTime: 1000 * 60 * 2,
   });
 
-  const leaderboardTournamentId = myEvents[0]?.id;
+  const leaderboardTournamentId = pickHubLeaderboardTournamentId(myEvents);
 
   useFocusEffect(
     useCallback(() => {
@@ -225,6 +227,11 @@ export function MemberHubContent({
 
         <HubSection title={t.yourRound} className="mt-4">
           <HubContextCard />
+          {!previewMode && !hasActiveContext ? (
+            <View className="mt-3">
+              <HubTournamentMatchCTA userId={userId} />
+            </View>
+          ) : null}
           <HubWeatherStrip
             weather={weatherDisplay}
             iconCode={weather?.iconCode}

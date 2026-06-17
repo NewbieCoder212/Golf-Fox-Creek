@@ -84,9 +84,6 @@ export function TournamentTeamsRosterTab({
   const sideBTeam = getTeamBySide(teams, 'side_b');
   const canAddTeam = !sideATeam || !sideBTeam;
   const myCaptainTeam = teams.find((team) => team.captain_user_id === userId) ?? null;
-  const emailByUserId = Object.fromEntries(
-    members.filter((member) => member.email).map((member) => [member.id, member.email as string])
-  );
 
   const patchTeamInCache = (updatedTeam: TournamentTeam) => {
     queryClient.setQueryData(['tournamentTeams', tournamentId], (old: TournamentTeam[] | undefined) =>
@@ -360,14 +357,6 @@ export function TournamentTeamsRosterTab({
     });
   };
 
-  const getPlayerEmail = (playerId: string) => {
-    const player = tournamentPlayers.find((entry) => entry.id === playerId);
-    if (player?.user_id) {
-      return emailByUserId[player.user_id] ?? null;
-    }
-    return null;
-  };
-
   return (
     <View>
       {introText ? (
@@ -428,15 +417,11 @@ export function TournamentTeamsRosterTab({
               <Text className="text-amber-500/90 text-xs mt-2">Captain optional for now</Text>
             ) : null}
             <Text className="text-neutral-500 text-xs mt-2 uppercase tracking-widest">Players</Text>
-            {team.player_ids.map((playerId) => {
-              const email = getPlayerEmail(playerId);
-              return (
-                <Text key={playerId} className="text-neutral-300 text-sm mt-1">
-                  • {playerNameById[playerId] ?? 'Player'}
-                  {email ? ` · ${email}` : ' · Guest (no email on file)'}
-                </Text>
-              );
-            })}
+            {team.player_ids.map((playerId) => (
+              <Text key={playerId} className="text-neutral-300 text-sm mt-1">
+                • {playerNameById[playerId] ?? 'Player'}
+              </Text>
+            ))}
             {canManageRoster ? (
               <Pressable
                 onPress={() => openManageRoster(team)}
@@ -586,9 +571,6 @@ export function TournamentTeamsRosterTab({
                           >
                             {member.full_name}
                           </Text>
-                          {member.email ? (
-                            <Text className="text-neutral-500 text-xs mt-0.5">{member.email}</Text>
-                          ) : null}
                         </View>
                         <Text className="text-neutral-500 text-sm">
                           {captainUserId === member.id ? 'Selected' : 'Tap to select'}
@@ -605,8 +587,8 @@ export function TournamentTeamsRosterTab({
                     Captain (optional)
                   </Text>
                   <Text className="text-neutral-600 text-xs mb-3">
-                    Tap a club member below to set captain. Names and emails come from member
-                    profiles — they are not edited here.
+                    Tap a club member below to set captain. Names come from member profiles — they
+                    are not edited here.
                   </Text>
                   <View className="mb-4">
                     {members.map((member) => (
@@ -631,9 +613,6 @@ export function TournamentTeamsRosterTab({
                           >
                             {member.full_name}
                           </Text>
-                          {member.email ? (
-                            <Text className="text-neutral-500 text-xs mt-0.5">{member.email}</Text>
-                          ) : null}
                         </View>
                         <Text className="text-neutral-500 text-sm">
                           {editingCaptainUserId === member.id ? 'Selected' : 'Tap to select'}

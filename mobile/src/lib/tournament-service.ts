@@ -546,6 +546,26 @@ export async function deleteTournamentScore(scoreId: string): Promise<boolean> {
   return unwrapOk(result);
 }
 
+export async function deleteTournamentScoresForMatchRound(
+  matchGroupId: string,
+  roundNumber: number
+): Promise<{ success: boolean; error?: string }> {
+  if (!isConfigured()) {
+    return { success: false, error: 'Supabase is not configured' };
+  }
+
+  const result = await tournamentSupabaseRequest<unknown>('tournament_scores', {
+    method: 'DELETE',
+    query: {
+      match_group_id: `eq.${matchGroupId}`,
+      round_number: `eq.${roundNumber}`,
+    },
+  });
+
+  if (result.error) return { success: false, error: result.error };
+  return { success: true };
+}
+
 /**
  * Aggregate leaderboard totals across all rounds for a tournament.
  */

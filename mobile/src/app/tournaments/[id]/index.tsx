@@ -14,22 +14,17 @@ import {
   Trophy,
   Users,
   ClipboardList,
-  Medal,
   Clock,
   Swords,
 } from 'lucide-react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { useAdminAuthStore } from '@/lib/admin-auth-store';
 import {
-  buildMatchPointsLeaderboard,
-  buildTournamentLeaderboard,
   getTeamsForPlayer,
   getTournamentById,
-  getTournamentScores,
   getTournamentTeams,
   isUserRegisteredForTournament,
 } from '@/lib/tournament-service';
@@ -41,12 +36,7 @@ import {
 } from '@/lib/tournament-labels';
 import { TournamentTeeTimesTab } from '@/components/TournamentTeeTimesTab';
 import { TournamentMatchGroupsTab } from '@/components/TournamentMatchGroupsTab';
-import {
-  getTeamBySide,
-  getMatchHoleResultsForTournament,
-  getTournamentMatchGroups,
-} from '@/lib/tournament-match-service';
-import { aggregateEventHoleWins } from '@/lib/tournament-match-scoring';
+import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
 import {
   buildTournamentPlayerMaps,
   getTournamentPlayers,
@@ -58,14 +48,9 @@ import {
   getActiveRoundNumber,
   resolveTournamentScorecardRoute,
 } from '@/lib/tournament-scorecard-routing';
-import {
-  useTournamentLeaderboardMode,
-  useTournamentStore,
-} from '@/lib/tournament-store';
 import { cn } from '@/lib/cn';
-import { SponsorBanner } from '@/components/SponsorBanner';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
-import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import { TournamentLiveStandingsPanel } from '@/components/TournamentLiveStandingsPanel';
 import { TournamentTeamsRosterTab } from '@/components/TournamentTeamsRosterTab';
 
 type DetailTab = 'leaderboard' | 'teams' | 'matches' | 'teeTimes';
@@ -110,15 +95,6 @@ export default function TournamentDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const sideATeam = getTeamBySide(teams, 'side_a');
-  const sideBTeam = getTeamBySide(teams, 'side_b');
-
-  const { data: scores = [] } = useQuery({
-    queryKey: ['tournamentScores', id],
-    queryFn: () => getTournamentScores(id!),
-    enabled: Boolean(id),
-  });
-
   const { data: myTeams = [] } = useQuery({
     queryKey: ['myTeams', id, user?.id],
     queryFn: () => getTeamsForPlayer(id!, user!.id),
@@ -136,16 +112,11 @@ export default function TournamentDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const { data: matchHoleResults = [] } = useQuery({
-    queryKey: ['matchHoleResults', id],
-    queryFn: () => getMatchHoleResultsForTournament(id!),
-    enabled: Boolean(id && sideATeam && sideBTeam),
-  });
-
   const { data: matchGroups = [] } = useQuery({
     queryKey: ['tournamentMatchGroups', id],
     queryFn: () => getTournamentMatchGroups(id!),
     enabled: Boolean(id),
+    refetchInterval: 15000,
   });
 
   const { data: myRosterPlayerIds = [] } = useQuery({
@@ -159,16 +130,6 @@ export default function TournamentDetailScreen() {
     ? findMatchGroupForRosterPlayer(matchGroups, myRosterPlayerIds, activeRoundNumber)
     : null;
 
-  const matchPointsLeaderboard = buildMatchPointsLeaderboard(teams, matchGroups);
-
-  const eventHoleWins = aggregateEventHoleWins(matchHoleResults);
-  const hasMatchResults = matchHoleResults.length > 0;
-
-  const leaderboardMode = useTournamentLeaderboardMode();
-  const setLeaderboardMode = useTournamentStore((s) => s.setLeaderboardMode);
-
-  const leaderboard = buildTournamentLeaderboard(scores, leaderboardMode);
-  const teamNameById = Object.fromEntries(teams.map((t) => [t.id, t.team_name]));
   const { nameById: playerNameById } = buildTournamentPlayerMaps(tournamentPlayers, members);
 
   const canEnterScores =
@@ -318,129 +279,7 @@ export default function TournamentDetailScreen() {
       >
         {tab === 'leaderboard' ? (
           <View className="mx-5">
-            <SponsorBanner
-              placementType="leaderboard"
-              displayPosition="footer"
-              className="mt-2 mb-1"
-              compact
-            />
-
-            {sideATeam && sideBTeam && (
-              <TournamentTeamMatchupBoard
-                teams={teams}
-                teamStats={matchPointsLeaderboard.map((row) => ({
-                  teamId: row.teamId,
-                  matchPoints: row.matchPoints,
-                  matchesWon: row.matchesWon,
-                }))}
-                subtitle="Team Matchup"
-                className="mt-2 mb-3"
-              />
-            )}
-
-            {hasMatchResults && sideATeam && sideBTeam && (
-              <View className="bg-[#141414] rounded-2xl border border-lime-700/40 p-4 mt-2 mb-1">
-                <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
-                  Team Match Play
-                </Text>
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-1 items-center">
-                    <Text className="text-lime-400 text-xs font-bold uppercase mb-1">
-                      {sideATeam.team_name}
-                    </Text>
-                    <Text className="text-white text-3xl font-bold">{eventHoleWins.side_a}</Text>
-                    <Text className="text-neutral-500 text-xs">holes won</Text>
-                  </View>
-                  <Text className="text-neutral-600 text-lg font-bold px-3">vs</Text>
-                  <View className="flex-1 items-center">
-                    <Text className="text-lime-400 text-xs font-bold uppercase mb-1">
-                      {sideBTeam.team_name}
-                    </Text>
-                    <Text className="text-white text-3xl font-bold">{eventHoleWins.side_b}</Text>
-                    <Text className="text-neutral-500 text-xs">holes won</Text>
-                  </View>
-                </View>
-                {eventHoleWins.ties > 0 && (
-                  <Text className="text-neutral-500 text-xs text-center mt-2">
-                    {eventHoleWins.ties} holes tied across all matches
-                  </Text>
-                )}
-              </View>
-            )}
-
-            <View className="flex-row bg-[#141414] rounded-xl border border-neutral-800 p-1 mt-2 mb-1">
-              {(['net', 'gross'] as const).map((mode) => (
-                <Pressable
-                  key={mode}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setLeaderboardMode(mode);
-                  }}
-                  className={cn(
-                    'flex-1 py-2 rounded-lg items-center',
-                    leaderboardMode === mode && 'bg-lime-600'
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      'text-xs font-semibold uppercase tracking-wider',
-                      leaderboardMode === mode ? 'text-white' : 'text-neutral-500'
-                    )}
-                  >
-                    {mode === 'net' ? 'Net (Playing Hcp)' : 'Gross'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {leaderboard.length === 0 ? (
-              <View className="py-12 items-center bg-[#141414] rounded-2xl border border-neutral-800 mt-2">
-                <Medal size={36} color="#525252" />
-                <Text className="text-neutral-400 mt-3">No scores submitted yet</Text>
-              </View>
-            ) : (
-              leaderboard.map((entry, index) => (
-                <Animated.View
-                  key={entry.key}
-                  entering={FadeInDown.delay(index * 40).duration(300)}
-                  className="flex-row items-center bg-[#141414] border border-neutral-800 rounded-xl p-4 mt-3"
-                >
-                  <View
-                    className={cn(
-                      'w-8 h-8 rounded-full items-center justify-center mr-3',
-                      index === 0 ? 'bg-yellow-500/20' : 'bg-neutral-800'
-                    )}
-                  >
-                    <Text
-                      className={cn(
-                        'font-bold text-sm',
-                        index === 0 ? 'text-yellow-400' : 'text-neutral-400'
-                      )}
-                    >
-                      {index + 1}
-                    </Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-white font-semibold">
-                      {teamNameById[entry.key] ?? playerNameById[entry.key] ?? 'Player'}
-                    </Text>
-                    <Text className="text-neutral-500 text-xs mt-0.5">
-                      {entry.rounds_played} round{entry.rounds_played !== 1 ? 's' : ''} played
-                    </Text>
-                  </View>
-                  <View className="items-end">
-                    <Text className="text-lime-400 font-bold text-lg">
-                      {leaderboardMode === 'net' ? entry.total_net : entry.total_gross}
-                    </Text>
-                    <Text className="text-neutral-500 text-xs">
-                      {leaderboardMode === 'net'
-                        ? `Net (${entry.total_gross} gross)`
-                        : `Gross (${entry.total_net} net)`}
-                    </Text>
-                  </View>
-                </Animated.View>
-              ))
-            )}
+            <TournamentLiveStandingsPanel tournamentId={id!} showSponsorBanner />
           </View>
         ) : tab === 'teams' ? (
           <View className="mx-5">

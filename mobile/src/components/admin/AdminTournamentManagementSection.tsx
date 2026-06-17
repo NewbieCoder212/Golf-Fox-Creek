@@ -25,9 +25,11 @@ import {
   BookOpen,
   UserRound,
   Mail,
+  Medal,
 } from 'lucide-react-native';
 
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import { TournamentLiveStandingsPanel } from '@/components/TournamentLiveStandingsPanel';
 import { TournamentParticipantsTab } from '@/components/TournamentParticipantsTab';
 import { TournamentTeamsAssignTab } from '@/components/TournamentTeamsAssignTab';
 import { TournamentPublishTab } from '@/components/TournamentPublishTab';
@@ -61,7 +63,7 @@ import type { Tournament, TournamentDaySchedule, TournamentTeam } from '@/types'
 import { useRouter } from 'expo-router';
 import { cn } from '@/lib/cn';
 
-type ManagementTab = 'event' | 'participants' | 'teams' | 'matches' | 'publish' | 'formats';
+type ManagementTab = 'event' | 'participants' | 'teams' | 'matches' | 'standings' | 'publish' | 'formats';
 
 interface AdminTournamentManagementSectionProps {
   accessToken: string;
@@ -360,6 +362,7 @@ export function AdminTournamentManagementSection({
     { key: 'participants', label: 'Participants', Icon: UserRound },
     { key: 'teams', label: 'Teams', Icon: Users },
     { key: 'matches', label: 'Matches', Icon: Swords },
+    { key: 'standings', label: 'Live Standings', Icon: Medal },
     { key: 'publish', label: 'Send Invites', Icon: Mail },
     { key: 'formats', label: 'Formats', Icon: BookOpen },
   ];
@@ -469,6 +472,24 @@ export function AdminTournamentManagementSection({
               members={members}
               playerNameById={playerNameById}
               isManager
+            />
+          </ScrollView>
+        ) : (
+          <Text className="text-neutral-500 text-sm text-center px-4 py-8">
+            Select or create a tournament first.
+          </Text>
+        )
+      ) : tab === 'standings' ? (
+        activeTournament ? (
+          <ScrollView
+            className="flex-1"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 32 }}
+          >
+            <TournamentLiveStandingsPanel
+              tournamentId={activeTournament.id}
+              displayToken={activeTournament.display_token}
+              showTvLink
             />
           </ScrollView>
         ) : (

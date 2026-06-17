@@ -76,6 +76,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 -- tournament_scores: foursome entry + own roster row
 DROP POLICY IF EXISTS "Members write own scores" ON tournament_scores;
 DROP POLICY IF EXISTS "Members update own scores" ON tournament_scores;
+DROP POLICY IF EXISTS "Participants insert match scores" ON tournament_scores;
+DROP POLICY IF EXISTS "Participants update match scores" ON tournament_scores;
 
 CREATE POLICY "Participants insert match scores" ON tournament_scores
   FOR INSERT

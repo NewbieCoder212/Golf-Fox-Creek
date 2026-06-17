@@ -141,10 +141,7 @@ function buildLeaderboard(
     rank: index + 1,
     name: nameByKey.get(key) ?? 'Player',
     score: mode === 'gross' ? stats.total_gross : stats.total_net,
-    detail:
-      mode === 'gross'
-        ? `${stats.rounds} round${stats.rounds !== 1 ? 's' : ''} · ${stats.total_net} net`
-        : `${stats.rounds} round${stats.rounds !== 1 ? 's' : ''} · ${stats.total_gross} gross`,
+    detail: `${stats.rounds} round${stats.rounds !== 1 ? 's' : ''}`,
   }));
 }
 

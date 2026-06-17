@@ -10,6 +10,7 @@ import type {
   TournamentFormat,
   TournamentScore,
 } from '@/types';
+import { deleteTournamentScoresForMatchRound } from './tournament-service';
 import { computeMatchHoleResults, computeMatchPoints } from './tournament-match-scoring';
 import { useAdminAuthStore } from './admin-auth-store';
 import { useMemberAuthStore } from './member-auth-store';
@@ -252,6 +253,48 @@ export async function computeAndSaveMatchResults(params: {
   );
 
   return result?.[0] ?? null;
+}
+
+export async function clearTournamentMatchRound(params: {
+  matchGroupId: string;
+  roundNumber: number;
+}): Promise<{ success: boolean; error?: string }> {
+  const scoreResult = await deleteTournamentScoresForMatchRound(
+    params.matchGroupId,
+    params.roundNumber
+  );
+  if (!scoreResult.success) return scoreResult;
+
+  try {
+    requireMatchMutation(
+      await supabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+        method: 'DELETE',
+        query: {
+          match_group_id: `eq.${params.matchGroupId}`,
+          round_number: `eq.${params.roundNumber}`,
+        },
+      }),
+      'clear match hole results'
+    );
+
+    requireMatchMutation(
+      await supabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+        method: 'PATCH',
+        query: { id: `eq.${params.matchGroupId}` },
+        body: {
+          match_winner: null,
+          match_points_a: 0,
+          match_points_b: 0,
+        },
+      }),
+      'reset match results'
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to clear match data';
+    return { success: false, error: message };
+  }
+
+  return { success: true };
 }
 
 export function getAssignedPlayerIdsForRound(

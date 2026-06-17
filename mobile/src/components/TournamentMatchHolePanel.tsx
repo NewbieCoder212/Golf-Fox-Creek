@@ -39,6 +39,7 @@ interface TournamentMatchHolePanelProps {
   currentHoleWinner?: 'side_a' | 'side_b' | 'tie' | null;
   recentHoleRows: RecentHoleOutcomeRow[];
   scoringModeLabel?: string;
+  entryStatusLabel?: string | null;
   onSetCurrentHole: (hole: number) => void;
   onPlayerScoreAdjust: (side: 'a' | 'b', playerIndex: number, delta: number) => void;
   onTeamScoreAdjust?: (side: 'a' | 'b', delta: number) => void;
@@ -344,6 +345,7 @@ export function TournamentMatchHolePanel({
   currentHoleWinner,
   recentHoleRows,
   scoringModeLabel,
+  entryStatusLabel,
   onSetCurrentHole,
   onPlayerScoreAdjust,
   onTeamScoreAdjust,
@@ -401,7 +403,7 @@ export function TournamentMatchHolePanel({
           <Text className="text-neutral-500 text-xs mt-0.5">
             {matchStatus.throughHole > 0
               ? `Standing after hole ${matchStatus.throughHole} · ${matchStatus.holesRemaining} left`
-              : 'No holes decided yet'}
+              : entryStatusLabel ?? 'No holes decided yet'}
           </Text>
           {personalMatchStatus ? (
             <Text className="text-neutral-400 text-xs mt-1">

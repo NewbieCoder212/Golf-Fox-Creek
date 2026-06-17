@@ -38,9 +38,9 @@ import {
   isSinglesFormat,
   isTeamScorecardFormat,
 } from '@/lib/tournament-labels';
-import type { HandicapAllowancePct } from '@/lib/tournament-scoring';
 import { flattenRoundFormats } from '@/lib/tournament-schedule';
 import { FOX_CREEK_DATA } from '@/lib/course-data';
+import { furthestEnteredHole, type HandicapAllowancePct } from '@/lib/tournament-scoring';
 import {
   useTournamentStore,
   useTournamentIsDirty,
@@ -358,6 +358,32 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     ]
   );
 
+  const buildMatchRosterPlayers = useCallback(
+    (
+      roundFormat: ReturnType<typeof getRoundFormat>,
+      roundNum: number,
+      group: typeof activeMatchGroup
+    ) => {
+      if (!group || group.round_number !== roundNum) return null;
+
+      const playerIds = [...group.side_a_player_ids, ...group.side_b_player_ids];
+      return playerIds.map((pid) => {
+        const resolved = resolvePlayerHandicapForRound(pid, roundFormat);
+        return {
+          id: pid,
+          name: playerNameById[pid] ?? 'Player',
+          handicapIndex: resolved.handicapIndex,
+          playingHandicap: resolved.playingHandicap,
+          tournamentPlayerId: tournamentPlayers.some((p) => p.id === pid) ? pid : null,
+          teamId: group.side_a_player_ids.includes(pid)
+            ? group.side_a_team_id
+            : group.side_b_team_id,
+        };
+      });
+    },
+    [resolvePlayerHandicapForRound, playerNameById, tournamentPlayers]
+  );
+
   const findMatchGroupForRound = useCallback(
     (roundNum: number) => {
       if (activeMatchGroup?.round_number === roundNum) return activeMatchGroup;
@@ -405,6 +431,9 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
       const context = buildPlayersForRound(matchFormat, roundNum, activeMatchGroup);
       if (!context) return;
 
+      const matchRosterPlayers =
+        buildMatchRosterPlayers(matchFormat, roundNum, activeMatchGroup) ?? context.players;
+
       const restored = await restoreSession(id);
       if (restored) {
         const current = useTournamentStore.getState();
@@ -427,6 +456,7 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
         userId: context.userId,
         matchGroupId: context.matchGroupId,
         players: context.players,
+        matchRosterPlayers,
       });
 
       await loadExistingScores();
@@ -488,6 +518,9 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
       return;
     }
 
+    const matchRosterPlayers =
+      buildMatchRosterPlayers(matchFormat, nextRound, matchGroupForRound) ?? context.players;
+
     switchRound({
       roundNumber: nextRound,
       format: matchFormat,
@@ -496,6 +529,7 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
       userId: context.userId,
       matchGroupId: context.matchGroupId,
       players: context.players,
+      matchRosterPlayers,
     });
     await loadExistingScores();
   };
@@ -725,6 +759,24 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     tournament?.match_use_net_scoring,
     playerNameById,
   ]);
+
+  const viewerSidePlayerIds = useMemo(() => {
+    if (!activeMatchGroup) return players.map((player) => player.id);
+    return viewerSide === 'side_b'
+      ? activeMatchGroup.side_b_player_ids
+      : activeMatchGroup.side_a_player_ids;
+  }, [activeMatchGroup, viewerSide, players]);
+
+  const viewerEntryThroughHole = useMemo(
+    () => furthestEnteredHole(grossScoresForMatchStatus, viewerSidePlayerIds),
+    [grossScoresForMatchStatus, viewerSidePlayerIds]
+  );
+
+  const matchEntryStatusLabel = useMemo(() => {
+    if (matchStatus.throughHole > 0 || viewerEntryThroughHole === 0) return null;
+    const teamLabel = viewerSide === 'side_b' ? sideBName : sideAName;
+    return `${teamLabel} scores entered thru hole ${viewerEntryThroughHole}`;
+  }, [matchStatus.throughHole, viewerEntryThroughHole, viewerSide, sideAName, sideBName]);
 
   const currentHoleMatchResult = useMemo(
     () => liveHoleResults.find((row) => row.hole === currentHole),
@@ -1084,6 +1136,8 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     currentHoleWinner: currentHoleMatchResult?.hole_winner ?? null,
     matchRecentHoleRows,
     matchScoringModeLabel,
+    matchEntryStatusLabel,
+    viewerEntryThroughHole,
     handleMatchPlayerAdjust,
     handleMatchTeamAdjust,
     hasMatchPlay: Boolean(activeMatchGroup),

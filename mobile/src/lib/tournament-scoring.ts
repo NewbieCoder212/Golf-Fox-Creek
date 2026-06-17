@@ -439,3 +439,40 @@ export function sumHoleScores(holeScores: TournamentHoleScore[]): {
     total_net: holeScores.reduce((sum, h) => sum + h.net, 0),
   };
 }
+
+/** Highest hole number with a gross score for the given players. */
+export function furthestEnteredHole(
+  grossScores: Record<string, Record<number, number>>,
+  playerIds: string[]
+): number {
+  let maxHole = 0;
+  for (const playerId of playerIds) {
+    for (const holeStr of Object.keys(grossScores[playerId] ?? {})) {
+      const hole = Number(holeStr);
+      if (Number.isFinite(hole)) maxHole = Math.max(maxHole, hole);
+    }
+  }
+  return maxHole;
+}
+
+/** Next hole to play after the furthest entered score (defaults to 1). */
+export function inferNextHoleFromEntry(
+  grossScores: Record<string, Record<number, number>>,
+  teamGrossScores: Record<number, number> = {},
+  playerIds?: string[]
+): number {
+  let maxHole = 0;
+  const ids = playerIds?.length ? playerIds : Object.keys(grossScores);
+  for (const playerId of ids) {
+    for (const holeStr of Object.keys(grossScores[playerId] ?? {})) {
+      const hole = Number(holeStr);
+      if (Number.isFinite(hole)) maxHole = Math.max(maxHole, hole);
+    }
+  }
+  for (const holeStr of Object.keys(teamGrossScores)) {
+    const hole = Number(holeStr);
+    if (Number.isFinite(hole)) maxHole = Math.max(maxHole, hole);
+  }
+  if (maxHole === 0) return 1;
+  return Math.min(18, maxHole + 1);
+}

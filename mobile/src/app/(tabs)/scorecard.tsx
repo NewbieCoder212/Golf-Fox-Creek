@@ -706,7 +706,9 @@ export default function ScorecardScreen() {
             matchStatusLabel={
               tournamentSession.hasMatchPlay && tournamentSession.matchStatus.throughHole > 0
                 ? `${tournamentSession.matchStatus.label} · thru ${tournamentSession.matchStatus.throughHole}`
-                : null
+                : tournamentSession.hasMatchPlay && tournamentSession.viewerEntryThroughHole > 0
+                  ? `Scores thru ${tournamentSession.viewerEntryThroughHole}`
+                  : null
             }
             onRoundChange={tournamentSession.handleRoundChange}
           />
@@ -755,6 +757,7 @@ export default function ScorecardScreen() {
                 currentHoleWinner={tournamentSession.currentHoleWinner}
                 recentHoleRows={tournamentSession.matchRecentHoleRows}
                 scoringModeLabel={tournamentSession.matchScoringModeLabel}
+                entryStatusLabel={tournamentSession.matchEntryStatusLabel}
                 onSetCurrentHole={tournamentSession.setCurrentHole}
                 onPlayerScoreAdjust={tournamentSession.handleMatchPlayerAdjust}
                 onTeamScoreAdjust={

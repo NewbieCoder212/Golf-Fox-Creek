@@ -212,27 +212,107 @@ export interface SendParticipantInvitesResult {
   error?: string;
 }
 
-export async function sendParticipantInvites(params: {
+export interface BulkInviteProgress {
+  completed: number;
+  total: number;
+  lastEmail?: string;
+}
+
+const BULK_INVITE_CONCURRENCY = 2;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const current = nextIndex++;
+      if (current >= items.length) break;
+      results[current] = await fn(items[current]!);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
+  );
+  return results;
+}
+
+async function finalizeParticipantInvites(params: {
   tournamentId: string;
   accessToken: string;
-}): Promise<SendParticipantInvitesResult> {
-  const result = await postBackendWithManagerAuth<SendParticipantInvitesResult>(
-    `/api/tournaments/${params.tournamentId}/send-participant-invites`,
+}): Promise<{ success: boolean; error?: string }> {
+  const result = await postBackendWithManagerAuth<{ success?: boolean }>(
+    `/api/tournaments/${params.tournamentId}/finalize-participant-invites`,
     params.accessToken,
-    { timeoutMs: BACKEND_INVITE_TIMEOUT_MS }
+    { timeoutMs: BACKEND_REQUEST_TIMEOUT_MS }
   );
 
   if ('error' in result) {
     return { success: false, error: result.error };
   }
 
+  return { success: true };
+}
+
+export async function sendParticipantInvites(params: {
+  tournamentId: string;
+  accessToken: string;
+  playerIds: string[];
+  onProgress?: (progress: BulkInviteProgress) => void;
+}): Promise<SendParticipantInvitesResult> {
+  const { tournamentId, accessToken, playerIds, onProgress } = params;
+
+  if (playerIds.length === 0) {
+    return { success: true, emailed: 0, invitesSent: 0, skippedAlreadySent: 0 };
+  }
+
+  let emailed = 0;
+  let invitesSent = 0;
+  let skippedAlreadySent = 0;
+  const errors: string[] = [];
+  let completed = 0;
+
+  await mapWithConcurrency(playerIds, BULK_INVITE_CONCURRENCY, async (playerId) => {
+    const result = await sendParticipantInvite({ tournamentId, playerId, accessToken });
+    completed += 1;
+    onProgress?.({
+      completed,
+      total: playerIds.length,
+      lastEmail: result.email,
+    });
+
+    if (result.success) {
+      emailed += 1;
+      invitesSent += result.invitesSent ?? 0;
+    } else if (result.skippedAlreadySent) {
+      skippedAlreadySent += 1;
+    } else if (result.error) {
+      errors.push(result.error);
+    }
+  });
+
+  if (emailed > 0) {
+    const finalized = await finalizeParticipantInvites({ tournamentId, accessToken });
+    if (!finalized.success) {
+      errors.push(finalized.error ?? 'Could not mark event as sent');
+    }
+  }
+
+  if (emailed === 0 && errors.length > 0) {
+    return { success: false, error: errors[0], errors, skippedAlreadySent };
+  }
+
   return {
     success: true,
-    emailed: result.data.emailed,
-    invitesSent: result.data.invitesSent,
-    skippedNoEmail: result.data.skippedNoEmail,
-    skippedAlreadySent: result.data.skippedAlreadySent,
-    errors: result.data.errors,
+    emailed,
+    invitesSent,
+    skippedAlreadySent,
+    errors: errors.length > 0 ? errors : undefined,
   };
 }
 

@@ -1295,6 +1295,27 @@ tournamentTeamsRouter.post("/:tournamentId/participants/:playerId/send-invite", 
     return c.json({ error: message }, 500);
   }
 });
+async function finalizeParticipantInvites(tournamentId) {
+  const now = new Date().toISOString();
+  const supabase = getSupabaseAdminClient();
+  await supabase.from("tournaments").update({ participant_invites_sent_at: now }).eq("id", tournamentId);
+  const { data: teams } = await supabase.from("tournament_teams").select("id, player_ids").eq("tournament_id", tournamentId);
+  for (const team of teams ?? []) {
+    if ((team.player_ids?.length ?? 0) > 0) {
+      supabase.from("tournament_teams").update({ roster_status: "ready", onboard_email_sent_at: now }).eq("id", team.id);
+    }
+  }
+}
+tournamentTeamsRouter.post("/:tournamentId/finalize-participant-invites", requireManagerAuth, async (c) => {
+  const tournamentId = c.req.param("tournamentId");
+  try {
+    await finalizeParticipantInvites(tournamentId);
+    return c.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not finalize invites";
+    return c.json({ error: message }, 500);
+  }
+});
 tournamentTeamsRouter.post("/:tournamentId/send-participant-invites", requireManagerAuth, async (c) => {
   const tournamentId = c.req.param("tournamentId");
   const loaded = await loadParticipantInviteContext(tournamentId);
@@ -1325,22 +1346,8 @@ tournamentTeamsRouter.post("/:tournamentId/send-participant-invites", requireMan
       errors.push(`${result.email}: ${result.error}`);
     }
   }
-  const teamsResult = await adminFetch(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,player_ids`);
-  const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
-  await adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}`, {
-    method: "PATCH",
-    body: { participant_invites_sent_at: now }
-  });
-  for (const team of teams) {
-    if ((team.player_ids?.length ?? 0) > 0) {
-      await adminFetch(`/rest/v1/tournament_teams?id=eq.${team.id}`, {
-        method: "PATCH",
-        body: {
-          roster_status: "ready",
-          onboard_email_sent_at: now
-        }
-      });
-    }
+  if (emailed > 0) {
+    await finalizeParticipantInvites(tournamentId);
   }
   return c.json({
     emailed,

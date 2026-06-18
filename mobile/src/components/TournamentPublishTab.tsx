@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Mail, CheckCircle2, AlertCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -32,6 +33,9 @@ export function TournamentPublishTab({
   accessToken,
 }: TournamentPublishTabProps) {
   const queryClient = useQueryClient();
+  const [bulkProgress, setBulkProgress] = useState<{ completed: number; total: number } | null>(
+    null
+  );
 
   const { data: matchGroups = [] } = useTournamentMatchGroupsQuery(tournamentId);
 
@@ -66,15 +70,26 @@ export function TournamentPublishTab({
   const allRoundsHavePairings =
     tournament.rounds_count > 0 && pairingsByRound.every((round) => round.ok);
 
+  const pendingInviteIds = participants
+    .filter((p) => !p.invite_email_sent_at && resolveParticipantEmail(p, memberEmailByUserId))
+    .map((p) => p.id);
+
   const sendMutation = useMutation({
     mutationFn: async () => {
-      const result = await sendParticipantInvites({ tournamentId, accessToken });
+      setBulkProgress({ completed: 0, total: pendingInviteIds.length });
+      const result = await sendParticipantInvites({
+        tournamentId,
+        accessToken,
+        playerIds: pendingInviteIds,
+        onProgress: (progress) => setBulkProgress(progress),
+      });
       if (!result.success) {
         throw new Error(result.error ?? 'Could not send invites');
       }
       return result;
     },
     onSuccess: (result) => {
+      setBulkProgress(null);
       void queryClient.refetchQueries({ queryKey: ['tournament', tournamentId] });
       void queryClient.refetchQueries({ queryKey: ['tournamentPlayers', tournamentId] });
       void queryClient.refetchQueries({ queryKey: ['tournamentTeams', tournamentId] });
@@ -90,7 +105,11 @@ export function TournamentPublishTab({
         `Emailed ${result.emailed ?? 0} participant(s). Auth invites: ${result.invitesSent ?? 0}. Skipped (no email): ${result.skippedNoEmail ?? 0}.${errorNote}`
       );
     },
-    onError: (error: Error) => Alert.alert('Could not send invites', error.message),
+    onError: (error: Error) => {
+      setBulkProgress(null);
+      void queryClient.refetchQueries({ queryKey: ['tournamentPlayers', tournamentId] });
+      Alert.alert('Could not send invites', error.message);
+    },
   });
 
   const confirmSend = () => {
@@ -193,6 +212,12 @@ export function TournamentPublishTab({
           </>
         )}
       </Pressable>
+
+      {bulkProgress && bulkProgress.total > 0 ? (
+        <Text className="text-neutral-400 text-sm text-center mt-3">
+          Sending {bulkProgress.completed} of {bulkProgress.total}…
+        </Text>
+      ) : null}
 
       {!ready ? (
         <Text className="text-neutral-600 text-xs text-center mt-3 px-4">

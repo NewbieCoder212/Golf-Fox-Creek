@@ -105,20 +105,36 @@ export async function sendTournamentOnboardEmail(
     return { sent: false, error: 'RESEND_API_KEY is not configured' };
   }
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to: [params.to],
-      subject: `You're on the roster — ${params.tournamentName}`,
-      html: buildTournamentOnboardEmailHtml(params),
-      text: buildTournamentOnboardEmailText(params),
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  let response: Response;
+  try {
+    response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: [params.to],
+        subject: `You're on the roster — ${params.tournamentName}`,
+        html: buildTournamentOnboardEmailHtml(params),
+        text: buildTournamentOnboardEmailText(params),
+      }),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === 'AbortError'
+        ? 'Email service timed out'
+        : 'Email service unreachable';
+    return { sent: false, error: message };
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { message?: string };

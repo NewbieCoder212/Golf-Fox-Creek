@@ -4,10 +4,6 @@
   "installCommand": "cd mobile && bun install",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://golf-fox-creek-9yt1.vercel.app/api/:path*"
-    },
-    {
       "source": "/((?!_expo/).*)",
       "destination": "/index.html"
     }

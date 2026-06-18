@@ -265,32 +265,16 @@ async function authFetch(url, headers) {
     clearTimeout(timeout);
   }
 }
-async function fetchUserRole(userId, accessToken) {
+async function fetchUserRole(userId, _accessToken) {
   const { supabaseUrl, serviceRoleKey } = getSupabaseAdminConfig();
-  const anonKey = getSupabaseAnonKey();
-  const profileUrl = new URL(`${supabaseUrl}/rest/v1/user_profiles`);
-  profileUrl.searchParams.set("id", `eq.${userId}`);
-  profileUrl.searchParams.set("select", "role");
-  if (anonKey) {
-    const response2 = await authFetch(profileUrl.toString(), {
-      apikey: anonKey,
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/vnd.pgrst.object+json"
-    });
-    if (response2.ok) {
-      const profile2 = await response2.json();
-      return profile2.role ?? null;
-    }
-  }
-  const response = await authFetch(profileUrl.toString(), {
+  const response = await authFetch(`${supabaseUrl}/rest/v1/user_profiles?id=eq.${userId}&select=role&limit=1`, {
     apikey: serviceRoleKey,
-    Authorization: `Bearer ${serviceRoleKey}`,
-    Accept: "application/vnd.pgrst.object+json"
+    Authorization: `Bearer ${serviceRoleKey}`
   });
   if (!response.ok)
     return null;
-  const profile = await response.json();
-  return profile.role ?? null;
+  const rows = await response.json();
+  return rows[0]?.role ?? null;
 }
 async function validateAccessToken(token) {
   if (!isSupabaseAdminConfigured()) {
@@ -767,20 +751,32 @@ async function sendTournamentOnboardEmail(params) {
   if (!apiKey) {
     return { sent: false, error: "RESEND_API_KEY is not configured" };
   }
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      from,
-      to: [params.to],
-      subject: `You're on the roster — ${params.tournamentName}`,
-      html: buildTournamentOnboardEmailHtml(params),
-      text: buildTournamentOnboardEmailText(params)
-    })
-  });
+  const controller = new AbortController;
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  let response;
+  try {
+    response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from,
+        to: [params.to],
+        subject: `You're on the roster — ${params.tournamentName}`,
+        html: buildTournamentOnboardEmailHtml(params),
+        text: buildTournamentOnboardEmailText(params)
+      }),
+      signal: controller.signal,
+      cache: "no-store"
+    });
+  } catch (error) {
+    const message = error instanceof Error && error.name === "AbortError" ? "Email service timed out" : "Email service unreachable";
+    return { sent: false, error: message };
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     return { sent: false, error: body.message ?? `Resend request failed (${response.status})` };
@@ -1007,7 +1003,7 @@ async function loadSingleParticipantInviteContext(tournamentId, playerId) {
   const [tournamentResult, playerResult, teamsResult] = await Promise.all([
     adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`),
     adminFetch(`/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`),
-    adminFetch(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&player_ids=cs.{${playerId}}&select=id,team_name,side,player_ids`)
+    adminFetch(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`)
   ]);
   if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
     return { error: "Tournament not found", status: 404 };
@@ -1017,7 +1013,8 @@ async function loadSingleParticipantInviteContext(tournamentId, playerId) {
   }
   const tournament = tournamentResult.data[0];
   const player = playerResult.data[0];
-  const team = teamsResult.ok && teamsResult.data?.[0] ? teamsResult.data[0] : undefined;
+  const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
+  const team = teams.find((entry) => entry.player_ids?.includes(playerId));
   const profileById = new Map;
   const profilesByEmail = new Map;
   const rosterPromise = team?.player_ids?.length && team.player_ids.length > 0 ? adminFetch(`/rest/v1/tournament_players?id=in.(${team.player_ids.join(",")})&select=id,display_name,user_id,email,invite_email_sent_at`) : Promise.resolve({ ok: true, status: 200, data: [player] });

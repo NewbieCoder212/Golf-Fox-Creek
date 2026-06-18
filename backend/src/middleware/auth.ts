@@ -29,34 +29,19 @@ async function authFetch(url: string, headers: Record<string, string>): Promise<
 
 async function fetchUserRole(
   userId: string,
-  accessToken: string
+  _accessToken: string
 ): Promise<AuthUser['role'] | null> {
   const { supabaseUrl, serviceRoleKey } = getSupabaseAdminConfig();
-  const anonKey = getSupabaseAnonKey();
-  const profileUrl = new URL(`${supabaseUrl}/rest/v1/user_profiles`);
-  profileUrl.searchParams.set('id', `eq.${userId}`);
-  profileUrl.searchParams.set('select', 'role');
-
-  if (anonKey) {
-    const response = await authFetch(profileUrl.toString(), {
-      apikey: anonKey,
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/vnd.pgrst.object+json',
-    });
-    if (response.ok) {
-      const profile = (await response.json()) as { role?: AuthUser['role'] };
-      return profile.role ?? null;
+  const response = await authFetch(
+    `${supabaseUrl}/rest/v1/user_profiles?id=eq.${userId}&select=role&limit=1`,
+    {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
     }
-  }
-
-  const response = await authFetch(profileUrl.toString(), {
-    apikey: serviceRoleKey,
-    Authorization: `Bearer ${serviceRoleKey}`,
-    Accept: 'application/vnd.pgrst.object+json',
-  });
+  );
   if (!response.ok) return null;
-  const profile = (await response.json()) as { role?: AuthUser['role'] };
-  return profile.role ?? null;
+  const rows = (await response.json()) as Array<{ role?: AuthUser['role'] }>;
+  return rows[0]?.role ?? null;
 }
 
 async function validateAccessToken(token: string): Promise<{ id: string; email?: string } | null> {

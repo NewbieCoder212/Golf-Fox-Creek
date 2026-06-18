@@ -399,7 +399,7 @@ async function loadSingleParticipantInviteContext(
       `/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`
     ),
     adminFetch<TeamRow[]>(
-      `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&player_ids=cs.{${playerId}}&select=id,team_name,side,player_ids`
+      `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`
     ),
   ]);
 
@@ -412,7 +412,8 @@ async function loadSingleParticipantInviteContext(
 
   const tournament = tournamentResult.data[0];
   const player = playerResult.data[0];
-  const team = teamsResult.ok && teamsResult.data?.[0] ? teamsResult.data[0] : undefined;
+  const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
+  const team = teams.find((entry) => entry.player_ids?.includes(playerId));
 
   const profileById = new Map<string, UserProfileRow>();
   const profilesByEmail = new Map<string, UserProfileRow>();

@@ -171,6 +171,7 @@ export async function syncMatchHoleResults(params: {
   format: TournamentFormat;
   scores: TournamentScore[];
   useNetScoring?: boolean;
+  accessToken?: string | null;
 }): Promise<TournamentMatchHoleResult[]> {
   const rows = computeMatchHoleResults(
     params.matchGroup,
@@ -181,7 +182,9 @@ export async function syncMatchHoleResults(params: {
   );
 
   const token =
-    getManagerAccessToken() ?? useMemberAuthStore.getState().accessToken;
+    params.accessToken ??
+    getManagerAccessToken() ??
+    useMemberAuthStore.getState().accessToken;
 
   requireMatchMutation(
     await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
@@ -213,6 +216,7 @@ export async function syncMatchHoleResults(params: {
     scores: params.scores,
     holeResults,
     useNetScoring: params.useNetScoring ?? false,
+    accessToken: token,
   });
 
   return holeResults;
@@ -224,10 +228,13 @@ export async function computeAndSaveMatchResults(params: {
   scores: TournamentScore[];
   holeResults: TournamentMatchHoleResult[];
   useNetScoring?: boolean;
+  accessToken?: string | null;
 }): Promise<TournamentMatchGroup | null> {
   const points = computeMatchPoints(params);
   const token =
-    getManagerAccessToken() ?? useMemberAuthStore.getState().accessToken;
+    params.accessToken ??
+    getManagerAccessToken() ??
+    useMemberAuthStore.getState().accessToken;
 
   const result = requireMatchMutation(
     await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {

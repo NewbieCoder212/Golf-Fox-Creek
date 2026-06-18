@@ -6,6 +6,7 @@ import type {
   TournamentScoreInsert,
 } from '@/types';
 import { getBackendUrl, isBackendReachableInBrowser } from './backend-url';
+import { getMemberAccessToken } from './tournament-supabase';
 import { useMemberAuthStore } from './member-auth-store';
 import { clearTournamentMatchRound, syncMatchHoleResults } from './tournament-match-service';
 import { computeMatchHoleResults, computeMatchPoints } from './tournament-match-scoring';
@@ -74,11 +75,17 @@ export function buildMatchSyncPayload(params: {
 async function syncTournamentMatchScoresViaSupabase(
   params: MatchScoreSyncParams
 ): Promise<{ success: boolean; error?: string }> {
+  const memberToken = getMemberAccessToken();
+  const writeAuth = memberToken ? { accessToken: memberToken } : {};
+
   for (const score of params.scores) {
-    const result = await saveTournamentScore({
-      ...score,
-      match_group_id: score.match_group_id ?? params.matchGroupId,
-    });
+    const result = await saveTournamentScore(
+      {
+        ...score,
+        match_group_id: score.match_group_id ?? params.matchGroupId,
+      },
+      writeAuth
+    );
     if (result.error) {
       return { success: false, error: result.error };
     }
@@ -92,6 +99,7 @@ async function syncTournamentMatchScoresViaSupabase(
       format: params.format,
       scores: pseudoScores,
       useNetScoring: params.useNetScoring,
+      accessToken: memberToken,
     });
     return { success: true };
   } catch (err) {
@@ -111,7 +119,10 @@ async function postToBackend(
   path: string,
   accessToken: string,
   body: Record<string, unknown>
-): Promise<{ ok: true } | { ok: false; error: string; retryable: boolean }> {
+): Promise<
+  | { ok: true }
+  | { ok: false; error: string; retryable: boolean; status: number }
+> {
   try {
     const response = await fetch(`${getBackendUrl()}${path}`, {
       method: 'POST',
@@ -129,6 +140,7 @@ async function postToBackend(
         ok: false,
         error: data.error ?? 'Could not save scores',
         retryable,
+        status: response.status,
       };
     }
 
@@ -138,6 +150,7 @@ async function postToBackend(
       ok: false,
       error: 'Could not reach tournament service',
       retryable: true,
+      status: 0,
     };
   }
 }
@@ -158,6 +171,8 @@ export async function syncTournamentMatchScoresViaBackend(
     useNetScoring: params.useNetScoring,
   });
 
+  let backendError: string | undefined;
+
   if (isBackendReachableInBrowser()) {
     const backendResult = await postToBackend(
       `/api/tournaments/${params.tournamentId}/match-groups/${params.matchGroupId}/sync`,
@@ -169,7 +184,8 @@ export async function syncTournamentMatchScoresViaBackend(
       return { success: true };
     }
 
-    if (!backendResult.retryable) {
+    backendError = backendResult.error;
+    if (backendResult.status === 401) {
       return { success: false, error: backendResult.error };
     }
   }
@@ -179,13 +195,16 @@ export async function syncTournamentMatchScoresViaBackend(
     return supabaseResult;
   }
 
-  if (!isBackendReachableInBrowser()) {
-    return supabaseResult;
+  if (backendError && supabaseResult.error) {
+    return {
+      success: false,
+      error: `${supabaseResult.error} (API: ${backendError})`,
+    };
   }
 
   return {
     success: false,
-    error: supabaseResult.error ?? 'Could not save scores. Try again in a moment.',
+    error: supabaseResult.error ?? backendError ?? 'Could not save scores. Try again in a moment.',
   };
 }
 
@@ -210,7 +229,7 @@ export async function clearTournamentMatchScoresViaBackend(params: {
       return { success: true };
     }
 
-    if (!backendResult.retryable) {
+    if (backendResult.status === 401) {
       return { success: false, error: backendResult.error };
     }
   }

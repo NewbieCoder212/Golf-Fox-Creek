@@ -20,7 +20,6 @@ function getAccessToken(): string {
   );
 }
 
-/** Prefer a manager JWT for tournament writes (admin dashboard or member manager). */
 export function getManagerAccessToken(): string | null {
   const admin = useAdminAuthStore.getState();
   const member = useMemberAuthStore.getState();
@@ -40,6 +39,11 @@ export function getManagerAccessToken(): string | null {
   }
 
   return admin.accessToken ?? member.accessToken ?? null;
+}
+
+/** Member JWT for participant scorecard actions (never prefer a stale admin session). */
+export function getMemberAccessToken(): string | null {
+  return useMemberAuthStore.getState().accessToken;
 }
 
 function resolveTournamentAccessToken(

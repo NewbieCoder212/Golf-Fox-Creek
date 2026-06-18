@@ -555,11 +555,14 @@ export async function getSinglesRoundScoreByTournamentPlayer(
 }
 
 export async function saveTournamentScore(
-  score: TournamentScoreInsert
+  score: TournamentScoreInsert,
+  options?: { accessToken?: string | null }
 ): Promise<TournamentServiceResult<TournamentScore>> {
   if (!isConfigured()) {
     return { data: null, error: 'Supabase is not configured' };
   }
+
+  const writeAuth = options?.accessToken ? { accessToken: options.accessToken } : {};
 
   const existing = score.team_id
     ? await getTeamRoundScore(score.tournament_id, score.team_id, score.round_number)
@@ -583,6 +586,7 @@ export async function saveTournamentScore(
         total_net: score.total_net,
         match_group_id: score.match_group_id ?? existing.match_group_id,
       },
+      ...writeAuth,
     });
     if (result.error) return { data: null, error: result.error };
     const saved = unwrapList(result)[0] ?? null;
@@ -593,6 +597,7 @@ export async function saveTournamentScore(
   const result = await tournamentSupabaseRequest<TournamentScore[]>('tournament_scores', {
     method: 'POST',
     body: score as unknown as Record<string, unknown>,
+    ...writeAuth,
   });
 
   if (result.error) return { data: null, error: result.error };

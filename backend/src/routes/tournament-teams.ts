@@ -10,6 +10,7 @@ import {
   buildTournamentDeepLink,
   sendTournamentOnboardEmail,
 } from '../lib/tournament-email';
+import { loadParticipantOnboarding } from '../lib/tournament-participant-onboarding';
 import { requireManagerAuth, type AuthUser } from '../middleware/auth';
 
 type TournamentTeamsEnv = {
@@ -1065,6 +1066,23 @@ tournamentTeamsRouter.post(
       skippedGuests,
       errors,
     });
+  }
+);
+
+tournamentTeamsRouter.get(
+  '/:tournamentId/participant-onboarding',
+  requireManagerAuth,
+  async (c) => {
+    const tournamentId = c.req.param('tournamentId');
+    try {
+      const result = await loadParticipantOnboarding(tournamentId);
+      return c.json(result);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not load onboarding status';
+      console.error('[Tournament] participant-onboarding failed:', message);
+      return c.json({ error: message }, 500);
+    }
   }
 );
 

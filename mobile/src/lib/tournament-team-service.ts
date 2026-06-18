@@ -119,6 +119,104 @@ async function postBackendWithManagerAuth<T extends { error?: string }>(
   }
 }
 
+async function fetchBackendWithManagerAuth<T extends { error?: string }>(
+  path: string,
+  accessToken: string,
+  options: {
+    timeoutMs?: number;
+    retried?: boolean;
+    baseUrl?: string;
+  } = {}
+): Promise<{ data: T } | { error: string }> {
+  if (!isBackendReachableInBrowser()) {
+    return { error: backendReachabilityError() };
+  }
+
+  const token = (await ensureManagerAccessToken(accessToken)) ?? accessToken;
+  if (!token) {
+    return { error: 'Session expired. Log out and log back in, then try again.' };
+  }
+
+  const baseUrl = options.baseUrl ?? getBackendUrl();
+
+  try {
+    const response = await fetchBackend(
+      path,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      options.timeoutMs ?? BACKEND_REQUEST_TIMEOUT_MS,
+      baseUrl
+    );
+
+    const data = await readBackendJson<T>(response);
+
+    if (response.status === 401 && !options.retried) {
+      const refreshed = await ensureManagerAccessToken(null);
+      if (refreshed && refreshed !== token) {
+        return fetchBackendWithManagerAuth(path, refreshed, { ...options, retried: true });
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        data.error ??
+        (typeof (data as { message?: string }).message === 'string'
+          ? (data as { message?: string }).message
+          : undefined);
+      return { error: message ?? `Request failed (${response.status})` };
+    }
+
+    return { data };
+  } catch (error) {
+    return { error: fetchFailureMessage(error) };
+  }
+}
+
+export type ParticipantOnboardingStatus =
+  | 'no_email'
+  | 'not_invited'
+  | 'pending_setup'
+  | 'ready'
+  | 'logged_in';
+
+export interface ParticipantOnboardingEntry {
+  playerId: string;
+  status: ParticipantOnboardingStatus;
+  lastSignInAt: string | null;
+}
+
+export interface ParticipantOnboardingSummary {
+  total: number;
+  noEmail: number;
+  notInvited: number;
+  pendingSetup: number;
+  ready: number;
+  loggedIn: number;
+}
+
+export interface ParticipantOnboardingResult {
+  summary: ParticipantOnboardingSummary;
+  players: ParticipantOnboardingEntry[];
+}
+
+export async function getParticipantOnboardingStatus(params: {
+  tournamentId: string;
+  accessToken: string;
+}): Promise<{ data: ParticipantOnboardingResult } | { error: string }> {
+  return fetchBackendWithManagerAuth<ParticipantOnboardingResult>(
+    `/api/tournaments/${params.tournamentId}/participant-onboarding`,
+    params.accessToken,
+    {
+      timeoutMs: 15_000,
+      baseUrl: getInviteBackendUrl(),
+    }
+  );
+}
+
 export interface MarkTeamRosterReadyResult {
   success: boolean;
   emailed?: number;

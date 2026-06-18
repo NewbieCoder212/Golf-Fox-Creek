@@ -10,10 +10,11 @@ import {
 } from 'react-native';
 import { Plus, Trash2, Pencil, Check, X, Mail } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { createTournamentPlayer, deleteTournamentPlayer, updateTournamentPlayer } from '@/lib/tournament-player-service';
-import { sendParticipantInvite } from '@/lib/tournament-team-service';
+import { getParticipantOnboardingStatus, sendParticipantInvite } from '@/lib/tournament-team-service';
+import type { ParticipantOnboardingStatus } from '@/lib/tournament-team-service';
 import { PlayerHandicapOverrideFields } from '@/components/TournamentHandicapFields';
 import {
   resolvePlayerHandicapFromConfig,
@@ -24,6 +25,8 @@ import {
   inferParticipantUserId,
   isValidEmail,
   resolveParticipantEmail,
+  getParticipantOnboardingLabel,
+  formatParticipantLastSignIn,
 } from '@/lib/tournament-participant-utils';
 import { requireData } from '@/lib/tournament-supabase';
 import type { Tournament, TournamentPlayer, TournamentTeam } from '@/types';
@@ -49,6 +52,24 @@ interface TournamentParticipantsTabProps {
 const inputClassName =
   'bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 text-white text-base';
 const inputStyle = { color: '#ffffff' as const };
+
+function onboardingBadgeStyles(status: ParticipantOnboardingStatus): {
+  container: string;
+  text: string;
+} {
+  switch (status) {
+    case 'logged_in':
+      return { container: 'bg-lime-900/30', text: 'text-lime-400' };
+    case 'ready':
+      return { container: 'bg-emerald-900/20', text: 'text-emerald-400' };
+    case 'pending_setup':
+      return { container: 'bg-amber-900/30', text: 'text-amber-400' };
+    case 'not_invited':
+      return { container: 'bg-blue-900/30', text: 'text-blue-400' };
+    default:
+      return { container: 'bg-neutral-800', text: 'text-neutral-500' };
+  }
+}
 
 export function TournamentParticipantsTab({
   tournamentId,
@@ -84,7 +105,25 @@ export function TournamentParticipantsTab({
     void queryClient.refetchQueries({ queryKey: ['tournamentPlayers', tournamentId] });
     void queryClient.refetchQueries({ queryKey: ['tournamentTeams', tournamentId] });
     void queryClient.refetchQueries({ queryKey: ['tournamentMatchGroups', tournamentId] });
+    void queryClient.refetchQueries({ queryKey: ['tournamentParticipantOnboarding', tournamentId] });
   };
+
+  const { data: onboarding, isLoading: onboardingLoading } = useQuery({
+    queryKey: ['tournamentParticipantOnboarding', tournamentId],
+    queryFn: async () => {
+      const result = await getParticipantOnboardingStatus({ tournamentId, accessToken });
+      if ('error' in result) {
+        throw new Error(result.error);
+      }
+      return result.data;
+    },
+    enabled: Boolean(accessToken),
+    staleTime: 30_000,
+  });
+
+  const onboardingByPlayerId = Object.fromEntries(
+    (onboarding?.players ?? []).map((entry) => [entry.playerId, entry])
+  );
 
   const addMutation = useMutation({
     mutationFn: async () => {
@@ -308,6 +347,35 @@ export function TournamentParticipantsTab({
         </Text>
       </View>
 
+      <View className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-3 mb-4">
+        <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">
+          Account status
+        </Text>
+        {onboardingLoading ? (
+          <ActivityIndicator color="#a3e635" />
+        ) : onboarding ? (
+          <>
+            <Text className="text-white text-sm leading-6">
+              {onboarding.summary.loggedIn} logged in
+              {onboarding.summary.pendingSetup > 0
+                ? ` · ${onboarding.summary.pendingSetup} pending setup`
+                : ''}
+              {onboarding.summary.ready > 0 ? ` · ${onboarding.summary.ready} account ready` : ''}
+              {onboarding.summary.notInvited > 0
+                ? ` · ${onboarding.summary.notInvited} not emailed`
+                : ''}
+              {onboarding.summary.noEmail > 0 ? ` · ${onboarding.summary.noEmail} no email` : ''}
+            </Text>
+            <Text className="text-neutral-600 text-xs mt-1">
+              Pending setup means the invite was sent but they have not finished creating their
+              account yet.
+            </Text>
+          </>
+        ) : (
+          <Text className="text-neutral-500 text-sm">Could not load account status.</Text>
+        )}
+      </View>
+
       <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">Add participant</Text>
       <TextInput
         value={name}
@@ -393,6 +461,10 @@ export function TournamentParticipantsTab({
           const isSendingInvite =
             inviteMutation.isPending && inviteMutation.variables?.playerId === player.id;
           const hasEmail = Boolean(resolvedEmail ?? player.email?.trim());
+          const onboardingEntry = onboardingByPlayerId[player.id];
+          const onboardingStatus = onboardingEntry?.status ?? (hasEmail ? 'not_invited' : 'no_email');
+          const onboardingBadge = onboardingBadgeStyles(onboardingStatus);
+          const lastSignInLabel = formatParticipantLastSignIn(onboardingEntry?.lastSignInAt ?? null);
 
           if (isEditing) {
             return (
@@ -497,8 +569,17 @@ export function TournamentParticipantsTab({
                 </Text>
                 <Text className="text-neutral-600 text-[10px] mt-1">
                   {team ? `Team: ${team.team_name}` : 'Unassigned'}
-                  {player.invite_email_sent_at ? ' · Invited' : ''}
                 </Text>
+                <View className="flex-row items-center mt-1.5 gap-2">
+                  <View className={cn('px-2 py-0.5 rounded-full', onboardingBadge.container)}>
+                    <Text className={cn('text-[10px] font-semibold', onboardingBadge.text)}>
+                      {getParticipantOnboardingLabel(onboardingStatus)}
+                    </Text>
+                  </View>
+                  {lastSignInLabel ? (
+                    <Text className="text-neutral-600 text-[10px]">Last login {lastSignInLabel}</Text>
+                  ) : null}
+                </View>
               </View>
               <View className="flex-row gap-1">
                 <Pressable

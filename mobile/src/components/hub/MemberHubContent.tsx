@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, type RefreshControlProps } from 'react-native';
+import { View, ScrollView, type RefreshControlProps } from 'react-native';
 import { useEffect, type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -104,7 +104,7 @@ export function MemberHubContent({
         userProfile={userProfile}
         previewMode={previewMode}
         onLogout={previewMode ? undefined : handleLogout}
-        layout="flex"
+        layout="fixed"
       />
 
       <View className="shrink-0">
@@ -138,7 +138,6 @@ export function MemberHubContent({
         style={{ width: '100%' }}
         refreshControl={previewMode ? refreshControl : undefined}
         contentContainerStyle={{
-          flexGrow: 1,
           paddingTop: topPadding,
           paddingBottom: hasStickyFooterAd ? 8 : Math.max(insets.bottom, 16),
         }}

@@ -1,4 +1,5 @@
 import type { TournamentPlayer, TournamentTeam } from '@/types';
+import type { ParticipantOnboardingStatus } from '@/lib/tournament-team-service';
 
 function findParticipantForRosterId(
   rosterId: string,
@@ -234,4 +235,31 @@ export function splitName(displayName: string): { firstName: string; lastName: s
 
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+export function getParticipantOnboardingLabel(status: ParticipantOnboardingStatus): string {
+  switch (status) {
+    case 'no_email':
+      return 'No email';
+    case 'not_invited':
+      return 'Not emailed';
+    case 'pending_setup':
+      return 'Pending setup';
+    case 'ready':
+      return 'Account ready';
+    case 'logged_in':
+      return 'Logged in';
+  }
+}
+
+export function formatParticipantLastSignIn(lastSignInAt: string | null): string | null {
+  if (!lastSignInAt) return null;
+  const date = new Date(lastSignInAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }

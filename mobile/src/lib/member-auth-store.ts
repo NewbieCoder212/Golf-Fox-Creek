@@ -103,12 +103,6 @@ export const useMemberAuthStore = create<MemberAuthState>((set, get) => ({
           profile: data.profile,
           isLoading: false,
         });
-        if (!isAdminRole(data.profile?.role)) {
-          const admin = useAdminAuthStore.getState();
-          if (admin.isAuthenticated) {
-            await useAdminAuthStore.getState().clearAuth();
-          }
-        }
         return true;
       }
     } catch (err) {

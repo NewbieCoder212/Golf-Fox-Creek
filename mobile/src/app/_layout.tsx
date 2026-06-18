@@ -17,6 +17,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
+import { useAdminAuthStore } from '@/lib/admin-auth-store';
+import { getPostLoginRoute, syncStoredAuthStores } from '@/lib/admin-auth-bridge';
 import { foxColors } from '@/theme/tokens';
 
 export const unstable_settings = {
@@ -34,18 +36,23 @@ function useProtectedRoute() {
   const router = useRouter();
   const isAuthenticated = useMemberAuthStore((s) => s.isAuthenticated);
   const isLoading = useMemberAuthStore((s) => s.isLoading);
-  const loadStoredAuth = useMemberAuthStore((s) => s.loadStoredAuth);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
   // Load stored auth on mount
   useEffect(() => {
     const checkAuth = async () => {
-      await loadStoredAuth();
+      const member = useMemberAuthStore.getState();
+      const admin = useAdminAuthStore.getState();
+      if (!member.accessToken && !admin.accessToken) {
+        await useMemberAuthStore.getState().loadStoredAuth();
+        await useAdminAuthStore.getState().loadStoredAuth();
+      }
+      await syncStoredAuthStores();
       setHasCheckedAuth(true);
       SplashScreen.hideAsync();
     };
     checkAuth();
-  }, [loadStoredAuth]);
+  }, []);
 
   // Handle navigation based on auth state
   useEffect(() => {
@@ -65,9 +72,10 @@ function useProtectedRoute() {
     if (!isAuthenticated && !isPublicAuthRoute) {
       router.replace('/login');
     }
-    // If authenticated and on login page, redirect to home
+    // Managers/admins belong on the admin dashboard after sign-in — not member tabs.
     else if (isAuthenticated && inAuthGroup) {
-      router.replace('/(tabs)');
+      const profile = useMemberAuthStore.getState().profile;
+      router.replace(getPostLoginRoute(profile?.role));
     }
   }, [isAuthenticated, segments, hasCheckedAuth, isLoading, router]);
 

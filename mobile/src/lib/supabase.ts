@@ -934,6 +934,48 @@ export async function updatePasswordWithRecoveryToken(
 }
 
 /**
+ * Refresh an expired session using a refresh token.
+ */
+export async function refreshAuthSession(refreshToken: string): Promise<AuthResponse> {
+  if (!isConfigured()) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseAnonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.error_description || data.msg || 'Session refresh failed',
+      };
+    }
+
+    return {
+      success: true,
+      session: {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user: data.user,
+      },
+      user: data.user,
+    };
+  } catch (err) {
+    console.log('[Supabase] Refresh session error:', err);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+/**
  * Sign out (client-side only - just clear tokens)
  */
 export async function signOut(accessToken: string): Promise<boolean> {

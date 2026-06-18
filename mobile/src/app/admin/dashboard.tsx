@@ -53,7 +53,7 @@ import {
   signOut,
 } from '@/lib/supabase';
 import { getCourseReports, updateReportStatus } from '@/lib/course-reports';
-import { bridgeAdminAuthToMember } from '@/lib/admin-auth-bridge';
+import { bridgeAdminAuthToMember, restoreAdminSession } from '@/lib/admin-auth-bridge';
 import { setAdminTournamentsFlowActive } from '@/lib/scorecard-navigation';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import type {
@@ -91,6 +91,7 @@ export default function AdminDashboardScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [sessionRestoring, setSessionRestoring] = useState(false);
 
   // Push notification state
   const [pushMessage, setPushMessage] = useState('');
@@ -169,12 +170,11 @@ export default function AdminDashboardScreen() {
     let mounted = true;
 
     const initAdminAccess = async () => {
-      await useAdminAuthStore.getState().loadStoredAuth();
-      await bridgeAdminAuthToMember();
+      const restored = await restoreAdminSession();
       if (!mounted) return;
 
       const adminState = useAdminAuthStore.getState();
-      if (!adminState.canAccessAdmin()) {
+      if (!restored && !adminState.canAccessAdmin()) {
         router.replace('/admin');
       }
     };
@@ -194,6 +194,22 @@ export default function AdminDashboardScreen() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [section]);
+
+  useEffect(() => {
+    if (accessToken || (section !== 'ads' && section !== 'tournaments')) {
+      return;
+    }
+
+    let mounted = true;
+    setSessionRestoring(true);
+    void restoreAdminSession().finally(() => {
+      if (mounted) setSessionRestoring(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [accessToken, section]);
 
   const openSponsorAds = (openForm = false) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1311,11 +1327,25 @@ export default function AdminDashboardScreen() {
                     onBack={() => setSection('main')}
                   />
                 </View>
+              ) : sessionRestoring ? (
+                <View className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 items-center">
+                  <ActivityIndicator color="#a3e635" />
+                  <Text className="text-neutral-400 text-sm mt-3">Restoring admin session…</Text>
+                </View>
               ) : (
                 <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
                   <Text className="text-red-200 text-sm">
                     Admin session expired. Log out and sign in again to manage tournaments.
                   </Text>
+                  <Pressable
+                    onPress={() => {
+                      setSessionRestoring(true);
+                      void restoreAdminSession().finally(() => setSessionRestoring(false));
+                    }}
+                    className="mt-3 self-start bg-lime-600 rounded-lg px-4 py-2 active:bg-lime-700"
+                  >
+                    <Text className="text-white text-sm font-medium">Try again</Text>
+                  </Pressable>
                 </View>
               ))}
           </View>
@@ -1356,11 +1386,25 @@ export default function AdminDashboardScreen() {
                 initialOpenForm={openAdsFormOnMount}
                 onFormOpened={() => setOpenAdsFormOnMount(false)}
               />
+            ) : sessionRestoring ? (
+              <View className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 items-center">
+                <ActivityIndicator color="#a3e635" />
+                <Text className="text-neutral-400 text-sm mt-3">Restoring admin session…</Text>
+              </View>
             ) : (
               <View className="bg-red-900/30 border border-red-700/50 rounded-xl p-4">
                 <Text className="text-red-200 text-sm">
                   Admin session expired. Log out and sign in again to manage sponsor ads.
                 </Text>
+                <Pressable
+                  onPress={() => {
+                    setSessionRestoring(true);
+                    void restoreAdminSession().finally(() => setSessionRestoring(false));
+                  }}
+                  className="mt-3 self-start bg-lime-600 rounded-lg px-4 py-2 active:bg-lime-700"
+                >
+                  <Text className="text-white text-sm font-medium">Try again</Text>
+                </Pressable>
               </View>
             ))}
 

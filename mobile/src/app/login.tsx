@@ -26,7 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { getAuthenticatedUserProfile, signIn } from '@/lib/supabase';
-import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
+import { bridgeMemberAuthToAdmin, getPostLoginRoute } from '@/lib/admin-auth-bridge';
 
 const GENERATION_CUP_LOGO = require('@/assets/images/generation-cup-logo.png');
 
@@ -89,15 +89,10 @@ export default function LoginScreen() {
       await bridgeMemberAuthToAdmin();
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      if (profile.role === 'manager' || profile.role === 'super_admin') {
-        router.replace('/admin/dashboard');
-        return;
-      }
-
-      router.replace('/(tabs)');
+      router.replace(getPostLoginRoute(profile.role));
     } catch {
       setError('Network error. Please try again.');
+    } finally {
       setIsLoading(false);
     }
   };

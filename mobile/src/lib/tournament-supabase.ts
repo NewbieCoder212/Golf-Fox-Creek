@@ -3,6 +3,7 @@
  * Uses member/admin JWT when available; does not silently fall back to anon on auth errors.
  */
 
+import { refreshStoredAuthSession } from './admin-auth-bridge';
 import { useAdminAuthStore } from './admin-auth-store';
 import { useMemberAuthStore } from './member-auth-store';
 
@@ -141,28 +142,33 @@ export async function tournamentSupabaseRequest<T>(
     const primaryToken = resolveTournamentAccessToken(method, accessToken);
     let response = await fetchWithToken(url.toString(), init, primaryToken);
 
-    if (
-      !response.ok &&
-      response.status === 401 &&
-      primaryToken !== supabaseAnonKey &&
-      !accessToken
-    ) {
-      const memberToken = useMemberAuthStore.getState().accessToken;
-      const adminToken = useAdminAuthStore.getState().accessToken;
-      const retryToken =
-        primaryToken === memberToken && adminToken && adminToken !== memberToken
-          ? adminToken
-          : primaryToken === adminToken && memberToken && memberToken !== adminToken
-            ? memberToken
-            : null;
-      if (retryToken) {
-        response = await fetchWithToken(url.toString(), init, retryToken);
+    if (!response.ok && response.status === 401 && primaryToken !== supabaseAnonKey) {
+      if (!accessToken) {
+        const memberToken = useMemberAuthStore.getState().accessToken;
+        const adminToken = useAdminAuthStore.getState().accessToken;
+        const alternateToken =
+          primaryToken === memberToken && adminToken && adminToken !== memberToken
+            ? adminToken
+            : primaryToken === adminToken && memberToken && memberToken !== adminToken
+              ? memberToken
+              : null;
+        if (alternateToken) {
+          response = await fetchWithToken(url.toString(), init, alternateToken);
+        }
+      }
+
+      if (!response.ok) {
+        const freshToken = await refreshStoredAuthSession();
+        if (freshToken) {
+          response = await fetchWithToken(url.toString(), init, freshToken);
+        }
       }
     }
 
     if (!response.ok) {
       const errorText = await response.text();
       console.log(`[Tournament] ${method} ${table} ${response.status}:`, errorText);
+      const errorMessage = parseSupabaseError(response.status, errorText);
       if (response.status === 401 && primaryToken !== supabaseAnonKey) {
         return {
           data: null,
@@ -175,7 +181,7 @@ export async function tournamentSupabaseRequest<T>(
           error: 'Session expired. Log out and log back in, then try again.',
         };
       }
-      return { data: null, error: parseSupabaseError(response.status, errorText) };
+      return { data: null, error: errorMessage };
     }
 
     const responseText = await response.text();

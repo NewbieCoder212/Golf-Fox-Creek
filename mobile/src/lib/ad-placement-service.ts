@@ -3,6 +3,11 @@
  */
 
 import type { AdPlacement, AdDisplayPosition, AdPlacementType, AdImageLayout } from '@/types';
+import {
+  ensureManagerAccessToken,
+  isAuthTokenExpiredError,
+  refreshStoredAuthSession,
+} from './admin-auth-bridge';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -18,6 +23,9 @@ function parseAdPlacementError(status: number, errorText: string): string {
       parsed.message?.includes('row-level security')
     ) {
       return 'Database permissions blocked this action. Run supabase/migrations/20260624000000_ad_placements_rls_fix.sql in the Supabase SQL editor, then try again.';
+    }
+    if (parsed.code === 'PGRST301' || parsed.message?.includes('JWT')) {
+      return parsed.message ?? 'Session expired';
     }
     return parsed.message ?? `Request failed (${status})`;
   } catch {
@@ -107,17 +115,50 @@ async function authRequest<T>(
     headers['Accept'] = 'application/vnd.pgrst.object+json';
   }
 
-  try {
-    const response = await fetch(url.toString(), {
+  const sendRequest = async (token: string) =>
+    fetch(url.toString(), {
       method,
-      headers,
+      headers: {
+        ...headers,
+        Authorization: `Bearer ${token}`,
+      },
       body: body ? JSON.stringify(body) : undefined,
     });
 
+  try {
+    const activeToken = (await ensureManagerAccessToken(accessToken)) ?? accessToken;
+    let response = await sendRequest(activeToken);
+
     if (!response.ok) {
       const errorText = await response.text();
+      const errorMessage = parseAdPlacementError(response.status, errorText);
+
+      if (isAuthTokenExpiredError(errorMessage)) {
+        const freshToken = await refreshStoredAuthSession();
+        if (freshToken) {
+          response = await sendRequest(freshToken);
+          if (response.ok) {
+            if (method === 'DELETE') {
+              return { data: null as T, error: null };
+            }
+            const data = (await response.json()) as T;
+            return { data, error: null };
+          }
+          const retryErrorText = await response.text();
+          console.log('[AdPlacement] Auth error after refresh', response.status, retryErrorText);
+          return {
+            data: null,
+            error: 'Session expired. Log out and log back in, then try again.',
+          };
+        }
+        return {
+          data: null,
+          error: 'Session expired. Log out and log back in, then try again.',
+        };
+      }
+
       console.log('[AdPlacement] Auth error', response.status, errorText);
-      return { data: null, error: parseAdPlacementError(response.status, errorText) };
+      return { data: null, error: errorMessage };
     }
 
     if (method === 'DELETE') {

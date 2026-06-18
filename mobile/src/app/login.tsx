@@ -240,16 +240,6 @@ export default function LoginScreen() {
               </View>
             </BlurView>
           </Animated.View>
-
-          {/* Footer */}
-          <Animated.View
-            entering={FadeIn.delay(600).duration(800)}
-            className="mt-4 items-center"
-          >
-            <Text className="text-neutral-600 text-xs text-center">
-              Product of Acadia Venture Studio
-            </Text>
-          </Animated.View>
         </View>
       </KeyboardAvoidingView>
     </View>

@@ -23,7 +23,6 @@ import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQ
 import { TournamentDataLoadError } from '@/components/TournamentDataLoadError';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { formatClubTime } from '@/lib/club-timezone';
-import { AcadiaVentureStudioFooter } from '@/components/AcadiaVentureStudioFooter';
 import { cn } from '@/lib/cn';
 
 interface TournamentLiveStandingsPanelProps {
@@ -261,8 +260,6 @@ export function TournamentLiveStandingsPanel({
       )}
         </>
       ) : null}
-
-      <AcadiaVentureStudioFooter className="mt-2 mb-1" />
     </View>
   );
 }

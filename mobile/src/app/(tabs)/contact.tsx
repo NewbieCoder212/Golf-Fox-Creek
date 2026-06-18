@@ -101,12 +101,6 @@ export default function ContactScreen() {
             ))}
           </View>
         </Animated.View>
-
-        <View className="px-5 mt-10 mb-2 items-center">
-          <Text className="text-neutral-600 text-xs font-body text-center">
-            Powered by Acadia Venture Studio, Dieppe, NB
-          </Text>
-        </View>
       </ScrollView>
     </View>
   );

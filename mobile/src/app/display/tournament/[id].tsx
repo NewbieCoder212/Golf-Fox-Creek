@@ -15,7 +15,6 @@ import { useTournamentDisplayRealtime } from '@/hooks/useTournamentDisplayRealti
 import { formatTournamentDates, formatRoundPickerLabel } from '@/lib/tournament-labels';
 import { formatClubTime } from '@/lib/club-timezone';
 import { TvSponsorCarousel, TvSponsorSlot } from '@/components/TvSponsorSlot';
-import { AcadiaVentureStudioFooter } from '@/components/AcadiaVentureStudioFooter';
 import { TournamentLiveMatchGrids } from '@/components/TournamentLiveMatchGrids';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
@@ -257,7 +256,6 @@ export default function TournamentTvDisplayScreen() {
         ) : (
           <Text className="text-neutral-600 text-xs">Fox Creek Golf Club · Dieppe, NB</Text>
         )}
-        <AcadiaVentureStudioFooter variant="tv" />
       </View>
     </View>
   );

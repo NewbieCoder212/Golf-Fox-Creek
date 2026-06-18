@@ -21,6 +21,7 @@ import {
   TournamentRosterEditor,
   type RosterDraftEntry,
   type RosterMemberOption,
+  type RosterPlayerEntry,
 } from '@/components/TournamentRosterEditor';
 import { getTeamBySide } from '@/lib/tournament-match-service';
 import {
@@ -28,6 +29,7 @@ import {
   createTournamentTeamWithRoster,
   removePlayerFromTeam,
   resolveRosterEntries,
+  updateTournamentPlayer,
 } from '@/lib/tournament-player-service';
 import {
   canCaptainManageRoster,
@@ -36,7 +38,9 @@ import {
 import {
   buildCaptainTeamUpdate,
   isTeamCaptainPlayer,
+  isValidEmail,
   resolveCaptainDisplayName,
+  resolveParticipantEmail,
   resolveTeamParticipants,
 } from '@/lib/tournament-participant-utils';
 import { getTeamSideDisplayName, tournamentNeedsTeams } from '@/lib/tournament-labels';
@@ -299,6 +303,10 @@ export function TournamentTeamsRosterTab({
   const [rosterDraft, setRosterDraft] = useState<RosterDraftEntry[]>([]);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerHandicap, setNewPlayerHandicap] = useState('');
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [editPlayerName, setEditPlayerName] = useState('');
+  const [editPlayerHandicap, setEditPlayerHandicap] = useState('');
+  const [editPlayerEmail, setEditPlayerEmail] = useState('');
 
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
@@ -427,6 +435,57 @@ export function TournamentTeamsRosterTab({
     },
   });
 
+  const updatePlayerMutation = useMutation({
+    mutationFn: async (playerId: string) => {
+      const displayName = editPlayerName.trim();
+      if (!displayName) throw new Error('Name is required');
+
+      const emailValue = editPlayerEmail.trim().toLowerCase();
+      if (emailValue && !isValidEmail(emailValue)) {
+        throw new Error('Enter a valid email or leave it blank');
+      }
+
+      const hi = Number(editPlayerHandicap);
+
+      const result = await updateTournamentPlayer(
+        playerId,
+        {
+          display_name: displayName,
+          handicap_index: Number.isFinite(hi) ? hi : null,
+          ...(isManager ? { email: emailValue || null } : {}),
+        },
+        { tournamentId, accessToken: accessToken ?? undefined }
+      );
+      return requireData(result, 'Could not update player');
+    },
+    onSuccess: () => {
+      cancelEditPlayer();
+      refreshRosterData();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: Error) => {
+      Alert.alert('Could not update player', error.message);
+    },
+  });
+
+  const cancelEditPlayer = () => {
+    setEditingPlayerId(null);
+    setEditPlayerName('');
+    setEditPlayerHandicap('');
+    setEditPlayerEmail('');
+  };
+
+  const startEditPlayer = (player: RosterPlayerEntry) => {
+    const tournamentPlayer = tournamentPlayers.find((entry) => entry.id === player.id);
+    const resolvedEmail = tournamentPlayer
+      ? resolveParticipantEmail(tournamentPlayer, memberEmailByUserId)
+      : player.email;
+    setEditingPlayerId(player.id);
+    setEditPlayerName(player.display_name);
+    setEditPlayerHandicap(String(player.handicap_index));
+    setEditPlayerEmail(resolvedEmail ?? player.email ?? '');
+  };
+
   const closeTeamModal = () => {
     setShowTeamModal(false);
     setEditingTeam(null);
@@ -436,6 +495,7 @@ export function TournamentTeamsRosterTab({
     setRosterDraft([]);
     setNewPlayerName('');
     setNewPlayerHandicap('');
+    cancelEditPlayer();
   };
 
   const selectCaptain = (memberId: string) => {
@@ -1010,8 +1070,25 @@ export function TournamentTeamsRosterTab({
                   activeEditingTeam &&
                     canManageTeamRoster(activeEditingTeam, { isManager, userId })
                 )}
+                canEditEditingPlayers={Boolean(
+                  activeEditingTeam &&
+                    canManageTeamRoster(activeEditingTeam, { isManager, userId })
+                )}
+                canEditPlayerEmail={isManager}
+                editingPlayerId={editingPlayerId}
+                editPlayerName={editPlayerName}
+                editPlayerHandicap={editPlayerHandicap}
+                editPlayerEmail={editPlayerEmail}
+                onEditPlayerNameChange={setEditPlayerName}
+                onEditPlayerHandicapChange={setEditPlayerHandicap}
+                onEditPlayerEmailChange={setEditPlayerEmail}
+                onStartEditPlayer={startEditPlayer}
+                onCancelEditPlayer={cancelEditPlayer}
+                onSaveEditPlayer={(playerId) => updatePlayerMutation.mutate(playerId)}
                 isAddingPlayer={addPlayerMutation.isPending}
                 isRemovingPlayer={removePlayerMutation.isPending}
+                isSavingPlayer={updatePlayerMutation.isPending}
+                savingPlayerId={updatePlayerMutation.variables ?? null}
               />
             </ScrollView>
 

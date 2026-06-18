@@ -321,7 +321,13 @@ export function resolveRosterEntries(
   playerIds: string[],
   tournamentPlayers: TournamentPlayer[],
   members: Array<{ id: string; full_name: string; handicap_index?: number | null }>
-): Array<{ id: string; display_name: string; handicap_index: number; user_id?: string | null }> {
+): Array<{
+  id: string;
+  display_name: string;
+  handicap_index: number;
+  user_id?: string | null;
+  email?: string | null;
+}> {
   const { nameById, handicapById } = buildTournamentPlayerMaps(tournamentPlayers, members);
   const playerById = Object.fromEntries(tournamentPlayers.map((p) => [p.id, p]));
 
@@ -332,6 +338,7 @@ export function resolveRosterEntries(
       display_name: nameById[id] ?? 'Player',
       handicap_index: rosterPlayer?.handicap_index ?? handicapById[id] ?? 0,
       user_id: rosterPlayer?.user_id ?? (members.some((m) => m.id === id) ? id : null),
+      email: rosterPlayer?.email ?? null,
     };
   });
 }

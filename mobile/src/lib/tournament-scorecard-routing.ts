@@ -68,10 +68,6 @@ export function findMatchGroupForRosterPlayer(
     }
   }
 
-  if (roundNumber !== undefined) {
-    return findMatchGroupForRosterPlayer(groups, rosterPlayerIds);
-  }
-
   return null;
 }
 

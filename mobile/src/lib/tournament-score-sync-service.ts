@@ -190,7 +190,7 @@ async function clearTournamentMatchScoresViaSupabase(params: {
   return clearTournamentMatchRound(params);
 }
 
-const BACKEND_REQUEST_TIMEOUT_MS = 15_000;
+const BACKEND_REQUEST_TIMEOUT_MS = 4_000;
 
 async function postToBackend(
   path: string,
@@ -256,6 +256,12 @@ export async function syncTournamentMatchScoresViaBackend(
     return { success: false, error: 'Not signed in' };
   }
 
+  // Primary: member JWT → Supabase (direct, ~1–2s). Backend is fallback only.
+  const supabaseResult = await syncTournamentMatchScoresViaSupabase(params);
+  if (supabaseResult.success) {
+    return supabaseResult;
+  }
+
   const useDirectResult =
     params.holeOutcomes != null || params.pairingOutcomes != null;
 
@@ -275,8 +281,6 @@ export async function syncTournamentMatchScoresViaBackend(
         useNetScoring: params.useNetScoring,
       });
 
-  let backendError: string | undefined;
-
   if (isBackendReachableInBrowser()) {
     const backendResult = await postToBackend(
       `/api/tournaments/${params.tournamentId}/match-groups/${params.matchGroupId}/sync`,
@@ -288,26 +292,14 @@ export async function syncTournamentMatchScoresViaBackend(
       return { success: true };
     }
 
-    backendError = backendResult.error;
-    console.log('[Tournament] Backend sync failed, trying Supabase:', backendError);
-  }
-
-  const supabaseResult = await syncTournamentMatchScoresViaSupabase(params);
-  if (supabaseResult.success) {
-    return supabaseResult;
-  }
-
-  if (backendError && supabaseResult.error) {
+    console.log('[Tournament] Supabase and backend sync failed:', supabaseResult.error, backendResult.error);
     return {
       success: false,
-      error: supabaseResult.error,
+      error: supabaseResult.error ?? backendResult.error,
     };
   }
 
-  return {
-    success: false,
-    error: supabaseResult.error ?? backendError ?? 'Could not save scores. Try again in a moment.',
-  };
+  return supabaseResult;
 }
 
 export async function declareMatchWinnerOverride(params: {

@@ -10,6 +10,7 @@ import type {
   TeeName,
   TournamentFormat,
   TournamentHoleScore,
+  TournamentMatchGroup,
   TournamentScoreInsert,
   WageringGameType,
   WageringResults,
@@ -94,6 +95,7 @@ interface TournamentStoreState {
   teamName: string | null;
   userId: string | null;
   matchGroupId: string | null;
+  activeMatchGroup: TournamentMatchGroup | null;
   currentHole: number;
   teePlayed: TeeName;
   players: TournamentStorePlayer[];
@@ -112,6 +114,7 @@ interface TournamentStoreState {
   wageringSettings: WageringSettings | null;
   wageringResults: WageringResults | null;
 
+  setActiveMatchGroup: (matchGroup: TournamentMatchGroup | null) => void;
   initSession: (params: {
     tournamentId: string;
     roundFormats: TournamentFormat[];
@@ -470,6 +473,7 @@ const initialState = {
   teamName: null,
   userId: null,
   matchGroupId: null,
+  activeMatchGroup: null,
   currentHole: 1,
   teePlayed: 'White' as TeeName,
   players: [] as TournamentStorePlayer[],
@@ -491,6 +495,13 @@ const initialState = {
 
 export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
   ...initialState,
+
+  setActiveMatchGroup: (matchGroup) => {
+    set({
+      activeMatchGroup: matchGroup,
+      matchGroupId: matchGroup?.id ?? get().matchGroupId,
+    });
+  },
 
   initSession: ({
     tournamentId,
@@ -984,8 +995,17 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       const matchGroupId = state.matchGroupId;
 
       if (matchGroupId) {
-        const groups = await getTournamentMatchGroups(state.tournamentId);
-        const matchGroup = groups.find((g) => g.id === matchGroupId);
+        let matchGroup =
+          state.activeMatchGroup?.id === matchGroupId ? state.activeMatchGroup : null;
+
+        if (!matchGroup) {
+          const groups = await getTournamentMatchGroups(state.tournamentId);
+          matchGroup = groups.find((g) => g.id === matchGroupId) ?? null;
+          if (matchGroup) {
+            set({ activeMatchGroup: matchGroup });
+          }
+        }
+
         if (!matchGroup) {
           throw new Error('Match pairing not found');
         }

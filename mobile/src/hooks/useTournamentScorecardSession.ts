@@ -93,6 +93,7 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
   const syncScoresToSupabase = useTournamentStore((s) => s.syncScoresToSupabase);
   const clearMatchRoundScores = useTournamentStore((s) => s.clearMatchRoundScores);
   const persistSession = useTournamentStore((s) => s.persistSession);
+  const setActiveMatchGroup = useTournamentStore((s) => s.setActiveMatchGroup);
   const setHoleOutcome = useTournamentStore((s) => s.setHoleOutcome);
   const setActivePairingIndex = useTournamentStore((s) => s.setActivePairingIndex);
   const holeOutcomes = useTournamentStore((s) => s.holeOutcomes);
@@ -167,6 +168,10 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
 
   const activeMatchGroup = resolvedMatch?.group ?? null;
   const effectiveSide = side ?? resolvedMatch?.side;
+
+  useEffect(() => {
+    setActiveMatchGroup(activeMatchGroup);
+  }, [activeMatchGroup, setActiveMatchGroup]);
 
   const { data: members = [] } = useQuery({
     queryKey: ['membersForTeam'],

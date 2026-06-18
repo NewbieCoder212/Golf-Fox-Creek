@@ -48,6 +48,7 @@ import {
   getActiveRoundNumber,
   resolveTournamentScorecardRoute,
 } from '@/lib/tournament-scorecard-routing';
+import { useScorecardTimeGate } from '@/hooks/useScorecardTimeGate';
 import { cn } from '@/lib/cn';
 import { TournamentTabAdBanner } from '@/components/TournamentTabAdBanner';
 import { TournamentDetailAdBanner } from '@/components/TournamentDetailAdBanner';
@@ -152,10 +153,20 @@ export default function TournamentDetailScreen() {
 
   const { nameById: playerNameById } = buildTournamentPlayerMaps(tournamentPlayers, members);
 
-  const canEnterScores =
+  const hasRosterAccess =
     isManager ||
     myTeams.length > 0 ||
     (tournament ? tournamentHasSinglesRound(tournament) : false);
+
+  const { open: scorecardTimeOpen, hint: scorecardClosedHint } = useScorecardTimeGate({
+    tournament: tournament ?? { start_date: '', end_date: '' },
+    matchGroup: myMatchAssignment?.group ?? null,
+    bypassTimeGate: isManager,
+  });
+
+  const canEnterScores = hasRosterAccess && scorecardTimeOpen;
+  const scorecardTimeHint =
+    hasRosterAccess && !scorecardTimeOpen ? scorecardClosedHint : null;
 
   const handleEnterScores = async () => {
     if (!id) return;
@@ -271,28 +282,36 @@ export default function TournamentDetailScreen() {
                 teams={teams}
                 playerNameById={playerNameById}
                 canEnterScores={canEnterScores}
+                scorecardClosedHint={scorecardTimeHint}
                 isOpeningScorecard={isOpeningScorecard}
                 onEnterScores={() => void handleEnterScores()}
                 onViewStandings={goToStandings}
               />
             ) : (
-              <Pressable
-                onPress={() => void handleEnterScores()}
-                disabled={!canEnterScores || isOpeningScorecard}
-                className={cn(
-                  'flex-row items-center justify-center rounded-xl py-4',
-                  canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
-                )}
-              >
-                {isOpeningScorecard ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <ClipboardList size={20} color="#fff" />
-                    <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
-                  </>
-                )}
-              </Pressable>
+              <>
+                {scorecardTimeHint ? (
+                  <Text className="text-neutral-500 text-xs text-center mb-3 px-2">
+                    {scorecardTimeHint}
+                  </Text>
+                ) : null}
+                <Pressable
+                  onPress={() => void handleEnterScores()}
+                  disabled={!canEnterScores || isOpeningScorecard}
+                  className={cn(
+                    'flex-row items-center justify-center rounded-xl py-4',
+                    canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
+                  )}
+                >
+                  {isOpeningScorecard ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <ClipboardList size={20} color="#fff" />
+                      <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+                    </>
+                  )}
+                </Pressable>
+              </>
             )}
           </View>
 
@@ -405,6 +424,7 @@ export default function TournamentDetailScreen() {
               rosterPlayerIds={myRosterPlayerIds}
               playerNameById={playerNameById}
               defaultRoundNumber={activeRoundNumber}
+              bypassScorecardTimeGate={isManager}
               onViewStandings={goToStandings}
             />
             </>

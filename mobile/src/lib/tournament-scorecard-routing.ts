@@ -1,8 +1,54 @@
 import type { Tournament, TournamentMatchGroup, TournamentTeamSide } from '@/types';
+import { formatClubTime } from './club-timezone';
 import { getTournamentById } from './tournament-service';
 import { getTournamentMatchGroups } from './tournament-match-service';
 import { getTournamentRosterPlayerIdsForUser } from './tournament-player-service';
 import { getMatchGroupFormat, isFoursomePlayerScorecardFormat, isSideScopedTeamFormat } from './tournament-labels';
+
+export const SCORECARD_OPEN_MINUTES_BEFORE_TEE = 30;
+
+export interface ScorecardTimeGateParams {
+  tournament: Pick<Tournament, 'start_date' | 'end_date'>;
+  matchGroup?: Pick<TournamentMatchGroup, 'tee_time'> | null;
+  now?: Date;
+  bypassTimeGate?: boolean;
+}
+
+/** Soft UI gate: event day + 30 minutes before assigned tee time (managers may bypass). */
+export function isScorecardTimeGateOpen(params: ScorecardTimeGateParams): boolean {
+  if (params.bypassTimeGate) return true;
+
+  const now = params.now ?? new Date();
+  if (!isTournamentActiveToday(params.tournament.start_date, params.tournament.end_date, now)) {
+    return false;
+  }
+
+  const teeTime = params.matchGroup?.tee_time;
+  if (!teeTime) return true;
+
+  const openAtMs =
+    new Date(teeTime).getTime() - SCORECARD_OPEN_MINUTES_BEFORE_TEE * 60_000;
+  return now.getTime() >= openAtMs;
+}
+
+export function getScorecardClosedHint(params: ScorecardTimeGateParams): string {
+  if (params.bypassTimeGate) return '';
+
+  const now = params.now ?? new Date();
+  if (!isTournamentActiveToday(params.tournament.start_date, params.tournament.end_date, now)) {
+    return 'Score entry opens on event day, 30 minutes before your tee time.';
+  }
+
+  const teeTime = params.matchGroup?.tee_time;
+  if (!teeTime) {
+    return 'Score entry opens on event day.';
+  }
+
+  const openAtMs =
+    new Date(teeTime).getTime() - SCORECARD_OPEN_MINUTES_BEFORE_TEE * 60_000;
+  const opensAtLabel = formatClubTime(new Date(openAtMs).toISOString(), true);
+  return `Score entry opens at ${opensAtLabel} (30 min before tee).`;
+}
 
 /** Pick the round for today's calendar day within the tournament schedule. */
 export function getActiveRoundNumber(
@@ -28,13 +74,16 @@ export function getActiveRoundNumber(
   return tournament.rounds_count;
 }
 
-export function isTournamentActiveToday(startDate: string, endDate: string): boolean {
+export function isTournamentActiveToday(
+  startDate: string,
+  endDate: string,
+  now: Date = new Date()
+): boolean {
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
   const end = new Date(endDate);
   end.setHours(23, 59, 59, 999);
-  const today = new Date();
-  return today >= start && today <= end;
+  return now >= start && now <= end;
 }
 
 export function pickHubLeaderboardTournamentId<
@@ -125,8 +174,6 @@ export async function resolveTournamentScorecardRoute(
     roundNumber,
   });
 }
-
-import { formatClubTime } from './club-timezone';
 
 export function formatTeeTimeLabel(iso: string): string {
   return formatClubTime(iso, true);

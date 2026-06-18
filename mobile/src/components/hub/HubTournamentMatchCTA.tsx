@@ -13,6 +13,7 @@ import {
   isTournamentActiveToday,
   resolveTournamentScorecardRoute,
 } from '@/lib/tournament-scorecard-routing';
+import { useScorecardTimeGate } from '@/hooks/useScorecardTimeGate';
 import { getTournamentMatchGroups } from '@/lib/tournament-match-service';
 import { getTournamentRosterPlayerIdsForUser } from '@/lib/tournament-player-service';
 import { getTournamentsForUserList } from '@/lib/tournament-service';
@@ -20,6 +21,7 @@ import { formatRoundPickerLabel } from '@/lib/tournament-labels';
 import { useTranslations } from '@/lib/language-store';
 import type { Tournament } from '@/types';
 import { foxColors } from '@/theme/tokens';
+import { cn } from '@/lib/cn';
 
 interface HubTournamentMatchCTAProps {
   userId: string | undefined;
@@ -74,6 +76,11 @@ export function HubTournamentMatchCTA({
     staleTime: 1000 * 60,
   });
 
+  const { open: scorecardTimeOpen, hint: scorecardClosedHint } = useScorecardTimeGate({
+    tournament: tournament ?? { start_date: '', end_date: '' },
+    matchGroup: matchContext?.match.group ?? null,
+  });
+
   const sectionClass = compact ? 'px-5 mt-2' : 'px-5 mt-4';
 
   if (previewMode || !tournament) {
@@ -122,10 +129,15 @@ export function HubTournamentMatchCTA({
     <Animated.View entering={FadeInDown.delay(150).duration(600)} className={sectionClass}>
       <Pressable
         onPress={() => {
+          if (!scorecardTimeOpen) return;
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           router.push(matchContext.scorecardRoute as never);
         }}
-        className="active:opacity-80 active:scale-[0.99]"
+        disabled={!scorecardTimeOpen}
+        className={cn(
+          'active:opacity-80 active:scale-[0.99]',
+          !scorecardTimeOpen && 'opacity-80'
+        )}
       >
         <SurfaceCard variant="accent" className={compact ? 'p-3 pl-4' : 'p-4 pl-5'}>
           <View className="flex-row items-center justify-between">
@@ -154,15 +166,23 @@ export function HubTournamentMatchCTA({
                     </Text>
                   </View>
                 ) : null}
+                {scorecardClosedHint ? (
+                  <Text className="text-neutral-500 text-xs font-body mt-2">{scorecardClosedHint}</Text>
+                ) : null}
               </View>
             </View>
-            <ChevronRight size={22} color={foxColors.lime} />
+            {scorecardTimeOpen ? <ChevronRight size={22} color={foxColors.lime} /> : null}
           </View>
           <View className="flex-row items-center mt-3 pt-2 border-t border-fox-border-accent/40">
-            <Text className="text-fox-lime text-sm font-body-semibold flex-1">
-              {t.tapToEnterTournament}
+            <Text
+              className={cn(
+                'text-sm font-body-semibold flex-1',
+                scorecardTimeOpen ? 'text-fox-lime' : 'text-neutral-500'
+              )}
+            >
+              {scorecardTimeOpen ? t.tapToEnterTournament : 'Opens soon'}
             </Text>
-            <ChevronRight size={16} color={foxColors.lime} />
+            {scorecardTimeOpen ? <ChevronRight size={16} color={foxColors.lime} /> : null}
           </View>
         </SurfaceCard>
       </Pressable>

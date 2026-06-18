@@ -17,6 +17,7 @@ import {
   getActiveRoundNumber,
   resolveTournamentScorecardRoute,
 } from '@/lib/tournament-scorecard-routing';
+import { useScorecardTimeGate } from '@/hooks/useScorecardTimeGate';
 import { formatLabelFromSettings, formatScoringHintFromSettings } from '@/lib/tournament-format-settings';
 import { useTournamentFormatsSettings } from '@/lib/useTournamentFormatsSettings';
 import {
@@ -37,6 +38,7 @@ interface TournamentMyMatchTabProps {
   rosterPlayerIds: string[];
   playerNameById: Record<string, string>;
   defaultRoundNumber?: number;
+  bypassScorecardTimeGate?: boolean;
   onViewStandings: () => void;
 }
 
@@ -64,6 +66,7 @@ export function TournamentMyMatchTab({
   rosterPlayerIds,
   playerNameById,
   defaultRoundNumber,
+  bypassScorecardTimeGate = false,
   onViewStandings,
 }: TournamentMyMatchTabProps) {
   const router = useRouter();
@@ -144,6 +147,7 @@ export function TournamentMyMatchTab({
           roundFormat={roundFormat}
           formatSettings={formatSettings}
           isOpeningScorecard={isOpeningScorecard}
+          bypassScorecardTimeGate={bypassScorecardTimeGate}
           onEnterScores={handleEnterScores}
           onViewStandings={onViewStandings}
         />
@@ -164,6 +168,7 @@ interface MyMatchCardProps {
   roundFormat: string;
   formatSettings: ReturnType<typeof useTournamentFormatsSettings>['data'];
   isOpeningScorecard: boolean;
+  bypassScorecardTimeGate?: boolean;
   onEnterScores: () => void;
   onViewStandings: () => void;
 }
@@ -180,10 +185,17 @@ function MyMatchCard({
   roundFormat,
   formatSettings,
   isOpeningScorecard,
+  bypassScorecardTimeGate = false,
   onEnterScores,
   onViewStandings,
 }: MyMatchCardProps) {
   const router = useRouter();
+  const { open: scorecardTimeOpen, hint: scorecardClosedHint } = useScorecardTimeGate({
+    tournament,
+    matchGroup: group,
+    bypassTimeGate: bypassScorecardTimeGate,
+  });
+  const canOpenScorecard = scorecardTimeOpen;
   const groupFormat = getMatchGroupFormat(group, tournament);
   const mySideName = viewerSide === 'side_a' ? sideAName : sideBName;
   const oppSideName = viewerSide === 'side_a' ? sideBName : sideAName;
@@ -371,8 +383,11 @@ function MyMatchCard({
           </Text>
           <Pressable
             onPress={onEnterScores}
-            disabled={isOpeningScorecard}
-            className="mt-4 flex-row items-center justify-center bg-lime-600 rounded-xl py-3.5 active:opacity-80"
+            disabled={!canOpenScorecard || isOpeningScorecard}
+            className={cn(
+              'mt-4 flex-row items-center justify-center rounded-xl py-3.5 active:opacity-80',
+              canOpenScorecard ? 'bg-lime-600' : 'bg-neutral-800 opacity-50'
+            )}
           >
             {isOpeningScorecard ? (
               <ActivityIndicator color="#fff" />
@@ -391,20 +406,28 @@ function MyMatchCard({
           </Pressable>
         </View>
       ) : (
-        <Pressable
-          onPress={onEnterScores}
-          disabled={isOpeningScorecard}
-          className="flex-row items-center justify-center bg-lime-600 rounded-xl py-3.5 active:opacity-80"
-        >
-          {isOpeningScorecard ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <ClipboardList size={18} color="#fff" />
-              <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
-            </>
-          )}
-        </Pressable>
+        <>
+          {scorecardClosedHint ? (
+            <Text className="text-neutral-500 text-xs text-center mb-3">{scorecardClosedHint}</Text>
+          ) : null}
+          <Pressable
+            onPress={onEnterScores}
+            disabled={!canOpenScorecard || isOpeningScorecard}
+            className={cn(
+              'flex-row items-center justify-center rounded-xl py-3.5 active:opacity-80',
+              canOpenScorecard ? 'bg-lime-600' : 'bg-neutral-800 opacity-50'
+            )}
+          >
+            {isOpeningScorecard ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <ClipboardList size={18} color="#fff" />
+                <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+              </>
+            )}
+          </Pressable>
+        </>
       )}
     </View>
   );

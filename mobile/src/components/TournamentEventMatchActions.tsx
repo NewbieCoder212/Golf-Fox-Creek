@@ -23,6 +23,7 @@ interface TournamentEventMatchActionsProps {
   teams: TournamentTeam[];
   playerNameById: Record<string, string>;
   canEnterScores: boolean;
+  scorecardClosedHint?: string | null;
   isOpeningScorecard: boolean;
   onEnterScores: () => void;
   onViewStandings: () => void;
@@ -37,6 +38,7 @@ export function TournamentEventMatchActions({
   teams,
   playerNameById,
   canEnterScores,
+  scorecardClosedHint = null,
   isOpeningScorecard,
   onEnterScores,
   onViewStandings,
@@ -125,7 +127,7 @@ export function TournamentEventMatchActions({
           <Text className="text-neutral-500 text-xs mt-1">
             {isComplete
               ? 'This match is final — standings updated.'
-              : 'Scorecard opens with your foursome and pairings'}
+              : scorecardClosedHint ?? 'Scorecard opens with your foursome and pairings'}
           </Text>
         )}
         {isComplete && completionDetail ? (
@@ -181,23 +183,28 @@ export function TournamentEventMatchActions({
           </Pressable>
         </View>
       ) : (
-        <Pressable
-          onPress={onEnterScores}
-          disabled={!canEnterScores || isOpeningScorecard}
-          className={cn(
-            'flex-row items-center justify-center rounded-xl py-4',
-            canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
-          )}
-        >
-          {isOpeningScorecard ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <ClipboardList size={20} color="#fff" />
-              <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
-            </>
-          )}
-        </Pressable>
+        <>
+          {scorecardClosedHint ? (
+            <Text className="text-neutral-500 text-xs text-center mb-3">{scorecardClosedHint}</Text>
+          ) : null}
+          <Pressable
+            onPress={onEnterScores}
+            disabled={!canEnterScores || isOpeningScorecard}
+            className={cn(
+              'flex-row items-center justify-center rounded-xl py-4',
+              canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
+            )}
+          >
+            {isOpeningScorecard ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <ClipboardList size={20} color="#fff" />
+                <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+              </>
+            )}
+          </Pressable>
+        </>
       )}
     </View>
   );

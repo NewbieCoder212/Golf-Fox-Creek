@@ -1,6 +1,6 @@
 import type { TournamentPlayer, TournamentTeam } from '@/types';
 import { ensureManagerAccessToken } from './admin-auth-bridge';
-import { getBackendUrl, isBackendReachableInBrowser, isLocalhostBackendUrl } from './backend-url';
+import { getBackendUrl, getInviteBackendUrl, isBackendReachableInBrowser, isLocalhostBackendUrl } from './backend-url';
 
 const BACKEND_REQUEST_TIMEOUT_MS = 4_000;
 const BACKEND_INVITE_TIMEOUT_MS = 120_000;
@@ -30,12 +30,13 @@ function fetchFailureMessage(error: unknown): string {
 async function fetchBackend(
   path: string,
   init: RequestInit = {},
-  timeoutMs = BACKEND_REQUEST_TIMEOUT_MS
+  timeoutMs = BACKEND_REQUEST_TIMEOUT_MS,
+  baseUrl = getBackendUrl()
 ): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(`${getBackendUrl()}${path}`, {
+    return await fetch(`${baseUrl}${path}`, {
       ...init,
       signal: controller.signal,
     });
@@ -65,6 +66,7 @@ async function postBackendWithManagerAuth<T extends { error?: string }>(
     body?: Record<string, unknown>;
     timeoutMs?: number;
     retried?: boolean;
+    baseUrl?: string;
   } = {}
 ): Promise<{ response: Response; data: T; accessToken: string } | { error: string }> {
   if (!isBackendReachableInBrowser()) {
@@ -75,6 +77,8 @@ async function postBackendWithManagerAuth<T extends { error?: string }>(
   if (!token) {
     return { error: 'Session expired. Log out and log back in, then try again.' };
   }
+
+  const baseUrl = options.baseUrl ?? getBackendUrl();
 
   try {
     const response = await fetchBackend(
@@ -87,7 +91,8 @@ async function postBackendWithManagerAuth<T extends { error?: string }>(
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
       },
-      options.timeoutMs ?? BACKEND_REQUEST_TIMEOUT_MS
+      options.timeoutMs ?? BACKEND_REQUEST_TIMEOUT_MS,
+      baseUrl
     );
 
     const data = await readBackendJson<T>(response);
@@ -249,7 +254,7 @@ async function finalizeParticipantInvites(params: {
   const result = await postBackendWithManagerAuth<{ success?: boolean }>(
     `/api/tournaments/${params.tournamentId}/finalize-participant-invites`,
     params.accessToken,
-    { timeoutMs: BACKEND_REQUEST_TIMEOUT_MS }
+    { timeoutMs: BACKEND_REQUEST_TIMEOUT_MS, baseUrl: getInviteBackendUrl() }
   );
 
   if ('error' in result) {
@@ -339,6 +344,7 @@ export async function sendParticipantInvite(params: {
     {
       body: { resend: params.resend === true },
       timeoutMs: BACKEND_INVITE_TIMEOUT_MS,
+      baseUrl: getInviteBackendUrl(),
     }
   );
 

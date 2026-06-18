@@ -353,6 +353,34 @@ async function sendParticipantInvite(tournamentId, playerId, { resend = false } 
   };
 }
 
+async function finalizeParticipantInvites(tournamentId) {
+  const now = new Date().toISOString();
+
+  const teamsResult = await adminFetch(
+    `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,player_ids`
+  );
+  const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
+
+  await adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}`, {
+    method: 'PATCH',
+    body: { participant_invites_sent_at: now },
+  });
+
+  for (const team of teams) {
+    if ((team.player_ids?.length ?? 0) > 0) {
+      await adminFetch(`/rest/v1/tournament_teams?id=eq.${team.id}`, {
+        method: 'PATCH',
+        body: {
+          roster_status: 'ready',
+          onboard_email_sent_at: now,
+        },
+      });
+    }
+  }
+
+  return { success: true, status: 200 };
+}
+
 async function sendAllParticipantInvites(tournamentId) {
   const playersResult = await adminFetch(
     `/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`
@@ -387,26 +415,9 @@ async function sendAllParticipantInvites(tournamentId) {
     }
   }
 
-  const teamsResult = await adminFetch(
-    `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,player_ids`
-  );
-  const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
-
-  await adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}`, {
-    method: 'PATCH',
-    body: { participant_invites_sent_at: now },
-  });
-
-  for (const team of teams) {
-    if ((team.player_ids?.length ?? 0) > 0) {
-      await adminFetch(`/rest/v1/tournament_teams?id=eq.${team.id}`, {
-        method: 'PATCH',
-        body: {
-          roster_status: 'ready',
-          onboard_email_sent_at: now,
-        },
-      });
-    }
+  const finalizeResult = await finalizeParticipantInvites(tournamentId);
+  if (finalizeResult.error) {
+    return finalizeResult;
   }
 
   return {
@@ -420,4 +431,4 @@ async function sendAllParticipantInvites(tournamentId) {
   };
 }
 
-module.exports = { sendParticipantInvite, sendAllParticipantInvites };
+module.exports = { sendParticipantInvite, sendAllParticipantInvites, finalizeParticipantInvites };

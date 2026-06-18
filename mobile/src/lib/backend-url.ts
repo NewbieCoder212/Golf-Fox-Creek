@@ -70,3 +70,14 @@ export function isBackendReachableInBrowser(): boolean {
   if (!isProductionWebHost()) return true;
   return !isLocalhostBackendUrl();
 }
+
+/**
+ * Tournament invite emails run on the same foxcreek.golf /api routes in production
+ * (fast, fixed path). Other admin calls may still use the Hono backend URL.
+ */
+export function getInviteBackendUrl(): string {
+  if (typeof window !== 'undefined' && isProductionWebHost()) {
+    return window.location.origin;
+  }
+  return getBackendUrl();
+}

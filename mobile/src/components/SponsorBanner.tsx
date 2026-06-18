@@ -84,7 +84,7 @@ interface SponsorBannerProps {
   displayPosition?: AdDisplayPosition;
   className?: string;
   compact?: boolean;
-  variant?: 'default' | 'footer' | 'card' | 'strip' | 'mini-card' | 'auto';
+  variant?: 'default' | 'footer' | 'card' | 'strip' | 'mini-card' | 'square' | 'auto';
 }
 
 function normalizeActionUrl(url: string): string {
@@ -163,7 +163,7 @@ function SponsorAdCard({
   ad: AdPlacement;
   className?: string;
   compact?: boolean;
-  variant?: 'default' | 'footer' | 'card' | 'strip' | 'mini-card' | 'auto';
+  variant?: 'default' | 'footer' | 'card' | 'strip' | 'mini-card' | 'square' | 'auto';
   animateEntry?: boolean;
 }) {
   const layout = getAdImageLayout(ad);
@@ -228,6 +228,33 @@ function SponsorAdCard({
               <ChevronRight size={18} color="#a3e635" strokeWidth={2} />
             </View>
           ) : null}
+        </Pressable>
+      </EntryShell>
+    );
+  }
+
+  if (variant === 'square') {
+    return (
+      <EntryShell {...entryProps} className={cn('items-center', className)}>
+        <Pressable
+          onPress={hasAction ? handlePress : undefined}
+          disabled={!hasAction}
+          className={cn(cardShell, 'w-full max-w-[320px]')}
+        >
+          <View className="bg-white w-full px-4 pt-3 pb-4">
+            <Text className="text-[10px] font-body-semibold uppercase tracking-[0.18em] text-neutral-400 mb-2">
+              Sponsored
+            </Text>
+            <View className="w-full aspect-square items-center justify-center">
+              <Image
+                source={{ uri: ad.image_url }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="contain"
+                onError={() => setImageFailed(true)}
+              />
+            </View>
+          </View>
+          <SponsorAdFooterStrip ad={ad} hasAction={hasAction} compact />
         </Pressable>
       </EntryShell>
     );
@@ -412,8 +439,11 @@ export function SponsorBanner({
 
   const pool = adsProp ?? fetchedAds;
   const rotationEnabled = rotationSettings?.enabled ?? false;
-  const adsToShow =
-    rotationEnabled && !adProp && !adsProp ? pool : pool.slice(0, 1);
+  const adsToShow = adProp
+    ? [adProp]
+    : rotationEnabled
+      ? pool
+      : pool.slice(0, 1);
 
   const resolveVariant = (ad: AdPlacement) => {
     if (variant !== 'auto') {

@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 import { useScorecardStore } from '@/lib/scorecard-store';
 import { SponsorBanner } from '@/components/SponsorBanner';
+import { ScorecardHeaderAdBanner } from '@/components/ScorecardHeaderAdBanner';
 import { getTurnMessaging, getDefaultTurnMessagingSettings } from '@/lib/supabase';
 import { CasualDirectResultScorecard } from '@/components/CasualDirectResultScorecard';
 import { ScorecardAssistPanel } from '@/components/ScorecardAssistPanel';
@@ -775,7 +776,7 @@ export default function ScorecardScreen() {
         }
       >
         <View className="mx-4 mt-4">
-          <SponsorBanner placementType="scorecard_header" variant="auto" />
+          <ScorecardHeaderAdBanner />
         </View>
 
         {isTournamentMode && tournamentSession.hasMatchPlay && tournamentSession.format ? (

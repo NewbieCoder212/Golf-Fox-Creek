@@ -250,7 +250,7 @@ export async function deleteAdPlacementAuth(
 }
 
 export const PLACEMENT_TYPE_LABELS: Record<AdPlacementType, string> = {
-  scorecard_header: 'Scorecard Header (top strip)',
+  scorecard_header: 'Scorecard Header (banner or square)',
   hole_sponsor: 'Match Hole Ad #1 (score entry)',
   hole_sponsor_secondary: 'Match Hole Ad #2 (score entry)',
   the_turn: 'The Turn (mid-round F&B)',
@@ -282,7 +282,46 @@ export function isBannerLayout(ad: Pick<AdPlacement, 'image_layout'>): boolean {
   return getAdImageLayout(ad) === 'banner';
 }
 
-/** Event header/tab ads: prefer compact banner strips; never mix layouts in one rotator. */
+function scorecardHeaderPreviewConfig(imageLayout: AdImageLayout): AdPreviewConfig {
+  if (isBannerLayout({ image_layout: imageLayout })) {
+    return {
+      screenLabel: 'Scorecard tab',
+      locationHint: 'Compact strip at the top of the scorecard',
+      variant: 'strip',
+    };
+  }
+
+  return {
+    screenLabel: 'Scorecard tab',
+    locationHint: 'Square sponsor card at the top of the scorecard',
+    variant: 'square',
+  };
+}
+
+/** Scorecard header: banner → strip, square → centered square card; never mix layouts in one rotator. */
+export function pickScorecardHeaderAds(ads: AdPlacement[]): {
+  ads: AdPlacement[];
+  variant: 'strip' | 'square';
+} {
+  const bannerAds = ads.filter(isBannerLayout);
+  if (bannerAds.length > 0) {
+    return { ads: bannerAds, variant: 'strip' };
+  }
+
+  const squareAds = ads.filter((ad) => getAdImageLayout(ad) === 'square');
+  if (squareAds.length > 0) {
+    return { ads: squareAds, variant: 'square' };
+  }
+
+  const cardAds = ads.filter((ad) => !isBannerLayout(ad));
+  if (cardAds.length > 0) {
+    return { ads: cardAds, variant: 'square' };
+  }
+
+  return { ads: [], variant: 'strip' };
+}
+
+/** Event header/tab ads: banner → strip, square/portrait → mini-card; never mix layouts in one rotator. */
 export function pickTournamentEventHeaderAds(ads: AdPlacement[]): {
   ads: AdPlacement[];
   variant: 'strip' | 'mini-card';
@@ -330,7 +369,7 @@ function tournamentEventPreviewConfig(
       };
 }
 
-export type AdPreviewVariant = 'default' | 'footer' | 'card' | 'strip' | 'mini-card';
+export type AdPreviewVariant = 'default' | 'footer' | 'card' | 'strip' | 'mini-card' | 'square';
 
 export type AdPreviewConfig = {
   screenLabel: string;
@@ -376,11 +415,7 @@ export function getAdPreviewConfig(
   }
 
   if (placementType === 'scorecard_header') {
-    return {
-      screenLabel: 'Scorecard tab',
-      locationHint: 'Compact strip at the top of the scorecard',
-      variant: 'strip',
-    };
+    return scorecardHeaderPreviewConfig(imageLayout);
   }
 
   if (placementType === 'hole_sponsor' || placementType === 'hole_sponsor_secondary') {
@@ -504,11 +539,12 @@ export const AD_PLACEMENT_GUIDES: Record<AdPlacementType, AdPlacementGuide> = {
   scorecard_header: {
     summary: 'Top of the Scorecard tab while members are scoring.',
     tips: [
-      'Always shows as a compact strip — use a wide logo (Banner layout).',
-      'Avoid portrait flyers here; they will not display full size.',
+      'Banner = compact strip; Square = centered sponsor card (~320px).',
+      'Only one layout type rotates at a time — do not mix Banner and Square ads.',
+      'Square works well for logos and promos that do not fit a wide banner.',
     ],
-    recommendedLayout: 'banner',
-    imageSizeHint: 'Wide banner ~800×200px with simple logo + short tagline.',
+    recommendedLayout: 'square',
+    imageSizeHint: 'Banner: wide logo ~800×200px. Square: ~800×800px social-style graphic.',
   },
   hole_sponsor: {
     summary: 'Shown while entering match scores — one ad per hole (pick hole 1–18).',
@@ -562,16 +598,21 @@ export function getAdLayoutRecommendation(
 ): AdLayoutRecommendation {
   const guide = AD_PLACEMENT_GUIDES[placementType];
 
-  if (
-    (placementType === 'scorecard_header' ||
-      isHoleSponsorPlacement(placementType)) &&
-    imageLayout !== 'banner'
-  ) {
+  if (isHoleSponsorPlacement(placementType) && imageLayout !== 'banner') {
     return {
       ok: false,
       message:
         'This placement uses a compact strip or banner. Portrait flyers will look small — use Banner layout, or choose Member Hub / Event for flyers.',
       suggestLayout: 'banner',
+    };
+  }
+
+  if (placementType === 'scorecard_header' && imageLayout === 'portrait') {
+    return {
+      ok: false,
+      message:
+        'Portrait flyers are cramped in the scorecard header — use Square or Banner layout instead.',
+      suggestLayout: 'square',
     };
   }
 
@@ -629,6 +670,7 @@ export function resolvePreviewPlacement(
 const VARIANT_MIN_HEIGHT: Record<AdPreviewVariant, number> = {
   strip: 96,
   'mini-card': 340,
+  square: 360,
   footer: 176,
   card: 400,
   default: 160,

@@ -2,7 +2,7 @@ import { View, Text, ScrollView } from 'react-native';
 
 import type { MatchGridCell, MatchGridModel, MatchGridRow } from '@/lib/tournament-match-grid';
 import { TOURNAMENT_MATCH_HOLES } from '@/lib/tournament-match-scoring';
-import { getHoleWinnerBgClass } from '@/lib/match-play-theme';
+import { getHoleWinnerBgClass, SIDE_A_COLOR, SIDE_B_COLOR } from '@/lib/match-play-theme';
 import { cn } from '@/lib/cn';
 
 const GRID_SIZES = {
@@ -143,6 +143,8 @@ export function TournamentMatchGridCard({
   const hasPoints = model.matchPointsA > 0 || model.matchPointsB > 0;
   const gridWidth = TOURNAMENT_MATCH_HOLES.length * sizes.holeWidth;
   const showLive = highlight || model.inProgress;
+  const isComplete = model.playStatus === 'complete';
+  const isScheduled = model.playStatus === 'not_started';
 
   return (
     <View
@@ -156,15 +158,28 @@ export function TournamentMatchGridCard({
       <View className={cn('border-b border-neutral-800', isCompact ? 'px-2 py-1.5' : 'px-4 py-3')}>
         <View className="flex-row items-start justify-between">
           <View className="flex-1 mr-2">
-            <Text
-              className={cn(
-                'text-white font-semibold',
-                variant === 'tv' ? 'text-lg' : isCompact ? 'text-xs' : 'text-sm'
-              )}
-              numberOfLines={1}
-            >
-              Tee {model.teeTimeLabel} · {model.sideAName} vs {model.sideBName}
-            </Text>
+            {isCompact ? (
+              <View>
+                <Text className="text-neutral-500 text-[10px] font-medium">
+                  Tee {model.teeTimeLabel}
+                </Text>
+                <Text className="text-sm font-semibold mt-0.5 leading-5" numberOfLines={2}>
+                  <Text style={{ color: SIDE_A_COLOR }}>{model.sideAName}</Text>
+                  <Text className="text-neutral-500"> vs </Text>
+                  <Text style={{ color: SIDE_B_COLOR }}>{model.sideBName}</Text>
+                </Text>
+              </View>
+            ) : (
+              <Text
+                className={cn(
+                  'text-white font-semibold',
+                  variant === 'tv' ? 'text-lg' : 'text-sm'
+                )}
+                numberOfLines={1}
+              >
+                Tee {model.teeTimeLabel} · {model.sideAName} vs {model.sideBName}
+              </Text>
+            )}
             {hasPoints && !isCompact ? (
               <Text
                 className={cn(
@@ -175,7 +190,18 @@ export function TournamentMatchGridCard({
                 Match pts {model.matchPointsA}–{model.matchPointsB}
               </Text>
             ) : null}
-            {model.inProgress && model.throughHole > 0 && !isCompact ? (
+            {model.resultSummary ? (
+              <Text
+                className={cn(
+                  'font-semibold mt-0.5',
+                  isComplete ? 'text-neutral-200' : 'text-neutral-400',
+                  variant === 'tv' ? 'text-sm' : isCompact ? 'text-[10px]' : 'text-xs'
+                )}
+                numberOfLines={1}
+              >
+                {model.resultSummary}
+              </Text>
+            ) : model.inProgress && model.throughHole > 0 && !isCompact ? (
               <Text
                 className={cn(
                   'text-neutral-500 mt-0.5',
@@ -191,6 +217,18 @@ export function TournamentMatchGridCard({
               <View className="w-1.5 h-1.5 rounded-full bg-lime-400 mr-1" />
               <Text className="text-lime-400 text-[9px] font-bold uppercase tracking-wider">
                 Live
+              </Text>
+            </View>
+          ) : isComplete ? (
+            <View className="rounded-full px-2 py-0.5 border bg-neutral-900 border-neutral-700">
+              <Text className="text-neutral-300 text-[9px] font-bold uppercase tracking-wider">
+                {model.statusLabel}
+              </Text>
+            </View>
+          ) : isScheduled ? (
+            <View className="rounded-full px-2 py-0.5 border bg-neutral-900 border-neutral-700">
+              <Text className="text-neutral-500 text-[9px] font-bold uppercase tracking-wider">
+                {model.statusLabel}
               </Text>
             </View>
           ) : null}

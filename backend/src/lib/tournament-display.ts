@@ -49,6 +49,7 @@ export interface DisplayTeamRow {
   tournament_id: string;
   team_name: string;
   side: string | null;
+  logo_url: string | null;
 }
 
 export interface DisplayPlayerRow {
@@ -137,6 +138,7 @@ type TeamRow = {
   tournament_id: string;
   team_name: string;
   side: string | null;
+  logo_url?: string | null;
 };
 
 type PlayerRow = {
@@ -334,6 +336,7 @@ export function buildTournamentDisplayPayload(params: {
       tournament_id: team.tournament_id,
       team_name: team.team_name,
       side: team.side,
+      logo_url: team.logo_url ?? null,
     })),
     players: players.map((player) => ({
       id: player.id,

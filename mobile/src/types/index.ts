@@ -175,7 +175,7 @@ export interface TournamentDisplayPayload {
     | 'rounds_count'
     | 'match_use_net_scoring'
   >;
-  teams: Pick<TournamentTeam, 'id' | 'tournament_id' | 'team_name' | 'side'>[];
+  teams: Pick<TournamentTeam, 'id' | 'tournament_id' | 'team_name' | 'side' | 'logo_url'>[];
   players: Pick<TournamentPlayer, 'id' | 'tournament_id' | 'display_name'>[];
   matchGroups: TournamentMatchGroup[];
   scores: TournamentScore[];

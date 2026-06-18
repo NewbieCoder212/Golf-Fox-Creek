@@ -10,10 +10,6 @@ export function buildTournamentTvDisplayUrl(tournamentId: string, displayToken: 
   return `${WEB_APP_URL}/display/tournament/${tournamentId}?${params.toString()}`;
 }
 
-export function buildTournamentMobileUrl(tournamentId: string): string {
-  return `${WEB_APP_URL}/tournaments/${tournamentId}`;
-}
-
 export async function fetchTournamentDisplay(
   tournamentId: string,
   token: string
@@ -29,8 +25,4 @@ export async function fetchTournamentDisplay(
   }
 
   return response.json() as Promise<TournamentDisplayPayload>;
-}
-
-export function buildQrCodeUrl(targetUrl: string, size = 180): string {
-  return `https://quickchart.io/qr?size=${size}&margin=1&text=${encodeURIComponent(targetUrl)}`;
 }

@@ -44,7 +44,7 @@ displayRouter.get('/tournament/:id', async (c) => {
     'id,tournament_id,round_number,format,side_a_team_id,side_b_team_id,side_a_player_ids,side_b_player_ids,tee_time,starting_hole,group_number,notes,match_winner,match_points_a,match_points_b,created_at';
 
   const [teams, players, scores, matchGroups, fullMatchGroups, ads] = await Promise.all([
-    fetchRows(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_name,side`),
+    fetchRows(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_name,side,logo_url`),
     fetchRows(`/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,tournament_id,display_name`),
     fetchRows(
       `/rest/v1/tournament_scores?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_id,tournament_player_id,user_id,match_group_id,round_number,hole_scores,total_gross,total_net,created_at&order=round_number.asc`

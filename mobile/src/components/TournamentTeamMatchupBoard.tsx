@@ -22,6 +22,10 @@ interface TournamentTeamMatchupBoardProps {
   compact?: boolean;
   minimal?: boolean;
   hubEmbedded?: boolean;
+  /** Clubhouse TV sidebar — larger logos and readable team names */
+  tvDisplay?: boolean;
+  /** Clubhouse TV hero — full-width focal standings */
+  tvHero?: boolean;
 }
 
 function TeamLogo({
@@ -104,6 +108,8 @@ export function TournamentTeamMatchupBoard({
   compact = false,
   minimal = false,
   hubEmbedded = false,
+  tvDisplay = false,
+  tvHero = false,
 }: TournamentTeamMatchupBoardProps) {
   const sideA = getTeamBySide(teams, 'side_a');
   const sideB = getTeamBySide(teams, 'side_b');
@@ -120,7 +126,10 @@ export function TournamentTeamMatchupBoard({
     );
   }
 
-  const logoSize = hubEmbedded ? 88 : minimal ? 40 : compact ? 56 : 72;
+  const isTvFeatured = tvHero || tvDisplay;
+  const logoSize = hubEmbedded ? 88 : tvHero ? 80 : tvDisplay ? 52 : minimal ? 40 : compact ? 56 : 72;
+  const showMinimalChrome = minimal && !isTvFeatured;
+  const logoProminent = hubEmbedded || tvHero;
   const statA = sideA ? findStat(teamStats, sideA.id) : undefined;
   const statB = sideB ? findStat(teamStats, sideB.id) : undefined;
 
@@ -140,7 +149,10 @@ export function TournamentTeamMatchupBoard({
 
     return (
       <View
-        className="flex-1 items-center justify-center px-2"
+        className={cn(
+          'flex-1 items-center justify-center',
+          tvHero ? 'px-4 py-4' : tvDisplay ? 'px-1.5 py-3' : 'px-2'
+        )}
         style={{
           backgroundColor: theme.panelBg,
           borderColor: isLeading ? theme.ringBorder : theme.panelBorder,
@@ -149,19 +161,25 @@ export function TournamentTeamMatchupBoard({
       >
         {team ? (
           <>
-            <TeamLogo uri={team.logo_url} size={logoSize} side={side} prominent={hubEmbedded} />
+            <TeamLogo uri={team.logo_url} size={logoSize} side={side} prominent={logoProminent} />
             <Text
+              style={isTvFeatured ? { color: theme.colorLight } : undefined}
               className={cn(
-                'font-display font-bold text-center text-white',
+                'font-display font-bold text-center',
+                !isTvFeatured && 'text-white',
                 hubEmbedded
                   ? 'text-xl mt-3 leading-7'
-                  : minimal
-                    ? 'text-xs mt-2'
-                    : compact
-                      ? 'text-base mt-2.5'
-                      : 'text-lg mt-3 leading-6'
+                  : tvHero
+                    ? 'text-xl mt-3 leading-7 px-1'
+                    : tvDisplay
+                      ? 'text-sm mt-2 leading-5 px-0.5'
+                      : showMinimalChrome
+                        ? 'text-xs mt-2'
+                        : compact
+                          ? 'text-base mt-2.5'
+                          : 'text-lg mt-3 leading-6'
               )}
-              numberOfLines={2}
+              numberOfLines={tvHero ? 2 : tvDisplay ? 3 : 2}
             >
               {displayName}
             </Text>
@@ -170,7 +188,7 @@ export function TournamentTeamMatchupBoard({
                 style={{ color: theme.color }}
                 className={cn(
                   'font-display font-bold mt-1.5',
-                  hubEmbedded ? 'text-4xl' : minimal ? 'text-xl' : 'text-3xl'
+                  hubEmbedded ? 'text-4xl' : tvHero ? 'text-5xl' : tvDisplay ? 'text-2xl' : showMinimalChrome ? 'text-xl' : 'text-3xl'
                 )}
               >
                 {stat.matchPoints}
@@ -180,13 +198,13 @@ export function TournamentTeamMatchupBoard({
                 style={{ color: theme.color }}
                 className={cn(
                   'font-display font-bold mt-1.5',
-                  hubEmbedded ? 'text-4xl' : minimal ? 'text-xl' : 'text-3xl'
+                  hubEmbedded ? 'text-4xl' : tvHero ? 'text-5xl' : tvDisplay ? 'text-2xl' : showMinimalChrome ? 'text-xl' : 'text-3xl'
                 )}
               >
                 {stat.holesWon}
               </Text>
             ) : null}
-            {stat?.matchesWon != null && !minimal ? (
+            {stat?.matchesWon != null && !showMinimalChrome ? (
               <Text style={{ color: theme.colorLight }} className="text-[10px] font-body mt-1 opacity-80">
                 {stat.matchesWon} match win{stat.matchesWon !== 1 ? 's' : ''}
               </Text>
@@ -216,7 +234,7 @@ export function TournamentTeamMatchupBoard({
         className
       )}
     >
-      {subtitle && !minimal ? (
+      {subtitle && !showMinimalChrome ? (
         <View className="px-4 py-2 border-b border-neutral-800 bg-[#111]">
           <Text className="text-neutral-500 text-[10px] uppercase tracking-widest font-body-semibold text-center">
             {subtitle}
@@ -225,25 +243,28 @@ export function TournamentTeamMatchupBoard({
       ) : null}
 
       <View
-        className={cn('flex-row items-stretch', hubEmbedded ? 'min-h-[200px]' : minimal ? '' : '')}
+        className={cn(
+          'flex-row items-stretch',
+          hubEmbedded || tvHero ? 'min-h-[220px]' : tvDisplay ? 'min-h-[168px]' : showMinimalChrome ? '' : ''
+        )}
       >
         {renderTeamPanel(sideA, 'side_a', statA, aLeading)}
 
         <View
           className={cn(
             'items-center justify-center bg-[#141414] border-x border-neutral-800',
-            minimal ? 'px-1.5 py-3' : 'px-2 py-4'
+            showMinimalChrome ? 'px-1.5 py-3' : tvHero ? 'px-2 py-5' : tvDisplay ? 'px-1 py-3' : 'px-2 py-4'
           )}
         >
           <View
             className={cn(
               'rounded-full bg-neutral-900 border border-neutral-700 items-center justify-center',
-              minimal ? 'w-7 h-7' : 'w-9 h-9'
+              showMinimalChrome ? 'w-7 h-7' : tvHero ? 'w-10 h-10' : tvDisplay ? 'w-8 h-8' : 'w-9 h-9'
             )}
           >
-            <Swords size={minimal ? 12 : 16} color="#a3a3a3" strokeWidth={1.5} />
+            <Swords size={showMinimalChrome ? 12 : tvHero ? 18 : tvDisplay ? 14 : 16} color="#a3a3a3" strokeWidth={1.5} />
           </View>
-          {!minimal ? (
+          {!showMinimalChrome ? (
             <Text className="text-neutral-600 text-[9px] font-body-bold mt-1 tracking-widest">VS</Text>
           ) : null}
         </View>
@@ -251,7 +272,7 @@ export function TournamentTeamMatchupBoard({
         {renderTeamPanel(sideB, 'side_b', statB, bLeading)}
       </View>
 
-      {!minimal && statA?.matchPoints != null && statB?.matchPoints != null ? (
+      {!showMinimalChrome && statA?.matchPoints != null && statB?.matchPoints != null ? (
         <View className="flex-row h-1">
           <View
             style={{

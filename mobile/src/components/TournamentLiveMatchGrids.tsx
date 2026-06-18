@@ -22,6 +22,8 @@ interface TournamentLiveMatchGridsProps {
   roundNumber?: number;
   hideTitle?: boolean;
   layout?: 'stack' | 'tv-row' | 'tv-carousel';
+  /** TV hero layout — only show in-progress matches, no finished rotation */
+  liveOnly?: boolean;
 }
 
 const TV_CAROUSEL_INTERVAL_MS = 12_000;
@@ -32,7 +34,7 @@ const TV_MIN_CARD_WIDTH = 300;
 type TvCarouselPhase = 'live' | 'finished' | 'all';
 
 function isFinishedMatch(model: MatchGridModel): boolean {
-  return !model.inProgress && model.throughHole > 0;
+  return model.playStatus === 'complete';
 }
 
 function chunkMatches<T>(items: T[], size: number): T[][] {
@@ -49,17 +51,19 @@ function TvMatchCarousel({
   variant,
   cardsPerPage,
   prioritizeLive = true,
+  liveOnly = false,
 }: {
   matches: MatchGridModel[];
   variant: MatchGridCardVariant;
   cardsPerPage: number;
   prioritizeLive?: boolean;
+  liveOnly?: boolean;
 }) {
   const liveMatches = useMemo(() => matches.filter((model) => model.inProgress), [matches]);
   const finishedMatches = useMemo(() => matches.filter(isFinishedMatch), [matches]);
   const hasLive = liveMatches.length > 0;
   const hasFinished = finishedMatches.length > 0;
-  const alternatesPhases = prioritizeLive && hasLive && hasFinished;
+  const alternatesPhases = !liveOnly && prioritizeLive && hasLive && hasFinished;
 
   const [phase, setPhase] = useState<TvCarouselPhase>(() =>
     hasLive && prioritizeLive ? 'live' : 'all'
@@ -67,6 +71,10 @@ function TvMatchCarousel({
   const [pageIndex, setPageIndex] = useState(0);
 
   useEffect(() => {
+    if (liveOnly) {
+      setPhase('live');
+      return;
+    }
     if (!prioritizeLive || !hasLive) {
       setPhase('all');
       return;
@@ -76,20 +84,27 @@ function TvMatchCarousel({
       if (current === 'finished' && !hasFinished) return 'live';
       return current;
     });
-  }, [prioritizeLive, hasLive, hasFinished]);
+  }, [liveOnly, prioritizeLive, hasLive, hasFinished]);
 
-  const activePhase: TvCarouselPhase =
-    !prioritizeLive || !hasLive ? 'all' : alternatesPhases ? phase : 'live';
+  const activePhase: TvCarouselPhase = liveOnly
+    ? 'live'
+    : !prioritizeLive || !hasLive
+      ? 'all'
+      : alternatesPhases
+        ? phase
+        : 'live';
 
-  const carouselMatches =
-    activePhase === 'live'
+  const carouselMatches = liveOnly
+    ? liveMatches
+    : activePhase === 'live'
       ? liveMatches
       : activePhase === 'finished'
         ? finishedMatches
         : matches;
 
-  const effectiveCardsPerPage =
-    activePhase === 'live'
+  const effectiveCardsPerPage = liveOnly
+    ? cardsPerPage
+    : activePhase === 'live'
       ? Math.min(2, cardsPerPage)
       : activePhase === 'finished'
         ? Math.min(3, cardsPerPage)
@@ -135,21 +150,51 @@ function TvMatchCarousel({
   const cardVariant: MatchGridCardVariant =
     effectiveCardsPerPage <= 2 && variant === 'tv-compact' ? 'tv' : variant;
 
-  const sectionTitle =
-    activePhase === 'live'
+  const sectionTitle = liveOnly
+    ? 'Live on the course'
+    : activePhase === 'live'
       ? 'Live on the course'
       : activePhase === 'finished'
         ? 'Completed matches'
         : "Today's matches";
 
-  const statusLine =
-    activePhase === 'live'
+  const statusLine = liveOnly
+    ? hasLive
+      ? `${liveMatches.length} match${liveMatches.length !== 1 ? 'es' : ''} in progress`
+      : 'No matches on the course right now'
+    : activePhase === 'live'
       ? `${liveMatches.length} in progress${hasFinished ? ` · ${finishedMatches.length} done` : ''}`
       : activePhase === 'finished'
         ? `${finishedMatches.length} final${finishedMatches.length !== 1 ? 's' : ''} · slow pass`
         : `${matches.length} tee time${matches.length !== 1 ? 's' : ''}`;
 
-  const showLiveBadge = activePhase === 'live';
+  const showLiveBadge = liveOnly ? hasLive : activePhase === 'live';
+
+  if (liveOnly && !hasLive) {
+    return (
+      <View className="flex-1 min-h-0 justify-center">
+        <View className="flex-row items-center justify-between mb-2 px-0.5">
+          <View className="flex-1 mr-2">
+            <Text className="text-neutral-500 text-[10px] uppercase tracking-widest">
+              {sectionTitle}
+            </Text>
+            <Text className="text-neutral-600 text-xs mt-1">{statusLine}</Text>
+          </View>
+        </View>
+        <View className="flex-1 items-center justify-center bg-[#141414] rounded-xl border border-neutral-800 border-dashed">
+          <Text className="text-neutral-500 text-sm">Check back when tee times are on the course</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (carouselMatches.length === 0) {
+    return (
+      <View className="flex-1 min-h-0 items-center justify-center bg-[#141414] rounded-xl border border-neutral-800">
+        <Text className="text-neutral-500 text-sm">No matches for this round yet</Text>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 min-h-0">
@@ -224,6 +269,7 @@ export function TournamentLiveMatchGrids({
   roundNumber,
   hideTitle = false,
   layout = 'stack',
+  liveOnly = false,
 }: TournamentLiveMatchGridsProps) {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
@@ -263,12 +309,13 @@ export function TournamentLiveMatchGrids({
 
   const tvCardsPerPage = useMemo(() => {
     if (!isTvCarousel) return 1;
-    const standingsWidth = 260;
     const padding = 32;
-    const sponsorWidth = isLandscape ? 172 : 0;
-    const mainWidth = Math.max(480, width - standingsWidth - padding - sponsorWidth);
-    return Math.max(2, Math.min(4, Math.floor(mainWidth / TV_MIN_CARD_WIDTH)));
-  }, [isTvCarousel, width, isLandscape]);
+    const sidebarWidth = liveOnly ? 0 : 260 + (isLandscape ? 172 : 0);
+    const minCardWidth = liveOnly ? 280 : TV_MIN_CARD_WIDTH;
+    const mainWidth = Math.max(480, width - sidebarWidth - padding);
+    const maxCards = liveOnly ? 5 : 4;
+    return Math.max(2, Math.min(maxCards, Math.floor(mainWidth / minCardWidth)));
+  }, [isTvCarousel, width, isLandscape, liveOnly]);
 
   if (filteredGroups.length === 0) {
     return (
@@ -293,7 +340,8 @@ export function TournamentLiveMatchGrids({
         matches={matches}
         variant={variant}
         cardsPerPage={tvCardsPerPage}
-        prioritizeLive
+        prioritizeLive={!liveOnly}
+        liveOnly={liveOnly}
       />
     );
   }

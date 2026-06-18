@@ -20,6 +20,12 @@ import {
   TOURNAMENT_MATCH_HOLES,
 } from './tournament-match-scoring';
 import {
+  formatMatchPlayStatusLabel,
+  formatMatchResultSummary,
+  resolveMatchGroupPlayStatus,
+  type MatchPlayStatus,
+} from './tournament-match-play-status';
+import {
   computeLiveMatchStatus,
   computeMatchLeadFromResults,
   formatMatchLead,
@@ -60,6 +66,9 @@ export interface MatchGridModel {
   matchPointsB: number;
   throughHole: number;
   inProgress: boolean;
+  playStatus: MatchPlayStatus;
+  statusLabel: string;
+  resultSummary: string | null;
   rows: MatchGridRow[];
 }
 
@@ -371,11 +380,17 @@ export function buildMatchGridModel(params: {
     );
   }
 
-  const liveStatus = computeLiveMatchStatus({ holeResults: overallHoleResults });
-  const inProgress =
-    liveStatus.throughHole > 0 &&
-    matchGroup.match_winner == null &&
-    !liveStatus.clinched;
+  const liveStatus = computeLiveMatchStatus({
+    holeResults: overallHoleResults,
+    sideAName,
+    sideBName,
+  });
+  const playStatus = resolveMatchGroupPlayStatus(
+    matchGroup,
+    liveStatus,
+    overallHoleResults.length
+  );
+  const inProgress = playStatus === 'in_progress';
 
   return {
     matchGroupId: matchGroup.id,
@@ -389,6 +404,9 @@ export function buildMatchGridModel(params: {
     matchPointsB: matchGroup.match_points_b ?? 0,
     throughHole: liveStatus.throughHole,
     inProgress,
+    playStatus,
+    statusLabel: formatMatchPlayStatusLabel(playStatus),
+    resultSummary: formatMatchResultSummary(matchGroup, liveStatus, sideAName, sideBName),
     rows,
   };
 }

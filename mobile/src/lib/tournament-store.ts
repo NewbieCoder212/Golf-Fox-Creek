@@ -968,6 +968,9 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
     if (!state.tournamentId || !state.format) {
       return { success: false, error: 'No active tournament session' };
     }
+    if (state.isSyncing) {
+      return { success: false, error: 'Save already in progress' };
+    }
 
     const matchUseNetScoring = options?.matchUseNetScoring ?? false;
     const isSingles = state.format === 'singles' || state.format === 'match_play';

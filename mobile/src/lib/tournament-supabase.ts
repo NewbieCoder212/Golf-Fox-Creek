@@ -3,7 +3,7 @@
  * Uses member/admin JWT when available; does not silently fall back to anon on auth errors.
  */
 
-import { refreshStoredAuthSession } from './admin-auth-bridge';
+import { isAccessTokenExpired, refreshStoredAuthSession } from './admin-auth-bridge';
 import { useAdminAuthStore } from './admin-auth-store';
 import { useMemberAuthStore } from './member-auth-store';
 
@@ -45,6 +45,16 @@ export function getManagerAccessToken(): string | null {
 /** Member JWT for participant scorecard actions (never prefer a stale admin session). */
 export function getMemberAccessToken(): string | null {
   return useMemberAuthStore.getState().accessToken;
+}
+
+/** Refresh the member session when the access token is missing or near expiry. */
+export async function ensureFreshMemberAccessToken(): Promise<string | null> {
+  const { accessToken } = useMemberAuthStore.getState();
+  if (accessToken && !isAccessTokenExpired(accessToken)) {
+    return accessToken;
+  }
+
+  return refreshStoredAuthSession();
 }
 
 function resolveTournamentAccessToken(

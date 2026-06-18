@@ -6,9 +6,8 @@ import type {
   TournamentScoreInsert,
 } from '@/types';
 import { getBackendUrl, isBackendReachableInBrowser } from './backend-url';
-import { getMemberAccessToken } from './tournament-supabase';
-import { useMemberAuthStore } from './member-auth-store';
-import { clearTournamentMatchRound, syncMatchHoleResults } from './tournament-match-service';
+import { ensureFreshMemberAccessToken, getMemberAccessToken } from './tournament-supabase';
+import { clearTournamentMatchRound, syncMatchHoleResults, syncMatchHoleResultsDirect } from './tournament-match-service';
 import { allOutcomesToHoleResults } from './match-hole-outcomes';
 import {
   computeMatchHoleResults,
@@ -124,7 +123,7 @@ type DirectResultSyncParams = {
 async function syncTournamentMatchScoresViaSupabase(
   params: MatchScoreSyncParams
 ): Promise<{ success: boolean; error?: string }> {
-  const memberToken = getMemberAccessToken();
+  const memberToken = (await ensureFreshMemberAccessToken()) ?? getMemberAccessToken();
   const writeAuth = memberToken ? { accessToken: memberToken } : {};
 
   const useDirectResult =
@@ -140,7 +139,6 @@ async function syncTournamentMatchScoresViaSupabase(
     });
 
     try {
-      const { syncMatchHoleResultsDirect } = await import('./tournament-match-service');
       await syncMatchHoleResultsDirect({
         matchGroupId: params.matchGroupId,
         roundNumber: params.roundNumber,
@@ -192,14 +190,20 @@ async function clearTournamentMatchScoresViaSupabase(params: {
   return clearTournamentMatchRound(params);
 }
 
+const BACKEND_REQUEST_TIMEOUT_MS = 15_000;
+
 async function postToBackend(
   path: string,
   accessToken: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  options?: { retried?: boolean }
 ): Promise<
   | { ok: true }
   | { ok: false; error: string; retryable: boolean; status: number }
 > {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), BACKEND_REQUEST_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${getBackendUrl()}${path}`, {
       method: 'POST',
@@ -208,11 +212,20 @@ async function postToBackend(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
 
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) {
-      const retryable = response.status >= 500 || response.status === 0;
+      if (response.status === 401 && !options?.retried) {
+        const refreshed = await ensureFreshMemberAccessToken();
+        if (refreshed && refreshed !== accessToken) {
+          return postToBackend(path, refreshed, body, { retried: true });
+        }
+      }
+
+      const retryable =
+        response.status >= 500 || response.status === 0 || response.status === 401;
       return {
         ok: false,
         error: data.error ?? 'Could not save scores',
@@ -222,20 +235,23 @@ async function postToBackend(
     }
 
     return { ok: true };
-  } catch {
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === 'AbortError';
     return {
       ok: false,
-      error: 'Could not reach tournament service',
+      error: timedOut ? 'Tournament service timed out' : 'Could not reach tournament service',
       retryable: true,
       status: 0,
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
 export async function syncTournamentMatchScoresViaBackend(
   params: MatchScoreSyncParams
 ): Promise<{ success: boolean; error?: string }> {
-  const accessToken = useMemberAuthStore.getState().accessToken;
+  const accessToken = await ensureFreshMemberAccessToken();
   if (!accessToken) {
     return { success: false, error: 'Not signed in' };
   }
@@ -273,9 +289,7 @@ export async function syncTournamentMatchScoresViaBackend(
     }
 
     backendError = backendResult.error;
-    if (backendResult.status === 401) {
-      return { success: false, error: backendResult.error };
-    }
+    console.log('[Tournament] Backend sync failed, trying Supabase:', backendError);
   }
 
   const supabaseResult = await syncTournamentMatchScoresViaSupabase(params);
@@ -286,7 +300,7 @@ export async function syncTournamentMatchScoresViaBackend(
   if (backendError && supabaseResult.error) {
     return {
       success: false,
-      error: `${supabaseResult.error} (API: ${backendError})`,
+      error: supabaseResult.error,
     };
   }
 
@@ -310,7 +324,7 @@ export async function declareMatchWinnerOverride(params: {
     matchPoints,
   };
 
-  const accessToken = useMemberAuthStore.getState().accessToken;
+  const accessToken = await ensureFreshMemberAccessToken();
   if (!accessToken) {
     return { success: false, error: 'Not signed in' };
   }
@@ -329,13 +343,10 @@ export async function declareMatchWinnerOverride(params: {
     }
 
     backendError = backendResult.error;
-    if (backendResult.status === 401) {
-      return { success: false, error: backendResult.error };
-    }
+    console.log('[Tournament] Backend declare winner failed, trying Supabase:', backendError);
   }
 
   try {
-    const { syncMatchHoleResultsDirect } = await import('./tournament-match-service');
     await syncMatchHoleResultsDirect({
       matchGroupId: params.matchGroupId,
       roundNumber: params.roundNumber,
@@ -346,9 +357,6 @@ export async function declareMatchWinnerOverride(params: {
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to declare match result';
-    if (backendError) {
-      return { success: false, error: `${message} (API: ${backendError})` };
-    }
     return { success: false, error: message };
   }
 }
@@ -358,7 +366,7 @@ export async function clearTournamentMatchScoresViaBackend(params: {
   matchGroupId: string;
   roundNumber: number;
 }): Promise<{ success: boolean; error?: string }> {
-  const accessToken = useMemberAuthStore.getState().accessToken;
+  const accessToken = await ensureFreshMemberAccessToken();
   if (!accessToken) {
     return { success: false, error: 'Not signed in' };
   }
@@ -374,9 +382,7 @@ export async function clearTournamentMatchScoresViaBackend(params: {
       return { success: true };
     }
 
-    if (backendResult.status === 401) {
-      return { success: false, error: backendResult.error };
-    }
+    console.log('[Tournament] Backend clear failed, trying Supabase:', backendResult.error);
   }
 
   return clearTournamentMatchScoresViaSupabase({

@@ -282,6 +282,24 @@ export function isBannerLayout(ad: Pick<AdPlacement, 'image_layout'>): boolean {
   return getAdImageLayout(ad) === 'banner';
 }
 
+/** Event header/tab ads: prefer compact banner strips; never mix layouts in one rotator. */
+export function pickTournamentEventHeaderAds(ads: AdPlacement[]): {
+  ads: AdPlacement[];
+  variant: 'strip' | 'mini-card';
+} {
+  const bannerAds = ads.filter(isBannerLayout);
+  if (bannerAds.length > 0) {
+    return { ads: bannerAds, variant: 'strip' };
+  }
+
+  const cardAds = ads.filter((ad) => !isBannerLayout(ad));
+  if (cardAds.length > 0) {
+    return { ads: cardAds, variant: 'mini-card' };
+  }
+
+  return { ads: [], variant: 'strip' };
+}
+
 export function isHoleSponsorPlacement(placementType: AdPlacementType | string): boolean {
   return placementType === 'hole_sponsor' || placementType === 'hole_sponsor_secondary';
 }

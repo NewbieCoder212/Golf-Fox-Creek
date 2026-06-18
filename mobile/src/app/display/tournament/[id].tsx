@@ -49,6 +49,7 @@ export default function TournamentTvDisplayScreen() {
   const tournamentPlayers = (data?.players ?? []) as TournamentPlayer[];
   const scores = data?.scores ?? [];
   const matchGroups = data?.matchGroups ?? [];
+  const holeResults = data?.holeResults ?? [];
 
   const teamNameById = useMemo(
     () => Object.fromEntries(teams.map((team) => [team.id, team.team_name])),
@@ -238,6 +239,7 @@ export default function TournamentTvDisplayScreen() {
           <TournamentLiveMatchGrids
             matchGroups={matchGroups}
             scores={scores}
+            holeResults={holeResults}
             teamNameById={teamNameById}
             playerNameById={playerNameById}
             useNetScoring={matchUseNetScoring}

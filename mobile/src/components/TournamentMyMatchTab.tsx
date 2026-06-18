@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
-import { ClipboardList, Swords } from 'lucide-react-native';
+import { ClipboardList, Swords, Trophy } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 
@@ -19,6 +19,12 @@ import {
 } from '@/lib/tournament-scorecard-routing';
 import { formatLabelFromSettings, formatScoringHintFromSettings } from '@/lib/tournament-format-settings';
 import { useTournamentFormatsSettings } from '@/lib/useTournamentFormatsSettings';
+import {
+  getMatchCompletionDetail,
+  useMyMatchTabStatus,
+} from '@/hooks/useMyMatchTabStatus';
+import { getOpponentSide, getMatchWinnerTheme, getTeamSideTheme } from '@/lib/match-play-theme';
+import { resolveMatchWinnerSide } from '@/lib/tournament-match-play-status';
 import type { Tournament, TournamentMatchGroup, TournamentTeam, TournamentTeamSide } from '@/types';
 import { cn } from '@/lib/cn';
 
@@ -31,6 +37,7 @@ interface TournamentMyMatchTabProps {
   rosterPlayerIds: string[];
   playerNameById: Record<string, string>;
   defaultRoundNumber?: number;
+  onViewStandings: () => void;
 }
 
 function formatName(playerId: string | undefined, playerNameById: Record<string, string>): string {
@@ -57,6 +64,7 @@ export function TournamentMyMatchTab({
   rosterPlayerIds,
   playerNameById,
   defaultRoundNumber,
+  onViewStandings,
 }: TournamentMyMatchTabProps) {
   const router = useRouter();
   const [roundNumber, setRoundNumber] = useState(
@@ -132,10 +140,12 @@ export function TournamentMyMatchTab({
           sideAName={sideAName}
           sideBName={sideBName}
           playerNameById={playerNameById}
+          roundNumber={roundNumber}
           roundFormat={roundFormat}
           formatSettings={formatSettings}
           isOpeningScorecard={isOpeningScorecard}
           onEnterScores={handleEnterScores}
+          onViewStandings={onViewStandings}
         />
       )}
     </View>
@@ -150,10 +160,12 @@ interface MyMatchCardProps {
   sideAName: string;
   sideBName: string;
   playerNameById: Record<string, string>;
+  roundNumber: number;
   roundFormat: string;
   formatSettings: ReturnType<typeof useTournamentFormatsSettings>['data'];
   isOpeningScorecard: boolean;
   onEnterScores: () => void;
+  onViewStandings: () => void;
 }
 
 function MyMatchCard({
@@ -164,14 +176,34 @@ function MyMatchCard({
   sideAName,
   sideBName,
   playerNameById,
+  roundNumber,
   roundFormat,
   formatSettings,
   isOpeningScorecard,
   onEnterScores,
+  onViewStandings,
 }: MyMatchCardProps) {
+  const router = useRouter();
   const groupFormat = getMatchGroupFormat(group, tournament);
   const mySideName = viewerSide === 'side_a' ? sideAName : sideBName;
   const oppSideName = viewerSide === 'side_a' ? sideBName : sideAName;
+
+  const { matchStatus, isComplete } = useMyMatchTabStatus({
+    tournament,
+    group,
+    roundNumber,
+    viewerSide,
+    rosterPlayerIds,
+    sideAName,
+    sideBName,
+    playerNameById,
+  });
+
+  const completionDetail = isComplete
+    ? getMatchCompletionDetail(matchStatus, viewerSide, mySideName, oppSideName, group)
+    : null;
+  const winnerSide = isComplete ? resolveMatchWinnerSide(group, matchStatus) : null;
+  const winnerTheme = getMatchWinnerTheme(winnerSide);
   const myPlayerIds =
     viewerSide === 'side_a' ? group.side_a_player_ids : group.side_b_player_ids;
   const oppPlayerIds =
@@ -191,19 +223,87 @@ function MyMatchCard({
   }
 
   const teammates = myPlayerIds.filter((id) => id !== myPlayerId && id);
+  const myTheme = getTeamSideTheme(viewerSide);
+  const oppTheme = getTeamSideTheme(getOpponentSide(viewerSide));
+
+  const renderTeamPanel = (
+    label: string,
+    content: string,
+    theme: ReturnType<typeof getTeamSideTheme>,
+    alignEnd = false
+  ) => (
+    <View
+      className={cn('flex-1 rounded-lg px-3 py-3', alignEnd && 'items-end')}
+      style={{
+        backgroundColor: theme.panelBg,
+        borderWidth: 1,
+        borderColor: theme.panelBorder,
+      }}
+    >
+      <Text
+        style={{ color: theme.colorLight }}
+        className="text-[10px] font-bold uppercase tracking-widest mb-1"
+      >
+        {label}
+      </Text>
+      <Text className="text-white text-sm font-semibold" numberOfLines={2}>
+        {content}
+      </Text>
+    </View>
+  );
 
   return (
-    <View className="bg-[#141414] border border-neutral-800 rounded-xl p-4">
-      <View className="flex-row items-center justify-between mb-3">
-        <View>
-          <Text className="text-lime-400 font-bold text-xl">
+    <View
+      className={cn('bg-[#141414] border rounded-xl p-4', !isComplete && 'border-neutral-800')}
+      style={
+        isComplete
+          ? { borderColor: winnerTheme.panelBorder, borderWidth: 1 }
+          : undefined
+      }
+    >
+      <View className="flex-row items-start justify-between mb-3">
+        <View className="flex-1 pr-3">
+          {isComplete ? (
+            <View
+              className="self-start rounded-full px-3 py-1 mb-2 border"
+              style={{
+                backgroundColor: winnerTheme.ringGlow,
+                borderColor: winnerTheme.ringBorder,
+              }}
+            >
+              <Text
+                style={{ color: winnerTheme.colorLight }}
+                className="text-[10px] font-bold uppercase tracking-widest"
+              >
+                Match Complete
+              </Text>
+            </View>
+          ) : null}
+          <Text
+            className={cn(
+              'font-bold text-xl',
+              isComplete ? 'text-neutral-300' : 'text-lime-400'
+            )}
+          >
             {formatTeeAssignmentTime(group.tee_time)}
           </Text>
           <Text className="text-neutral-500 text-sm mt-0.5">
             Hole {group.starting_hole} · Group {group.group_number}
           </Text>
+          {isComplete ? (
+            <Text
+              style={{ color: winnerTheme.color }}
+              className="text-sm font-semibold mt-2"
+            >
+              {matchStatus.label}
+            </Text>
+          ) : matchStatus.throughHole > 0 ? (
+            <Text className="text-neutral-400 text-sm mt-2">{matchStatus.label}</Text>
+          ) : null}
         </View>
-        <Text className="text-neutral-600 text-xs uppercase tracking-widest">Your match</Text>
+        <Text className="text-neutral-600 text-xs uppercase tracking-widest pt-1">
+          {isComplete ? 'Final' : 'Your match'}
+        </Text>
       </View>
 
       <View className="bg-[#0c0c0c] rounded-lg px-3 py-2.5 border border-neutral-800/80 mb-3">
@@ -220,38 +320,23 @@ function MyMatchCard({
 
       {singlesContent ? (
         <View className="flex-row items-center gap-2 mb-3">
-          <View className="flex-1 bg-[#0c0c0c] rounded-lg px-3 py-3 border border-lime-700/40">
-            <Text className="text-lime-400/80 text-[10px] font-bold uppercase tracking-widest mb-1">
-              You
-            </Text>
-            <Text className="text-white text-sm font-semibold">{singlesContent.myLabel}</Text>
-          </View>
+          {renderTeamPanel('You', singlesContent.myLabel, myTheme)}
           <Text className="text-neutral-500 text-xs font-bold uppercase">vs</Text>
-          <View className="flex-1 bg-[#0c0c0c] rounded-lg px-3 py-3 border border-neutral-800/80">
-            <Text className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest mb-1">
-              Opponent
-            </Text>
-            <Text className="text-neutral-100 text-sm font-semibold">{singlesContent.oppLabel}</Text>
-          </View>
+          {renderTeamPanel('Opponent', singlesContent.oppLabel, oppTheme, true)}
         </View>
       ) : (
-        <View className="flex-row gap-3 mb-3">
-          <View className="flex-1 bg-[#0c0c0c] rounded-lg p-3 border border-lime-700/40">
-            <Text className="text-lime-400/80 text-[10px] font-bold uppercase tracking-widest mb-1.5">
-              {mySideName} (you)
-            </Text>
-            <Text className="text-neutral-200 text-sm font-body" numberOfLines={4}>
-              {myPlayerIds.map((id) => formatName(id, playerNameById)).join(', ')}
-            </Text>
-          </View>
-          <View className="flex-1 bg-[#0c0c0c] rounded-lg p-3 border border-neutral-800/80">
-            <Text className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest mb-1.5">
-              {oppSideName}
-            </Text>
-            <Text className="text-neutral-200 text-sm font-body" numberOfLines={4}>
-              {oppPlayerIds.map((id) => formatName(id, playerNameById)).join(', ')}
-            </Text>
-          </View>
+        <View className="flex-row gap-2 mb-3">
+          {renderTeamPanel(
+            `${mySideName} (you)`,
+            myPlayerIds.map((id) => formatName(id, playerNameById)).join(', '),
+            myTheme
+          )}
+          {renderTeamPanel(
+            oppSideName,
+            oppPlayerIds.map((id) => formatName(id, playerNameById)).join(', '),
+            oppTheme,
+            true
+          )}
         </View>
       )}
 
@@ -261,20 +346,66 @@ function MyMatchCard({
         </Text>
       ) : null}
 
-      <Pressable
-        onPress={onEnterScores}
-        disabled={isOpeningScorecard}
-        className="flex-row items-center justify-center bg-lime-600 rounded-xl py-3.5 active:opacity-80"
-      >
-        {isOpeningScorecard ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <>
-            <ClipboardList size={18} color="#fff" />
-            <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
-          </>
-        )}
-      </Pressable>
+      {isComplete ? (
+        <View
+          className="rounded-xl px-4 py-4 border"
+          style={{
+            backgroundColor: winnerTheme.ringGlow,
+            borderColor: winnerTheme.panelBorder,
+          }}
+        >
+          <View className="flex-row items-center justify-center mb-2">
+            <Trophy size={18} color={winnerTheme.color} />
+            <Text style={{ color: winnerTheme.color }} className="font-bold text-base ml-2">
+              Match finished
+            </Text>
+          </View>
+          <Text style={{ color: winnerTheme.color }} className="font-semibold text-center text-base">
+            {matchStatus.label}
+          </Text>
+          {completionDetail ? (
+            <Text className="text-neutral-400 text-sm text-center mt-2">{completionDetail}</Text>
+          ) : null}
+          <Text className="text-neutral-500 text-xs text-center mt-3">
+            Need to fix a hole? Open the scorecard and tap the hole to update.
+          </Text>
+          <Pressable
+            onPress={onEnterScores}
+            disabled={isOpeningScorecard}
+            className="mt-4 flex-row items-center justify-center bg-lime-600 rounded-xl py-3.5 active:opacity-80"
+          >
+            {isOpeningScorecard ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <ClipboardList size={18} color="#fff" />
+                <Text className="text-white font-bold text-base ml-2">Edit scorecard</Text>
+              </>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={onViewStandings}
+            className="mt-2 flex-row items-center justify-center border border-neutral-700 rounded-xl py-3 active:opacity-80"
+          >
+            <Text className="text-neutral-200 font-semibold text-sm">View standings</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          onPress={onEnterScores}
+          disabled={isOpeningScorecard}
+          className="flex-row items-center justify-center bg-lime-600 rounded-xl py-3.5 active:opacity-80"
+        >
+          {isOpeningScorecard ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <ClipboardList size={18} color="#fff" />
+              <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+            </>
+          )}
+        </Pressable>
+      )}
     </View>
   );
 }

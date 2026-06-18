@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useScorecardStore } from '@/lib/scorecard-store';
 import { SponsorBanner } from '@/components/SponsorBanner';
 import { getTurnMessaging, getDefaultTurnMessagingSettings } from '@/lib/supabase';
-import { FoxCreekPaperScorecard } from '@/components/FoxCreekPaperScorecard';
+import { CasualDirectResultScorecard } from '@/components/CasualDirectResultScorecard';
 import { ScorecardAssistPanel } from '@/components/ScorecardAssistPanel';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { cn } from '@/lib/cn';
@@ -23,7 +23,7 @@ import { scorecardTeeToDbTee } from '@/lib/scorecard-tees';
 import { useTranslations } from '@/lib/language-store';
 import { useTournamentScorecardSession } from '@/hooks/useTournamentScorecardSession';
 import { TournamentScorecardToolbar } from '@/components/TournamentScorecardToolbar';
-import { TournamentMatchHolePanel } from '@/components/TournamentMatchHolePanel';
+import { TournamentDirectResultPanel } from '@/components/TournamentDirectResultPanel';
 import type { TournamentTeamSide } from '@/types';
 
 // Fox Creek Golf Club - Dieppe, NB, Canada
@@ -86,7 +86,6 @@ export default function ScorecardScreen() {
     side?: TournamentTeamSide;
   }>();
   const isTournamentMode = Boolean(tournamentId);
-  const [tournamentViewTab, setTournamentViewTab] = useState<'match' | 'card'>('match');
 
   const { data: turnMessaging = getDefaultTurnMessagingSettings() } = useQuery({
     queryKey: ['turnMessaging'],
@@ -115,6 +114,8 @@ export default function ScorecardScreen() {
   const pendingHoleTransition = useScorecardStore((s) => s.pendingHoleTransition);
   const showResumePrompt = useScorecardStore((s) => s.showResumePrompt);
   const setPlayerName = useScorecardStore((s) => s.setPlayerName);
+  const matchOutcomes = useScorecardStore((s) => s.matchOutcomes);
+  const setMatchOutcome = useScorecardStore((s) => s.setMatchOutcome);
   const setScore = useScorecardStore((s) => s.setScore);
   const setCurrentHole = useScorecardStore((s) => s.setCurrentHole);
   const resetHoleTimer = useScorecardStore((s) => s.resetHoleTimer);
@@ -232,14 +233,14 @@ export default function ScorecardScreen() {
   };
 
   const hasRoundProgress = useMemo(
-    () => isTracking || scores.some((hole) => hole.scores.some((score) => score !== null)),
-    [isTracking, scores]
+    () =>
+      isTracking ||
+      Object.keys(matchOutcomes).length > 0 ||
+      scores.some((hole) => hole.scores.some((score) => score !== null)),
+    [isTracking, matchOutcomes, scores]
   );
 
-  const showCasualPaperScorecard = !isTournamentMode && (hasRoundProgress || showRoundSummary);
-  const showTournamentPaperScorecard =
-    isTournamentMode &&
-    (!tournamentSession.hasMatchPlay || tournamentViewTab === 'card');
+  const showCasualMatchPlay = !isTournamentMode && (hasRoundProgress || showRoundSummary);
 
   // Check for saved round on mount (casual only)
   useEffect(() => {
@@ -711,62 +712,7 @@ export default function ScorecardScreen() {
             onRoundChange={tournamentSession.handleRoundChange}
           />
         ) : null}
-        {isTournamentMode && tournamentSession.hasMatchPlay ? (
-          <>
-            <View className="flex-row mx-4 mb-2 gap-2">
-              {(['match', 'card'] as const).map((tab) => (
-                <Pressable
-                  key={tab}
-                  onPress={() => setTournamentViewTab(tab)}
-                  className={cn(
-                    'flex-1 py-2 rounded-lg border items-center',
-                    tournamentViewTab === tab
-                      ? 'bg-lime-900/30 border-lime-600'
-                      : 'bg-[#141414] border-neutral-800'
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      'text-sm font-semibold capitalize',
-                      tournamentViewTab === tab ? 'text-lime-400' : 'text-neutral-500'
-                    )}
-                  >
-                    {tab === 'match' ? 'Match' : 'Full Card'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            {tournamentViewTab === 'match' && tournamentSession.format ? (
-              <TournamentMatchHolePanel
-                currentHole={tournamentSession.currentHole}
-                currentHolePar={tournamentSession.currentHolePar}
-                sideAName={tournamentSession.sideAName}
-                sideBName={tournamentSession.sideBName}
-                matchStatus={tournamentSession.matchStatus}
-                personalMatchStatus={tournamentSession.personalMatchStatus}
-                viewerSide={tournamentSession.viewerSide}
-                format={tournamentSession.format}
-                isTeamFormat={tournamentSession.isTeamFormat}
-                sideAPlayers={tournamentSession.sideAPlayers}
-                sideBPlayers={tournamentSession.sideBPlayers}
-                sideATeamGross={tournamentSession.sideATeamGross}
-                sideBTeamGross={tournamentSession.sideBTeamGross}
-                currentHoleOutcome={tournamentSession.currentHoleOutcomeLabel}
-                currentHoleWinner={tournamentSession.currentHoleWinner}
-                recentHoleRows={tournamentSession.matchRecentHoleRows}
-                scoringModeLabel={tournamentSession.matchScoringModeLabel}
-                entryStatusLabel={tournamentSession.matchEntryStatusLabel}
-                onSetCurrentHole={tournamentSession.setCurrentHole}
-                onPlayerScoreAdjust={tournamentSession.handleMatchPlayerAdjust}
-                onTeamScoreAdjust={
-                  tournamentSession.isTeamFormat
-                    ? tournamentSession.handleMatchTeamAdjust
-                    : undefined
-                }
-              />
-            ) : null}
-          </>
-        ) : (
+        {isTournamentMode && tournamentSession.hasMatchPlay ? null : (
           <ScorecardAssistPanel {...assistPanelProps} />
         )}
       </View>
@@ -782,35 +728,32 @@ export default function ScorecardScreen() {
           <SponsorBanner placementType="scorecard_header" variant="auto" />
         </View>
 
-        {showCasualPaperScorecard || showTournamentPaperScorecard ? (
-        <Animated.View entering={FadeIn.duration(400)} className="mx-4 mt-4">
-          <FoxCreekPaperScorecard
-            players={isTournamentMode ? tournamentSession.paperPlayers : paperPlayers}
-            scores={isTournamentMode && tournamentSession.isTeamFormat ? {} : isTournamentMode ? tournamentSession.paperScores : paperScores}
-            currentHole={isTournamentMode ? tournamentSession.currentHole : currentHole}
-            onHoleSelect={isTournamentMode ? tournamentSession.setCurrentHole : setCurrentHole}
-            onNameChange={isTournamentMode ? undefined : handlePaperNameChange}
-            onTeeChange={isTournamentMode ? undefined : handlePaperTeeChange}
-            onScoreChange={(playerId, hole, score) => {
-              if (isTournamentMode) {
-                if (score !== null) {
-                  tournamentSession.setPlayerGross(playerId, hole, score);
-                }
-              } else {
-                handlePaperScoreChange(playerId, hole, score);
-              }
-            }}
-            teamMode={isTournamentMode && tournamentSession.isTeamFormat}
-            teamLabel={tournamentSession.teamName ?? 'Team'}
-            teamScores={isTournamentMode ? tournamentSession.teamGrossScores : undefined}
-            onTeamScoreChange={
-              isTournamentMode ? tournamentSession.setTeamGross : undefined
-            }
-            bestBallByHole={
-              isTournamentMode ? tournamentSession.bestBallByHole : undefined
-            }
+        {isTournamentMode && tournamentSession.hasMatchPlay && tournamentSession.format ? (
+          <TournamentDirectResultPanel
+            format={tournamentSession.format}
+            sideAName={tournamentSession.sideAName}
+            sideBName={tournamentSession.sideBName}
+            sideAPlayers={tournamentSession.sideAPlayers}
+            sideBPlayers={tournamentSession.sideBPlayers}
+            currentHole={tournamentSession.currentHole}
+            holeOutcomes={tournamentSession.holeOutcomes}
+            pairingOutcomes={tournamentSession.pairingOutcomes}
+            activePairingIndex={tournamentSession.activePairingIndex}
+            singlesPairings={tournamentSession.singlesPairings}
+            onSetCurrentHole={tournamentSession.setCurrentHole}
+            onSetActivePairingIndex={tournamentSession.setActivePairingIndex}
+            onSetHoleOutcome={tournamentSession.setHoleOutcome}
           />
-        </Animated.View>
+        ) : null}
+
+        {showCasualMatchPlay ? (
+          <CasualDirectResultScorecard
+            players={players}
+            currentHole={currentHole}
+            holeOutcomes={matchOutcomes}
+            onSetCurrentHole={setCurrentHole}
+            onSetOutcome={setMatchOutcome}
+          />
         ) : null}
 
         {!isTournamentMode && !hasRoundProgress && !showRoundSummary ? (
@@ -828,7 +771,7 @@ export default function ScorecardScreen() {
         ) : null}
 
         <View className="mx-4 mt-4">
-          {!(isTournamentMode && tournamentSession.hasMatchPlay && tournamentViewTab === 'match') ? (
+          {!isTournamentMode ? (
             <SponsorBanner
               placementType="hole_sponsor"
               variant="auto"
@@ -897,14 +840,14 @@ export default function ScorecardScreen() {
             <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-3">
               <Text className="text-lime-400 font-semibold text-sm">Match complete</Text>
               <Text className="text-neutral-400 text-xs mt-1">
-                {tournamentSession.matchStatus.label} — standings updated.
+                {tournamentSession.matchStatus.label} — tap any played hole above to fix a mistake.
               </Text>
               <View className="flex-row gap-2 mt-3">
                 <Pressable
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     if (tournamentId) {
-                      router.push(`/tournaments/${tournamentId}` as never);
+                      router.push(`/tournaments/${tournamentId}?tab=standings` as never);
                     }
                   }}
                   className="flex-1 bg-neutral-800 rounded-lg py-2.5 items-center active:opacity-80"

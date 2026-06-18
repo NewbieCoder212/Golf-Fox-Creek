@@ -1043,7 +1043,7 @@ tournamentTeamsRouter.post("/:tournamentId/send-participant-invites", requireMan
         tournamentName: tournament.name,
         tournamentDates,
         teamName: team?.team_name ?? null,
-        teamSideLabel: team?.side === "side_b" ? "Team B" : team?.side === "side_a" ? "Team A" : null,
+        teamSideLabel: null,
         rosterNames,
         tournamentUrl: isPendingMember ? inviteRedirect : tournamentUrl,
         isPendingMember
@@ -1129,7 +1129,7 @@ tournamentTeamsRouter.post("/:tournamentId/teams/:teamId/mark-ready-and-notify",
   }
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const rosterNames = rosterPlayers.map((player) => player.display_name);
-  const teamSideLabel = team.side === "side_b" ? "Team B" : "Team A";
+  const teamSideLabel = null;
   const tournamentDates = formatTournamentDates(tournament.start_date, tournament.end_date);
   let emailed = 0;
   let invitesSent = 0;

@@ -65,10 +65,23 @@ displayRouter.get('/tournament/:id', async (c) => {
   );
 
   let holeResults: { hole_winner: 'side_a' | 'side_b' | 'tie' }[] = [];
+  let fullHoleResults: Array<{
+    id: string;
+    match_group_id: string;
+    round_number: number;
+    hole: number;
+    hole_winner: 'side_a' | 'side_b' | 'tie';
+    pairing_index?: number;
+    side_a_net?: number | null;
+    side_b_net?: number | null;
+  }> = [];
   if (matchGroupIds.length > 0) {
     const ids = matchGroupIds.map((row) => row.id).join(',');
     holeResults = await fetchRows(
       `/rest/v1/tournament_match_hole_results?match_group_id=in.(${ids})&select=hole_winner`
+    );
+    fullHoleResults = await fetchRows(
+      `/rest/v1/tournament_match_hole_results?match_group_id=in.(${ids})&select=id,match_group_id,round_number,hole,hole_winner,pairing_index,side_a_net,side_b_net&order=round_number.asc,hole.asc`
     );
   }
 
@@ -82,6 +95,7 @@ displayRouter.get('/tournament/:id', async (c) => {
     ads: ads as never,
     fullMatchGroups: fullMatchGroups as never,
     fullScores: scores as never,
+    fullHoleResults: fullHoleResults as never,
   });
 
   return c.json(payload);

@@ -90,12 +90,24 @@ export interface DisplayScoreRow {
   created_at: string;
 }
 
+export interface DisplayHoleResultRow {
+  id: string;
+  match_group_id: string;
+  round_number: number;
+  hole: number;
+  hole_winner: 'side_a' | 'side_b' | 'tie';
+  pairing_index?: number;
+  side_a_net?: number | null;
+  side_b_net?: number | null;
+}
+
 export interface TournamentDisplayPayload {
   tournament: DisplayTournamentMeta;
   teams: DisplayTeamRow[];
   players: DisplayPlayerRow[];
   matchGroups: DisplayMatchGroupRow[];
   scores: DisplayScoreRow[];
+  holeResults?: DisplayHoleResultRow[];
   grossStandings: DisplayStandingRow[];
   netStandings: DisplayStandingRow[];
   matchPoints: DisplayMatchPointsRow[];
@@ -297,8 +309,9 @@ export function buildTournamentDisplayPayload(params: {
   ads: AdRow[];
   fullMatchGroups?: DisplayMatchGroupRow[];
   fullScores?: DisplayScoreRow[];
+  fullHoleResults?: DisplayHoleResultRow[];
 }): TournamentDisplayPayload {
-  const { tournament, teams, players, scores, matchGroups, holeResults, ads, fullMatchGroups, fullScores } =
+  const { tournament, teams, players, scores, matchGroups, holeResults, ads, fullMatchGroups, fullScores, fullHoleResults } =
     params;
   const nameByKey = buildNameMap(teams, players);
 
@@ -329,6 +342,7 @@ export function buildTournamentDisplayPayload(params: {
     })),
     matchGroups: fullMatchGroups ?? [],
     scores: fullScores ?? [],
+    holeResults: params.fullHoleResults ?? [],
     grossStandings: buildLeaderboard(scores, nameByKey, 'gross'),
     netStandings: buildLeaderboard(scores, nameByKey, 'net'),
     matchPoints: buildMatchPoints(teams, matchGroups),

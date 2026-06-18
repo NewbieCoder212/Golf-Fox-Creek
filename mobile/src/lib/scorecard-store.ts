@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { HoleScore as TypedHoleScore, TeeName } from '@/types';
+import type { TournamentMatchHoleWinner, TeeName, HoleScore as TypedHoleScore } from '@/types';
+import type { HoleOutcomesMap } from './match-hole-outcomes';
 import { prepareRoundForSubmission } from './handicap';
 import { awardRoundCompletionPoints, saveRound as saveRoundToDb } from './supabase';
 
@@ -34,6 +35,7 @@ interface RoundSummary {
 interface SavedRoundData {
   players: Player[];
   scores: HoleScore[];
+  matchOutcomes?: HoleOutcomesMap;
   currentHole: number;
   holeStartTime: number;
   elapsedSeconds: number;
@@ -47,6 +49,7 @@ interface SavedRoundData {
 interface ScorecardState {
   players: Player[];
   scores: HoleScore[];
+  matchOutcomes: HoleOutcomesMap;
   currentHole: number;
   holeStartTime: number;
   elapsedSeconds: number;
@@ -69,6 +72,7 @@ interface ScorecardState {
   // Actions
   setPlayerName: (playerId: number, name: string) => void;
   setScore: (hole: number, playerId: number, score: number | null) => void;
+  setMatchOutcome: (hole: number, winner: TournamentMatchHoleWinner) => void;
   setCurrentHole: (hole: number) => void;
   resetHoleTimer: () => void;
   updateElapsedTime: () => void;
@@ -158,6 +162,8 @@ const createInitialScores = (): HoleScore[] => {
 
 function savedDataHasProgress(parsed: SavedRoundData): boolean {
   if (parsed.isTracking || parsed.isTurnPaused) return true;
+  const hasMatchOutcomes = Object.keys(parsed.matchOutcomes ?? {}).length > 0;
+  if (hasMatchOutcomes) return true;
   const hasScores = parsed.scores.some((hole) => hole.scores.some((score) => score !== null));
   if (hasScores) return true;
   const namesChanged = parsed.players.some(
@@ -169,6 +175,7 @@ function savedDataHasProgress(parsed: SavedRoundData): boolean {
 export const useScorecardStore = create<ScorecardState>((set, get) => ({
   players: DEFAULT_PLAYERS,
   scores: createInitialScores(),
+  matchOutcomes: {},
   currentHole: 1,
   holeStartTime: Date.now(),
   elapsedSeconds: 0,
@@ -214,6 +221,14 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
       ),
     }));
     // Auto-save after score entry
+    get().saveRound();
+  },
+
+  setMatchOutcome: (hole, winner) => {
+    set((state) => ({
+      matchOutcomes: { ...state.matchOutcomes, [hole]: winner },
+      currentHole: Math.min(18, Math.max(state.currentHole, hole + 1)),
+    }));
     get().saveRound();
   },
 
@@ -445,6 +460,7 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
       const {
         players,
         scores,
+        matchOutcomes,
         currentHole,
         holeStartTime,
         elapsedSeconds,
@@ -457,6 +473,7 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
       const dataToSave: SavedRoundData = {
         players,
         scores,
+        matchOutcomes,
         currentHole,
         holeStartTime,
         elapsedSeconds,
@@ -475,8 +492,9 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
   },
 
   hasRoundProgress: () => {
-    const { scores, isTracking, isTurnPaused, players } = get();
+    const { scores, matchOutcomes, isTracking, isTurnPaused, players } = get();
     if (isTracking || isTurnPaused) return true;
+    if (Object.keys(matchOutcomes).length > 0) return true;
     const hasScores = scores.some((hole) => hole.scores.some((score) => score !== null));
     if (hasScores) return true;
     return players.some((p, i) => p.name !== DEFAULT_PLAYERS[i]?.name);
@@ -544,6 +562,7 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
         set({
           players: parsed.players,
           scores: parsed.scores,
+          matchOutcomes: parsed.matchOutcomes ?? {},
           currentHole: parsed.currentHole,
           holeStartTime: adjustedHoleStartTime,
           elapsedSeconds: parsed.elapsedSeconds + timeSinceSave,
@@ -577,6 +596,7 @@ export const useScorecardStore = create<ScorecardState>((set, get) => ({
     set({
       players: DEFAULT_PLAYERS,
       scores: createInitialScores(),
+      matchOutcomes: {},
       currentHole: 1,
       holeStartTime: Date.now(),
       elapsedSeconds: 0,

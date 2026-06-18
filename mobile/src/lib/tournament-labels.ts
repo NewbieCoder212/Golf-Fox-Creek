@@ -156,7 +156,17 @@ export function getTeamSideDisplayName(
   teams: Array<{ side: TournamentTeamSide | null; team_name: string }>
 ): string {
   const team = teams.find((entry) => entry.side === side);
-  return team?.team_name ?? (side === 'side_a' ? 'Team A' : 'Team B');
+  const name = team?.team_name?.trim();
+  return name || 'TBD';
+}
+
+export function getTeamNameById(
+  teamId: string | null | undefined,
+  teams: Array<{ id: string; team_name: string }>
+): string {
+  if (!teamId) return 'TBD';
+  const name = teams.find((entry) => entry.id === teamId)?.team_name?.trim();
+  return name || 'TBD';
 }
 
 export { flattenRoundFormats };

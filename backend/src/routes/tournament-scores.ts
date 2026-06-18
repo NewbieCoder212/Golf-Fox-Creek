@@ -32,8 +32,8 @@ tournamentScoresRouter.post('/:tournamentId/match-groups/:matchGroupId/sync', re
     };
   };
 
-  if (!body.roundNumber || !Array.isArray(body.scores) || !body.matchPoints) {
-    return c.json({ error: 'roundNumber, scores, and matchPoints are required' }, 400);
+  if (!body.roundNumber || !Array.isArray(body.scores)) {
+    return c.json({ error: 'roundNumber and scores array are required' }, 400);
   }
 
   const result = await syncTournamentMatchScores({

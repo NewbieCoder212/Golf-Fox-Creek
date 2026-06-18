@@ -89,8 +89,14 @@ export function scheduleHasSinglesRound(schedule: TournamentDaySchedule[]): bool
   );
 }
 
+/** Generation Cup default: Fri best ball, Sat AM scramble, Sat PM singles */
+export const RYDER_CUP_DEFAULT_SCHEDULE: TournamentDaySchedule[] = [
+  { formats: ['best_ball'] },
+  { formats: ['scramble', 'singles'] },
+];
+
 export function createDefaultSchedule(): TournamentDaySchedule[] {
-  return [{ formats: ['scramble'] }];
+  return RYDER_CUP_DEFAULT_SCHEDULE;
 }
 
 export function buildSchedulePayload(schedule: TournamentDaySchedule[]) {

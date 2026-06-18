@@ -179,6 +179,7 @@ export interface TournamentDisplayPayload {
   players: Pick<TournamentPlayer, 'id' | 'tournament_id' | 'display_name'>[];
   matchGroups: TournamentMatchGroup[];
   scores: TournamentScore[];
+  holeResults?: TournamentMatchHoleResult[];
   grossStandings: DisplayStandingRow[];
   netStandings: DisplayStandingRow[];
   matchPoints: DisplayMatchPointsRow[];
@@ -715,9 +716,10 @@ export interface TournamentMatchHoleResult {
   match_group_id: string;
   round_number: number;
   hole: number;
-  side_a_net: number;
-  side_b_net: number;
+  side_a_net: number | null;
+  side_b_net: number | null;
   hole_winner: TournamentMatchHoleWinner;
+  pairing_index?: number;
 }
 
 export interface TournamentTeeAssignment {

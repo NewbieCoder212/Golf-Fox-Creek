@@ -15,6 +15,8 @@ export interface MatchStatus {
   holesPlayed: number;
   /** Match clinched (lead > holes remaining) */
   clinched: boolean;
+  /** Dormie: lead equals holes remaining (e.g. 2 UP with 2 to play) */
+  dormie: boolean;
   /** Holes remaining after last played hole */
   holesRemaining: number;
   /** Last hole included in calculation */
@@ -43,7 +45,7 @@ export function formatMatchStatusLabel(
   sideAName?: string,
   sideBName?: string
 ): string {
-  if (lead === 0) return 'AS';
+  if (lead === 0) return 'ALL SQUARE';
 
   const clinched = Math.abs(lead) > holesRemaining;
   if (clinched) {
@@ -51,9 +53,25 @@ export function formatMatchStatusLabel(
     const margin = holesRemaining;
     const winner =
       lead > 0
-        ? sideAName ?? 'Side A'
-        : sideBName ?? 'Side B';
-    return `${abs} & ${margin} · ${winner}`;
+        ? sideAName ?? 'TBD'
+        : sideBName ?? 'TBD';
+    return `${winner} ${abs} & ${margin}`;
+  }
+
+  const dormie = Math.abs(lead) === holesRemaining && holesRemaining > 0;
+  const leaderName =
+    lead > 0 ? sideAName ?? 'TBD' : sideBName ?? 'TBD';
+  const abs = Math.abs(lead);
+
+  if (dormie) {
+    return `${leaderName} ${abs} UP · DORMIE`;
+  }
+
+  if (perspectiveSide === 'side_a' && lead > 0) {
+    return `${leaderName} ${abs} UP`;
+  }
+  if (perspectiveSide === 'side_b' && lead < 0) {
+    return `${leaderName} ${abs} UP`;
   }
 
   return formatMatchLead(lead, perspectiveSide);
@@ -96,6 +114,8 @@ export function computeLiveMatchStatus(params: {
     sorted.length > 0 ? Math.max(...sorted.map((row) => row.hole)) : 0;
   const holesRemaining = Math.max(0, totalHoles - lastPlayedHole);
   const clinched = lead !== 0 && Math.abs(lead) > holesRemaining;
+  const dormie =
+    !clinched && lead !== 0 && Math.abs(lead) === holesRemaining && holesRemaining > 0;
 
   const label = formatMatchStatusLabel(
     lead,
@@ -111,9 +131,27 @@ export function computeLiveMatchStatus(params: {
     lead,
     holesPlayed: relevant.filter((r) => r.hole_winner !== 'tie').length,
     clinched,
+    dormie,
     holesRemaining,
     throughHole: lastPlayedHole,
   };
+}
+
+/** First hole after which match is clinched (remaining holes locked). */
+export function getClinchThroughHole(status: MatchStatus, totalHoles: number = 18): number | null {
+  if (!status.clinched) return null;
+  return status.throughHole;
+}
+
+export function isHoleLocked(
+  hole: number,
+  status: MatchStatus,
+  totalHoles: number = 18
+): boolean {
+  if (!status.clinched) return false;
+  const clinchHole = getClinchThroughHole(status, totalHoles);
+  if (clinchHole == null) return false;
+  return hole > clinchHole;
 }
 
 export type HoleOutcome = 'win' | 'loss' | 'halved' | 'pending';

@@ -5,9 +5,9 @@ import { Medal, Radio } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
-import { SponsorBanner } from '@/components/SponsorBanner';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import { TournamentRoundMatchList } from '@/components/TournamentRoundMatchList';
 import {
   buildMatchPointsLeaderboard,
   buildTournamentLeaderboard,
@@ -29,7 +29,6 @@ interface TournamentLiveStandingsPanelProps {
   tournamentId: string;
   displayToken?: string | null;
   showTvLink?: boolean;
-  showSponsorBanner?: boolean;
   compact?: boolean;
 }
 
@@ -37,7 +36,6 @@ export function TournamentLiveStandingsPanel({
   tournamentId,
   displayToken,
   showTvLink = false,
-  showSponsorBanner = false,
   compact = false,
 }: TournamentLiveStandingsPanelProps) {
   const [leaderboardMode, setLeaderboardMode] = useState<'gross' | 'net'>('net');
@@ -131,16 +129,10 @@ export function TournamentLiveStandingsPanel({
             displayToken={displayToken}
             compact
           />
+          <Text className="text-neutral-600 text-[10px] text-center mt-2 px-2">
+            Clubhouse TV — live scores and full leaderboard for the big screen.
+          </Text>
         </View>
-      ) : null}
-
-      {showSponsorBanner ? (
-        <SponsorBanner
-          placementType="leaderboard"
-          displayPosition="footer"
-          className="mb-2"
-          compact
-        />
       ) : null}
 
       {matchGroupsError ? (
@@ -176,6 +168,17 @@ export function TournamentLiveStandingsPanel({
           </Text>
         </View>
       )}
+
+      {tournament ? (
+        <TournamentRoundMatchList
+          tournament={tournament}
+          teams={teams}
+          matchGroups={matchGroups}
+          playerNameById={playerNameById}
+          compact={compact}
+          className="mb-3"
+        />
+      ) : null}
 
       {!compact ? (
         <>

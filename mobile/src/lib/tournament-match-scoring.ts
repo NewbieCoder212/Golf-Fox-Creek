@@ -557,3 +557,48 @@ export function computeMatchPoints(params: {
   const wins = countMatchHoleWinsFromResults(holeResults);
   return pointsFromWinTally(wins.side_a, wins.side_b);
 }
+
+/** Compute cup points from direct hole_winner results (no strokes). */
+export function computeMatchPointsFromHoleResults(params: {
+  matchGroup: TournamentMatchGroup;
+  format: TournamentFormat;
+  holeResults: Array<Pick<TournamentMatchHoleResult, 'hole' | 'hole_winner' | 'pairing_index'>>;
+}): {
+  match_winner: TournamentTeamSide | 'tie';
+  match_points_a: number;
+  match_points_b: number;
+} {
+  const { matchGroup, format, holeResults } = params;
+
+  if (isSinglesFormat(format)) {
+    const pairCount = Math.min(
+      matchGroup.side_a_player_ids.length,
+      matchGroup.side_b_player_ids.length
+    );
+
+    let totalA = 0;
+    let totalB = 0;
+
+    for (let i = 0; i < pairCount; i++) {
+      const pairingRows = holeResults.filter((r) => (r.pairing_index ?? 0) === i);
+      const wins = countMatchHoleWinsFromResults(
+        pairingRows as TournamentMatchHoleResult[]
+      );
+      const pairPoints = pointsFromWinTally(wins.side_a, wins.side_b);
+      totalA += pairPoints.match_points_a;
+      totalB += pairPoints.match_points_b;
+    }
+
+    if (totalA > totalB) {
+      return { match_winner: 'side_a', match_points_a: totalA, match_points_b: totalB };
+    }
+    if (totalB > totalA) {
+      return { match_winner: 'side_b', match_points_a: totalA, match_points_b: totalB };
+    }
+    return { match_winner: 'tie', match_points_a: totalA, match_points_b: totalB };
+  }
+
+  const teamRows = holeResults.filter((r) => (r.pairing_index ?? 0) === 0);
+  const wins = countMatchHoleWinsFromResults(teamRows as TournamentMatchHoleResult[]);
+  return pointsFromWinTally(wins.side_a, wins.side_b);
+}

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { Trophy, ChevronRight } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -5,15 +6,17 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import { TournamentRoundMatchList } from '@/components/TournamentRoundMatchList';
 import {
   buildMatchPointsLeaderboard,
   getTournamentById,
   getTournamentTeams,
 } from '@/lib/tournament-service';
 import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
+import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
+import { getMembersForChallenge } from '@/lib/social-service';
 import { formatTournamentDates } from '@/lib/tournament-labels';
 import { cn } from '@/lib/cn';
-import { useTranslations } from '@/lib/language-store';
 
 interface TournamentLeaderboardCardProps {
   tournamentId: string;
@@ -27,7 +30,6 @@ export function TournamentLeaderboardCard({
   hubEmbedded = false,
 }: TournamentLeaderboardCardProps) {
   const router = useRouter();
-  const t = useTranslations();
 
   const { data: tournament, isPending: tournamentPending, isError: tournamentError } = useQuery({
     queryKey: ['tournament', tournamentId],
@@ -46,6 +48,23 @@ export function TournamentLeaderboardCard({
     { refetchInterval: hubEmbedded ? 30_000 : 15_000 }
   );
 
+  const { data: tournamentPlayers = [] } = useQuery({
+    queryKey: ['tournamentPlayers', tournamentId],
+    queryFn: () => getTournamentPlayers(tournamentId),
+    enabled: Boolean(tournamentId) && hubEmbedded,
+  });
+
+  const { data: members = [] } = useQuery({
+    queryKey: ['membersForTeam'],
+    queryFn: getMembersForChallenge,
+    enabled: hubEmbedded,
+  });
+
+  const playerNameById = useMemo(
+    () => buildTournamentPlayerMaps(tournamentPlayers, members).nameById,
+    [tournamentPlayers, members]
+  );
+
   const standings = buildMatchPointsLeaderboard(teams, matchGroups);
   const teamStats = standings.map((row) => ({
     teamId: row.teamId,
@@ -57,10 +76,10 @@ export function TournamentLeaderboardCard({
   const openTournament = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (hubEmbedded) {
-      router.push(`/tournaments/${tournamentId}?tab=teams`);
+      router.push(`/tournaments/${tournamentId}?tab=standings`);
       return;
     }
-    router.push(`/tournaments/${tournamentId}`);
+    router.push(`/tournaments/${tournamentId}?tab=standings`);
   };
 
   if (isLoading) {
@@ -85,7 +104,7 @@ export function TournamentLeaderboardCard({
     <Pressable
       onPress={openTournament}
       className={cn(
-        'bg-[#141414] rounded-2xl border border-lime-700/30 overflow-hidden active:opacity-90'
+        'bg-[#141414] rounded-2xl border border-neutral-800 overflow-hidden active:opacity-90'
       )}
     >
       {!hubEmbedded ? (
@@ -122,6 +141,16 @@ export function TournamentLeaderboardCard({
           hubEmbedded={hubEmbedded}
           className="border-0 bg-transparent"
         />
+        {hubEmbedded && tournament ? (
+          <TournamentRoundMatchList
+            tournament={tournament}
+            teams={teams}
+            matchGroups={matchGroups}
+            playerNameById={playerNameById}
+            compact
+            className="mt-3 pt-3 border-t border-neutral-800/60"
+          />
+        ) : null}
         {standings.length === 0 ? (
           <Text
             className={cn(
@@ -134,7 +163,7 @@ export function TournamentLeaderboardCard({
         ) : null}
         {hubEmbedded ? (
           <View className="flex-row items-center justify-center mt-2 pt-2 border-t border-neutral-800/60">
-            <Text className="text-lime-400 text-xs font-semibold">{t.viewTeams}</Text>
+            <Text className="text-lime-400 text-xs font-semibold">View full standings</Text>
             <ChevronRight size={14} color="#a3e635" style={{ marginLeft: 2 }} />
           </View>
         ) : null}

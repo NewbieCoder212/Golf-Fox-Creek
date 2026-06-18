@@ -1,4 +1,5 @@
 import { View, Text, Pressable, Image, Platform, Linking, Alert } from 'react-native';
+import { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useQuery } from '@tanstack/react-query';
@@ -62,6 +63,7 @@ export function useAdPlacement(
       }),
     enabled: isAdPlacementServiceConfigured(),
     staleTime: 1000 * 60 * 5,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -156,14 +158,24 @@ function SponsorAdCard({
   className,
   compact = false,
   variant = 'default',
+  animateEntry = true,
 }: {
   ad: AdPlacement;
   className?: string;
   compact?: boolean;
   variant?: 'default' | 'footer' | 'card' | 'strip' | 'mini-card' | 'auto';
+  animateEntry?: boolean;
 }) {
   const layout = getAdImageLayout(ad);
   const hasAction = Boolean(ad.action_url?.trim());
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (imageFailed) {
+    return null;
+  }
+
+  const EntryShell = animateEntry ? Animated.View : View;
+  const entryProps = animateEntry ? { entering: FadeInDown.duration(400) } : {};
 
   const handlePress = () => {
     if (!ad.action_url?.trim()) return;
@@ -180,7 +192,7 @@ function SponsorAdCard({
     const thumb = getStripThumbStyle(layout);
 
     return (
-      <Animated.View entering={FadeInDown.duration(400)} className={className}>
+      <EntryShell {...entryProps} className={className}>
         <Pressable
           onPress={hasAction ? handlePress : undefined}
           disabled={!hasAction}
@@ -197,6 +209,7 @@ function SponsorAdCard({
               source={{ uri: ad.image_url }}
               style={{ width: thumb.imageWidth, height: thumb.imageHeight }}
               resizeMode="contain"
+              onError={() => setImageFailed(true)}
             />
           </View>
           <View className="flex-1 min-w-0 self-center">
@@ -216,7 +229,7 @@ function SponsorAdCard({
             </View>
           ) : null}
         </Pressable>
-      </Animated.View>
+      </EntryShell>
     );
   }
 
@@ -226,7 +239,7 @@ function SponsorAdCard({
       layout === 'square' ? maxImageHeight : Math.round(maxImageHeight * PORTRAIT_IMAGE_ASPECT);
 
     return (
-      <Animated.View entering={FadeInDown.duration(400)} className={className}>
+      <EntryShell {...entryProps} className={className}>
         <Pressable
           onPress={hasAction ? handlePress : undefined}
           disabled={!hasAction}
@@ -240,11 +253,12 @@ function SponsorAdCard({
               source={{ uri: ad.image_url }}
               style={{ width: imageWidth, height: maxImageHeight }}
               resizeMode="contain"
+              onError={() => setImageFailed(true)}
             />
           </View>
           <SponsorAdFooterStrip ad={ad} hasAction={hasAction} />
         </Pressable>
-      </Animated.View>
+      </EntryShell>
     );
   }
 
@@ -252,7 +266,7 @@ function SponsorAdCard({
     const imageAspect = layout === 'square' ? SQUARE_IMAGE_ASPECT : PORTRAIT_IMAGE_ASPECT;
 
     return (
-      <Animated.View entering={FadeInDown.duration(400)} className={className}>
+      <EntryShell {...entryProps} className={className}>
         <Pressable
           onPress={hasAction ? handlePress : undefined}
           disabled={!hasAction}
@@ -266,11 +280,12 @@ function SponsorAdCard({
               source={{ uri: ad.image_url }}
               style={{ width: '100%', aspectRatio: imageAspect }}
               resizeMode="contain"
+              onError={() => setImageFailed(true)}
             />
           </View>
           <SponsorAdFooterStrip ad={ad} hasAction={hasAction} />
         </Pressable>
-      </Animated.View>
+      </EntryShell>
     );
   }
 
@@ -280,7 +295,7 @@ function SponsorAdCard({
     const sponsoredMargin = compact ? 'mb-1.5' : 'mb-3';
 
     return (
-      <Animated.View entering={FadeInDown.duration(400)} className={className}>
+      <EntryShell {...entryProps} className={className}>
         <Pressable
           onPress={hasAction ? handlePress : undefined}
           disabled={!hasAction}
@@ -299,11 +314,12 @@ function SponsorAdCard({
               source={{ uri: ad.image_url }}
               style={{ width: '100%', height: imageHeight, maxWidth: compact ? 240 : 280 }}
               resizeMode="contain"
+              onError={() => setImageFailed(true)}
             />
           </View>
           <SponsorAdFooterStrip ad={ad} hasAction={hasAction} compact={compact} />
         </Pressable>
-      </Animated.View>
+      </EntryShell>
     );
   }
 
@@ -312,10 +328,7 @@ function SponsorAdCard({
   const logoHeight = imageHeight - imagePadding * 2;
 
   return (
-    <Animated.View
-      entering={FadeInDown.duration(400)}
-      className={cn('overflow-hidden', className)}
-    >
+    <EntryShell {...entryProps} className={cn('overflow-hidden', className)}>
       <Pressable
         onPress={hasAction ? handlePress : undefined}
         disabled={!hasAction}
@@ -332,6 +345,7 @@ function SponsorAdCard({
             source={{ uri: ad.image_url }}
             style={{ width: '100%', height: logoHeight, maxHeight: logoHeight }}
             resizeMode="contain"
+            onError={() => setImageFailed(true)}
           />
         </View>
 
@@ -379,7 +393,7 @@ function SponsorAdCard({
           ) : null}
         </View>
       </Pressable>
-    </Animated.View>
+    </EntryShell>
   );
 }
 
@@ -463,6 +477,7 @@ export function SponsorBanner({
             ad={ad}
             compact={display.compact ?? compact}
             variant={display.variant}
+            animateEntry={false}
           />
         );
       }}

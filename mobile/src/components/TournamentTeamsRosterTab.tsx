@@ -40,6 +40,7 @@ import {
   resolveTeamParticipants,
 } from '@/lib/tournament-participant-utils';
 import { getTeamSideDisplayName, tournamentNeedsTeams } from '@/lib/tournament-labels';
+import { getTeamSideTheme } from '@/lib/match-play-theme';
 import { updateTournamentTeam } from '@/lib/tournament-service';
 import { requireData } from '@/lib/tournament-supabase';
 import type { Tournament, TournamentPlayer, TournamentTeam, TournamentTeamSide } from '@/types';
@@ -50,12 +51,20 @@ const modalInputClassName =
   'bg-[#0c0c0c] border border-neutral-800 rounded-xl px-4 py-3 text-white text-base';
 const modalInputStyle = { color: '#ffffff' };
 
+function resolveTeamSide(team: TournamentTeam, teams: TournamentTeam[]): TournamentTeamSide {
+  if (team.side === 'side_a' || team.side === 'side_b') return team.side;
+  if (getTeamBySide(teams, 'side_a')?.id === team.id) return 'side_a';
+  return 'side_b';
+}
+
 function HeroTeamPlayerList({
   playerIds,
   playerNameById,
+  accentColor,
 }: {
   playerIds: string[];
   playerNameById: Record<string, string>;
+  accentColor: string;
 }) {
   const playerCount = playerIds.length;
   const useTwoColumns = playerCount >= 4;
@@ -71,7 +80,7 @@ function HeroTeamPlayerList({
         paddingVertical: 3,
         paddingHorizontal: 2,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(38, 38, 38, 0.9)',
+        borderBottomColor: `${accentColor}33`,
       }}
     >
       <Text
@@ -136,13 +145,11 @@ function HeroTeamPanel({
       ? members.find((member) => member.id === team.captain_user_id)?.full_name ?? null
       : null;
   const canManageRoster = canManageTeamRoster(team, { isManager, userId });
-  const sideLabel = getTeamSideDisplayName(team.side ?? 'side_a', teams);
-  const isSideA = (team.side ?? 'side_a') === 'side_a';
+  const theme = getTeamSideTheme(resolveTeamSide(team, teams));
 
   return (
     <View
       style={{
-        width: '50%',
         flex: 1,
         minWidth: 0,
         paddingHorizontal: 4,
@@ -152,28 +159,39 @@ function HeroTeamPanel({
         style={{
           flex: 1,
           borderWidth: 2,
-          borderColor: isSideA ? 'rgba(132, 204, 22, 0.45)' : 'rgba(82, 82, 82, 0.9)',
+          borderColor: theme.panelBorder,
           borderRadius: 16,
           overflow: 'hidden',
-          backgroundColor: '#141414',
+          backgroundColor: '#0a0a0a',
         }}
       >
         <View
           style={{
             paddingHorizontal: 10,
             paddingVertical: 12,
-            borderBottomWidth: 1,
-            borderBottomColor: isSideA ? 'rgba(132, 204, 22, 0.25)' : 'rgba(64, 64, 64, 0.9)',
-            backgroundColor: isSideA ? 'rgba(26, 46, 5, 0.55)' : 'rgba(23, 23, 23, 0.9)',
+            borderBottomWidth: 2,
+            borderBottomColor: theme.color,
+            backgroundColor: theme.panelBg,
             alignItems: 'center',
           }}
         >
           {team.logo_url ? (
-            <Image
-              source={{ uri: team.logo_url }}
-              style={{ width: 48, height: 48, borderRadius: 24, marginBottom: 6 }}
-              resizeMode="cover"
-            />
+            <View
+              style={{
+                padding: 3,
+                borderRadius: 27,
+                borderWidth: 2,
+                borderColor: theme.ringBorder,
+                backgroundColor: theme.ringGlow,
+                marginBottom: 6,
+              }}
+            >
+              <Image
+                source={{ uri: team.logo_url }}
+                style={{ width: 48, height: 48, borderRadius: 24 }}
+                resizeMode="cover"
+              />
+            </View>
           ) : (
             <View
               style={{
@@ -182,43 +200,42 @@ function HeroTeamPanel({
                 borderRadius: 24,
                 marginBottom: 6,
                 borderWidth: 2,
-                borderColor: isSideA ? 'rgba(132, 204, 22, 0.5)' : 'rgba(82, 82, 82, 0.9)',
-                backgroundColor: isSideA ? 'rgba(26, 46, 5, 0.6)' : '#262626',
+                borderColor: theme.ringBorder,
+                backgroundColor: theme.ringGlow,
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Text style={{ color: '#a3e635', fontSize: 22, fontWeight: '700' }}>
+              <Text style={{ color: theme.colorLight, fontSize: 22, fontWeight: '700' }}>
                 {team.team_name.charAt(0).toUpperCase()}
               </Text>
             </View>
           )}
           <Text
             style={{
-              color: 'rgba(163, 230, 53, 0.85)',
-              fontSize: 10,
+              color: theme.color,
+              fontSize: 20,
               fontWeight: '700',
-              letterSpacing: 1.2,
-              textTransform: 'uppercase',
+              marginTop: 4,
+              textAlign: 'center',
             }}
-          >
-            {sideLabel}
-          </Text>
-          <Text
-            style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 2, textAlign: 'center' }}
             numberOfLines={2}
           >
             {team.team_name}
           </Text>
           {captainName ? (
-            <Text style={{ color: '#737373', fontSize: 11, marginTop: 4 }} numberOfLines={1}>
+            <Text style={{ color: theme.colorLight, fontSize: 11, marginTop: 4, opacity: 0.85 }} numberOfLines={1}>
               Capt. {captainName}
             </Text>
           ) : null}
         </View>
 
         <View style={{ flex: 1, paddingHorizontal: 4, paddingVertical: 4, minHeight: 0 }}>
-          <HeroTeamPlayerList playerIds={team.player_ids} playerNameById={playerNameById} />
+          <HeroTeamPlayerList
+            playerIds={team.player_ids}
+            playerNameById={playerNameById}
+            accentColor={theme.color}
+          />
         </View>
 
         {canManageRoster ? (
@@ -230,12 +247,12 @@ function HeroTeamPanel({
               justifyContent: 'center',
               paddingVertical: 10,
               borderTopWidth: 1,
-              borderTopColor: isSideA ? 'rgba(132, 204, 22, 0.25)' : 'rgba(64, 64, 64, 0.9)',
-              backgroundColor: isSideA ? 'rgba(26, 46, 5, 0.35)' : 'rgba(23, 23, 23, 0.7)',
+              borderTopColor: theme.panelBorder,
+              backgroundColor: theme.ringGlow,
             }}
           >
-            <UserPlus size={14} color="#a3e635" />
-            <Text style={{ color: '#a3e635', fontSize: 12, fontWeight: '600', marginLeft: 6 }}>
+            <UserPlus size={14} color={theme.color} />
+            <Text style={{ color: theme.color, fontSize: 12, fontWeight: '600', marginLeft: 6 }}>
               {isManager ? 'Manage' : 'Roster'}
             </Text>
           </Pressable>
@@ -509,6 +526,9 @@ export function TournamentTeamsRosterTab({
   const activeEditingTeam = editingTeam
     ? teams.find((team) => team.id === editingTeam.id) ?? editingTeam
     : null;
+  const myCaptainTheme = myCaptainTeam
+    ? getTeamSideTheme(resolveTeamSide(myCaptainTeam, teams))
+    : null;
   const editingTeamRoster = activeEditingTeam
     ? resolveRosterEntries(activeEditingTeam.player_ids, tournamentPlayers, members)
     : [];
@@ -574,8 +594,8 @@ export function TournamentTeamsRosterTab({
       memberEmailByUserId
     );
     const canManageRoster = canManageTeamRoster(team, { isManager, userId });
-    const sideLabel = getTeamSideDisplayName(team.side ?? 'side_a', teams);
     const isHero = layout === 'hero';
+    const theme = getTeamSideTheme(resolveTeamSide(team, teams));
 
     if (isHero) {
       return (
@@ -596,32 +616,61 @@ export function TournamentTeamsRosterTab({
       <Animated.View
         key={team.id}
         entering={FadeInDown.delay(index * 50).duration(300)}
-        className="flex-1 bg-[#141414] border border-neutral-800 rounded-xl p-3 min-w-0"
+        className="flex-1 rounded-xl min-w-0 overflow-hidden border"
+        style={{
+          backgroundColor: theme.panelBg,
+          borderColor: theme.panelBorder,
+        }}
       >
-        {team.logo_url ? (
-          <Image
-            source={{ uri: team.logo_url }}
-            style={{ width: 48, height: 48, borderRadius: 24, alignSelf: 'center' }}
-            resizeMode="cover"
-          />
-        ) : (
-          <View className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-700 items-center justify-center self-center">
-            <Text className="text-lime-400 font-display text-lg">
-              {team.team_name.charAt(0).toUpperCase()}
+        <View
+          className="p-3 items-center border-b-2"
+          style={{ borderBottomColor: theme.color }}
+        >
+          {team.logo_url ? (
+            <View
+              style={{
+                padding: 3,
+                borderRadius: 27,
+                borderWidth: 2,
+                borderColor: theme.ringBorder,
+                backgroundColor: theme.ringGlow,
+              }}
+            >
+              <Image
+                source={{ uri: team.logo_url }}
+                style={{ width: 48, height: 48, borderRadius: 24 }}
+                resizeMode="cover"
+              />
+            </View>
+          ) : (
+            <View
+              className="w-12 h-12 rounded-full items-center justify-center"
+              style={{
+                borderWidth: 2,
+                borderColor: theme.ringBorder,
+                backgroundColor: theme.ringGlow,
+              }}
+            >
+              <Text style={{ color: theme.colorLight }} className="font-display text-lg font-bold">
+                {team.team_name.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <Text
+            style={{ color: theme.color }}
+            className="font-bold text-lg text-center mt-3"
+            numberOfLines={2}
+          >
+            {team.team_name}
+          </Text>
+          {captainName ? (
+            <Text style={{ color: theme.colorLight }} className="text-[10px] text-center mt-2 opacity-85">
+              Capt. {captainName}
             </Text>
-          </View>
-        )}
-        <Text className="text-fox-lime text-[10px] font-body-bold uppercase tracking-widest text-center mt-3">
-          {sideLabel}
-        </Text>
-        <Text className="text-white font-bold text-sm text-center mt-1" numberOfLines={2}>
-          {team.team_name}
-        </Text>
-        {captainName ? (
-          <Text className="text-neutral-500 text-[10px] text-center mt-2">Capt. {captainName}</Text>
-        ) : null}
+          ) : null}
+        </View>
         <ScrollView
-          className="mt-3 pt-3 border-t border-neutral-800"
+          className="px-3 py-2"
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled
         >
@@ -642,10 +691,14 @@ export function TournamentTeamsRosterTab({
         {canManageRoster ? (
           <Pressable
             onPress={() => openManageRoster(team)}
-            className="flex-row items-center justify-center mt-3 pt-2 border-t border-neutral-800 active:opacity-80"
+            className="flex-row items-center justify-center py-2.5 border-t active:opacity-80"
+            style={{
+              borderTopColor: theme.panelBorder,
+              backgroundColor: theme.ringGlow,
+            }}
           >
-            <UserPlus size={12} color="#a3e635" />
-            <Text className="text-lime-400 font-semibold text-[10px] ml-1.5">
+            <UserPlus size={12} color={theme.color} />
+            <Text style={{ color: theme.color }} className="font-semibold text-[10px] ml-1.5">
               {isManager ? 'Manage' : 'Roster'}
             </Text>
           </Pressable>
@@ -662,16 +715,24 @@ export function TournamentTeamsRosterTab({
         </View>
       ) : null}
 
-      {myCaptainTeam && canCaptainManageRoster(myCaptainTeam, userId) && layout !== 'hero' ? (
-        <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-3">
+      {myCaptainTeam && myCaptainTheme && canCaptainManageRoster(myCaptainTeam, userId) && layout !== 'hero' ? (
+        <View
+          className="rounded-xl px-4 py-3 mb-3 border"
+          style={{
+            backgroundColor: myCaptainTheme.ringGlow,
+            borderColor: myCaptainTheme.panelBorder,
+          }}
+        >
           <View className="flex-row items-center">
-            <Shield size={16} color="#a3e635" />
-            <Text className="text-lime-400 font-semibold text-sm ml-2">
+            <Shield size={16} color={myCaptainTheme.color} />
+            <Text style={{ color: myCaptainTheme.color }} className="font-semibold text-sm ml-2">
               You're the captain — build your roster
             </Text>
           </View>
           <Pressable onPress={() => openManageRoster(myCaptainTeam)} className="mt-3 self-start active:opacity-80">
-            <Text className="text-lime-400 font-semibold text-sm">Manage roster</Text>
+            <Text style={{ color: myCaptainTheme.colorLight }} className="font-semibold text-sm">
+              Manage roster
+            </Text>
           </Pressable>
         </View>
       ) : null}
@@ -692,6 +753,9 @@ export function TournamentTeamsRosterTab({
         layout === 'hero' ? (
           <View style={{ flex: 1, flexDirection: 'row', width: '100%', alignItems: 'stretch' }}>
             {renderTeamColumn(sideATeam, 0)}
+            <View className="items-center justify-center px-1 bg-[#111] border-x border-neutral-800">
+              <Text className="text-neutral-600 text-[9px] font-bold tracking-widest">VS</Text>
+            </View>
             {renderTeamColumn(sideBTeam, 1)}
           </View>
         ) : (
@@ -780,26 +844,35 @@ export function TournamentTeamsRosterTab({
                   <View className="flex-row gap-2 mb-4">
                     {(['side_a', 'side_b'] as const)
                       .filter((side) => (side === 'side_a' ? !sideATeam : !sideBTeam))
-                      .map((side) => (
+                      .map((side) => {
+                        const sideTheme = getTeamSideTheme(side);
+                        const isSelected = teamSide === side;
+                        return (
                         <Pressable
                           key={side}
                           onPress={() => setTeamSide(side)}
-                          className={cn(
-                            'flex-1 py-2 rounded-lg border items-center',
-                            teamSide === side
-                              ? 'bg-lime-900/40 border-lime-600'
-                              : 'bg-[#0c0c0c] border-neutral-800'
-                          )}
+                          className="flex-1 py-2 rounded-lg border items-center"
+                          style={
+                            isSelected
+                              ? {
+                                  backgroundColor: sideTheme.ringGlow,
+                                  borderColor: sideTheme.ringBorder,
+                                }
+                              : {
+                                  backgroundColor: '#0c0c0c',
+                                  borderColor: '#262626',
+                                }
+                          }
                         >
                           <Text
-                            className={
-                              teamSide === side ? 'text-lime-400 font-semibold' : 'text-neutral-500'
-                            }
+                            style={{ color: isSelected ? sideTheme.color : '#737373' }}
+                            className={isSelected ? 'font-semibold' : undefined}
                           >
                             {getTeamSideDisplayName(side, teams)}
                           </Text>
                         </Pressable>
-                      ))}
+                        );
+                      })}
                   </View>
 
                   <Text className="text-neutral-500 text-xs uppercase tracking-widest mb-2">Team Name</Text>

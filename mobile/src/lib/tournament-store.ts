@@ -36,7 +36,15 @@ import {
 } from './tournament-score-sync-service';
 import {
   getTournamentMatchGroups,
+  getMatchHoleResults,
 } from './tournament-match-service';
+import type { HoleOutcomesMap, PairingOutcomesMap } from './match-hole-outcomes';
+import {
+  holeResultsToOutcomes,
+  holeResultsToPairingOutcomes,
+  setHoleOutcome as applyHoleOutcome,
+} from './match-hole-outcomes';
+import type { TournamentMatchHoleWinner } from '@/types';
 import {
   calculateSkinsResults,
   calculateStablefordResults,
@@ -72,6 +80,9 @@ interface PersistedSession {
   matchRosterPlayers?: TournamentStorePlayer[];
   grossScores: Record<string, Record<number, number>>;
   teamGrossScores: Record<number, number>;
+  holeOutcomes: HoleOutcomesMap;
+  pairingOutcomes: PairingOutcomesMap;
+  activePairingIndex: number;
 }
 
 interface TournamentStoreState {
@@ -89,6 +100,9 @@ interface TournamentStoreState {
   matchRosterPlayers: TournamentStorePlayer[];
   grossScores: Record<string, Record<number, number>>;
   teamGrossScores: Record<number, number>;
+  holeOutcomes: HoleOutcomesMap;
+  pairingOutcomes: PairingOutcomesMap;
+  activePairingIndex: number;
   isDirty: boolean;
   isSyncing: boolean;
   lastSyncedAt: string | null;
@@ -151,6 +165,9 @@ interface TournamentStoreState {
     }>;
   }) => void;
   setCurrentHole: (hole: number) => void;
+  setActivePairingIndex: (index: number) => void;
+  setHoleOutcome: (hole: number, winner: TournamentMatchHoleWinner, pairingIndex?: number) => void;
+  clearHoleOutcome: (hole: number, pairingIndex?: number) => void;
   setPlayerGross: (playerId: string, hole: number, gross: number) => void;
   setTeamGross: (hole: number, gross: number) => void;
   loadExistingScores: () => Promise<void>;
@@ -195,6 +212,14 @@ function isLikelyParPlaceholderMap(map: Record<number, number>): boolean {
   return FOX_CREEK_DATA.holeData.every(
     (hole) => map[hole.holeNumber] === hole.par
   );
+}
+
+function inferNextHoleFromOutcomes(outcomes: HoleOutcomesMap): number {
+  const played = Object.entries(outcomes)
+    .filter(([, winner]) => winner != null)
+    .map(([hole]) => Number(hole));
+  if (played.length === 0) return 1;
+  return Math.min(18, Math.max(...played) + 1);
 }
 
 function sanitizeGrossScoresState(
@@ -451,6 +476,9 @@ const initialState = {
   matchRosterPlayers: [] as TournamentStorePlayer[],
   grossScores: {} as Record<string, Record<number, number>>,
   teamGrossScores: {} as Record<number, number>,
+  holeOutcomes: {} as HoleOutcomesMap,
+  pairingOutcomes: {} as PairingOutcomesMap,
+  activePairingIndex: 0,
   isDirty: false,
   isSyncing: false,
   lastSyncedAt: null as string | null,
@@ -515,6 +543,9 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       matchRosterPlayers: rosterPlayers,
       grossScores,
       teamGrossScores: {},
+      holeOutcomes: {},
+      pairingOutcomes: {},
+      activePairingIndex: 0,
       teePlayed,
       isDirty: false,
     });
@@ -587,12 +618,64 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       matchRosterPlayers: rosterPlayers,
       grossScores,
       teamGrossScores: {},
+      holeOutcomes: {},
+      pairingOutcomes: {},
+      activePairingIndex: 0,
       isDirty: false,
     });
   },
 
   setCurrentHole: (hole) => {
     set({ currentHole: Math.min(18, Math.max(1, hole)) });
+  },
+
+  setActivePairingIndex: (index) => {
+    set({ activePairingIndex: index });
+  },
+
+  setHoleOutcome: (hole, winner, pairingIndex) => {
+    set((state) => {
+      const isSingles = state.format === 'singles' || state.format === 'match_play';
+      if (isSingles) {
+        const idx = pairingIndex ?? state.activePairingIndex;
+        const current = state.pairingOutcomes[idx] ?? {};
+        const nextPairing = applyHoleOutcome(current, hole, winner);
+        const nextHole = Math.max(state.currentHole, Math.min(18, hole + 1));
+        return {
+          pairingOutcomes: { ...state.pairingOutcomes, [idx]: nextPairing },
+          currentHole: Math.min(18, nextHole),
+          isDirty: true,
+        };
+      }
+
+      const nextOutcomes = applyHoleOutcome(state.holeOutcomes, hole, winner);
+      const nextHole = Math.max(state.currentHole, Math.min(18, hole + 1));
+      return {
+        holeOutcomes: nextOutcomes,
+        currentHole: Math.min(18, nextHole),
+        isDirty: true,
+      };
+    });
+    void get().persistSession();
+  },
+
+  clearHoleOutcome: (hole, pairingIndex) => {
+    set((state) => {
+      const isSingles = state.format === 'singles' || state.format === 'match_play';
+      if (isSingles) {
+        const idx = pairingIndex ?? state.activePairingIndex;
+        const current = { ...(state.pairingOutcomes[idx] ?? {}) };
+        delete current[hole];
+        return {
+          pairingOutcomes: { ...state.pairingOutcomes, [idx]: current },
+          isDirty: true,
+        };
+      }
+      const next = { ...state.holeOutcomes };
+      delete next[hole];
+      return { holeOutcomes: next, isDirty: true };
+    });
+    void get().persistSession();
   },
 
   setPlayerGross: (playerId, hole, gross) => {
@@ -654,6 +737,35 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
     };
 
     if (state.matchGroupId) {
+      const holeResultRows = await getMatchHoleResults(
+        state.matchGroupId,
+        state.roundNumber
+      );
+
+      if (holeResultRows.length > 0) {
+        const isSingles = state.format === 'singles' || state.format === 'match_play';
+        if (isSingles) {
+          const pairingOutcomes = holeResultsToPairingOutcomes(holeResultRows);
+          const firstPairing = pairingOutcomes[0] ?? {};
+          set({
+            pairingOutcomes,
+            holeOutcomes: {},
+            currentHole: inferNextHoleFromOutcomes(firstPairing),
+            isDirty: false,
+          });
+        } else {
+          const holeOutcomes = holeResultsToOutcomes(holeResultRows);
+          set({
+            holeOutcomes,
+            pairingOutcomes: {},
+            currentHole: inferNextHoleFromOutcomes(holeOutcomes),
+            isDirty: false,
+          });
+        }
+        await get().persistSession();
+        return;
+      }
+
       const scores = await getScoresForMatchGroup(state.matchGroupId, state.roundNumber);
       const playersToLoad =
         state.format === 'best_ball' || state.format === 'singles'
@@ -858,7 +970,10 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
     }
 
     const matchUseNetScoring = options?.matchUseNetScoring ?? false;
-    const scorePayloads = buildScoreInsertPayloads(state);
+    const isSingles = state.format === 'singles' || state.format === 'match_play';
+    const hasDirectOutcomes =
+      Object.keys(state.holeOutcomes).length > 0 ||
+      Object.values(state.pairingOutcomes).some((m) => Object.keys(m).length > 0);
 
     set({ isSyncing: true });
 
@@ -877,15 +992,20 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
           matchGroupId,
           roundNumber: state.roundNumber,
           format: state.format,
-          scores: scorePayloads,
+          scores: [],
           useNetScoring: matchUseNetScoring,
           matchGroup,
+          holeOutcomes: isSingles ? undefined : state.holeOutcomes,
+          pairingOutcomes: isSingles ? state.pairingOutcomes : undefined,
         });
 
         if (!backendResult.success) {
           throw new Error(backendResult.error ?? 'Failed to save scores');
         }
+      } else if (hasDirectOutcomes) {
+        return { success: false, error: 'Match pairing required to save direct results' };
       } else {
+        const scorePayloads = buildScoreInsertPayloads(state);
         for (const payload of scorePayloads) {
           const result = await saveTournamentScore(payload);
           if (result.error || !result.data) {
@@ -968,6 +1088,9 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
     set({
       grossScores: buildEmptyPlayerGrossMaps(state.players),
       teamGrossScores: {},
+      holeOutcomes: {},
+      pairingOutcomes: {},
+      activePairingIndex: 0,
       currentHole: 1,
       isDirty: false,
       lastSyncedAt: null,
@@ -995,6 +1118,9 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       matchRosterPlayers: state.matchRosterPlayers,
       grossScores: state.grossScores,
       teamGrossScores: state.teamGrossScores,
+      holeOutcomes: state.holeOutcomes,
+      pairingOutcomes: state.pairingOutcomes,
+      activePairingIndex: state.activePairingIndex,
     };
 
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -1025,6 +1151,9 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
         matchRosterPlayers: data.matchRosterPlayers ?? data.players,
         grossScores: sanitizeGrossScoresState(data.grossScores),
         teamGrossScores: sanitizeTeamGrossScores(data.teamGrossScores),
+        holeOutcomes: data.holeOutcomes ?? {},
+        pairingOutcomes: data.pairingOutcomes ?? {},
+        activePairingIndex: data.activePairingIndex ?? 0,
         isDirty: true,
       });
       return true;

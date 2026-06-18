@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -45,21 +45,30 @@ import {
 } from '@/lib/tournament-player-service';
 import {
   findMatchGroupForRosterPlayer,
-  formatTeeTimeLabel,
   getActiveRoundNumber,
   resolveTournamentScorecardRoute,
 } from '@/lib/tournament-scorecard-routing';
 import { cn } from '@/lib/cn';
 import { TournamentTabAdBanner } from '@/components/TournamentTabAdBanner';
-import { SponsorBanner } from '@/components/SponsorBanner';
+import { TournamentDetailAdBanner } from '@/components/TournamentDetailAdBanner';
 import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkButton';
 import { TournamentTeamsRosterTab } from '@/components/TournamentTeamsRosterTab';
+import { TournamentLiveStandingsPanel } from '@/components/TournamentLiveStandingsPanel';
+import { TournamentEventMatchActions } from '@/components/TournamentEventMatchActions';
 
-type DetailTab = 'schedule' | 'match' | 'matches' | 'teams';
+type DetailTab = 'schedule' | 'match' | 'matches' | 'teams' | 'standings';
 
 function parseTabParam(param: string | string[] | undefined): DetailTab | null {
   const raw = Array.isArray(param) ? param[0] : param;
-  if (raw === 'teams' || raw === 'schedule' || raw === 'match' || raw === 'matches') return raw;
+  if (
+    raw === 'teams' ||
+    raw === 'schedule' ||
+    raw === 'match' ||
+    raw === 'matches' ||
+    raw === 'standings'
+  ) {
+    return raw;
+  }
   return null;
 }
 
@@ -74,15 +83,18 @@ export default function TournamentDetailScreen() {
   const viewAllTournaments = isManager;
   const managerAccessToken = memberAccessToken;
 
-  const [tab, setTab] = useState<DetailTab>(() => parseTabParam(tabParam) ?? 'schedule');
+  const [tab, setTab] = useState<DetailTab>(() => parseTabParam(tabParam) ?? 'standings');
   const [isOpeningScorecard, setIsOpeningScorecard] = useState(false);
+  const [isUserRefreshing, setIsUserRefreshing] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const tabSectionY = useRef(0);
 
   useEffect(() => {
     const parsed = parseTabParam(tabParam);
     if (parsed) setTab(parsed);
   }, [tabParam]);
 
-  const { data: tournament, isLoading, refetch, isRefetching } = useQuery({
+  const { data: tournament, isLoading, refetch } = useQuery({
     queryKey: ['tournament', id],
     queryFn: () => getTournamentById(id!),
     enabled: Boolean(id),
@@ -161,6 +173,27 @@ export default function TournamentDetailScreen() {
     }
   };
 
+  const handlePullRefresh = useCallback(async () => {
+    setIsUserRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsUserRefreshing(false);
+    }
+  }, [refetch]);
+
+  const goToStandings = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTab('standings');
+    router.setParams({ tab: 'standings' });
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, tabSectionY.current - 8),
+        animated: true,
+      });
+    });
+  }, [router]);
+
   if (isLoading || isCheckingAccess || !tournament) {
     return (
       <View className="flex-1 bg-[#0c0c0c] items-center justify-center">
@@ -193,11 +226,16 @@ export default function TournamentDetailScreen() {
   return (
     <View className="flex-1 bg-[#0c0c0c]">
       <ScrollView
+        ref={scrollRef}
         className="flex-1"
         stickyHeaderIndices={[1]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#a3e635" />
+          <RefreshControl
+            refreshing={isUserRefreshing}
+            onRefresh={() => void handlePullRefresh()}
+            tintColor="#a3e635"
+          />
         }
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
       >
@@ -218,35 +256,44 @@ export default function TournamentDetailScreen() {
             </Pressable>
           </View>
 
+          <View className="px-5 pb-3">
+            <TournamentDetailAdBanner />
+          </View>
+
           <View className="px-5 pb-4">
-            {myMatchAssignment ? (
-              <View className="bg-lime-900/20 border border-lime-700/40 rounded-xl px-4 py-3 mb-3">
-                <Text className="text-lime-400 text-sm font-semibold">
-                  Your group · Tee {formatTeeTimeLabel(myMatchAssignment.group.tee_time)} · Hole{' '}
-                  {myMatchAssignment.group.starting_hole}
-                </Text>
-                <Text className="text-neutral-500 text-xs mt-1">
-                  Scorecard opens with your foursome and pairings
-                </Text>
-              </View>
-            ) : null}
-            <Pressable
-              onPress={handleEnterScores}
-              disabled={!canEnterScores || isOpeningScorecard}
-              className={cn(
-                'flex-row items-center justify-center rounded-xl py-4',
-                canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
-              )}
-            >
-              {isOpeningScorecard ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <ClipboardList size={20} color="#fff" />
-                  <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
-                </>
-              )}
-            </Pressable>
+            {myMatchAssignment && tournament ? (
+              <TournamentEventMatchActions
+                tournament={tournament}
+                group={myMatchAssignment.group}
+                viewerSide={myMatchAssignment.side}
+                roundNumber={activeRoundNumber}
+                rosterPlayerIds={myRosterPlayerIds}
+                teams={teams}
+                playerNameById={playerNameById}
+                canEnterScores={canEnterScores}
+                isOpeningScorecard={isOpeningScorecard}
+                onEnterScores={() => void handleEnterScores()}
+                onViewStandings={goToStandings}
+              />
+            ) : (
+              <Pressable
+                onPress={() => void handleEnterScores()}
+                disabled={!canEnterScores || isOpeningScorecard}
+                className={cn(
+                  'flex-row items-center justify-center rounded-xl py-4',
+                  canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
+                )}
+              >
+                {isOpeningScorecard ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <ClipboardList size={20} color="#fff" />
+                    <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+                  </>
+                )}
+              </Pressable>
+            )}
           </View>
 
           <View className="px-5 pb-3">
@@ -254,10 +301,6 @@ export default function TournamentDetailScreen() {
             <Text className="text-neutral-400 text-sm mt-0.5">
               {formatTournamentDates(tournament.start_date, tournament.end_date)}
             </Text>
-          </View>
-
-          <View className="px-5 pb-3">
-            <SponsorBanner placementType="tournament_detail" variant="auto" />
           </View>
 
           {isManager && tournament.display_token ? (
@@ -280,6 +323,7 @@ export default function TournamentDetailScreen() {
             contentContainerStyle={{ gap: 8 }}
           >
             {[
+              { key: 'standings' as const, label: 'Standings', Icon: Trophy },
               { key: 'schedule' as const, label: 'Schedule', Icon: Clock },
               { key: 'match' as const, label: 'Match', Icon: Swords },
               ...(isManager
@@ -314,8 +358,13 @@ export default function TournamentDetailScreen() {
           </ScrollView>
         </View>
 
-        <View className="pt-4">
-          {matchGroupsError && (tab === 'schedule' || tab === 'match') ? (
+        <View
+          className="pt-4"
+          onLayout={(event) => {
+            tabSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
+          {matchGroupsError && (tab === 'schedule' || tab === 'match' || tab === 'standings') ? (
             <View className="px-5 mb-4">
               <TournamentDataLoadError
                 title="Could not load tee times"
@@ -356,6 +405,7 @@ export default function TournamentDetailScreen() {
               rosterPlayerIds={myRosterPlayerIds}
               playerNameById={playerNameById}
               defaultRoundNumber={activeRoundNumber}
+              onViewStandings={goToStandings}
             />
             </>
           ) : tab === 'matches' && isManager ? (
@@ -367,6 +417,15 @@ export default function TournamentDetailScreen() {
               playerNameById={playerNameById}
               isManager={isManager}
             />
+          ) : tab === 'standings' ? (
+            <View className="px-5">
+              <TournamentLiveStandingsPanel
+                tournamentId={id!}
+                displayToken={isManager ? tournament.display_token : null}
+                showTvLink={isManager}
+                compact
+              />
+            </View>
           ) : tab === 'teams' ? (
             <>
               <View className="px-5 mb-4">

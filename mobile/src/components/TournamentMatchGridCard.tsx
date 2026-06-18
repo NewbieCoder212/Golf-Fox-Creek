@@ -2,6 +2,7 @@ import { View, Text, ScrollView } from 'react-native';
 
 import type { MatchGridCell, MatchGridModel, MatchGridRow } from '@/lib/tournament-match-grid';
 import { TOURNAMENT_MATCH_HOLES } from '@/lib/tournament-match-scoring';
+import { getHoleWinnerBgClass } from '@/lib/match-play-theme';
 import { cn } from '@/lib/cn';
 
 const GRID_SIZES = {
@@ -25,13 +26,21 @@ function GridCell({
   rowHeight: number;
   variant: MatchGridCardVariant;
 }) {
+  const outcomeBg =
+    cell.holeWinner != null && !isStatusRow
+      ? getHoleWinnerBgClass(cell.holeWinner)
+      : cell.isWinner
+        ? 'bg-red-600'
+        : cell.isHalved
+          ? 'bg-neutral-600'
+          : '';
+
   return (
     <View
       style={{ width: holeWidth, height: rowHeight }}
       className={cn(
         'items-center justify-center border-r border-neutral-800/60',
-        cell.isWinner && 'bg-lime-900/50',
-        cell.isHalved && 'bg-neutral-700/40',
+        outcomeBg,
         !cell.isPlayed && !isStatusRow && 'opacity-40'
       )}
     >

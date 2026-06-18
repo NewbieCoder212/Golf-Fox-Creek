@@ -9,8 +9,13 @@ import { getBackendUrl, isBackendReachableInBrowser } from './backend-url';
 import { getMemberAccessToken } from './tournament-supabase';
 import { useMemberAuthStore } from './member-auth-store';
 import { clearTournamentMatchRound, syncMatchHoleResults } from './tournament-match-service';
-import { computeMatchHoleResults, computeMatchPoints } from './tournament-match-scoring';
+import { allOutcomesToHoleResults } from './match-hole-outcomes';
+import { computeMatchHoleResults, computeMatchPoints, computeMatchPointsFromHoleResults } from './tournament-match-scoring';
 import { saveTournamentScore } from './tournament-service';
+import type {
+  HoleOutcomesMap,
+  PairingOutcomesMap,
+} from './match-hole-outcomes';
 
 type MatchScoreSyncParams = {
   tournamentId: string;
@@ -20,6 +25,8 @@ type MatchScoreSyncParams = {
   scores: TournamentScoreInsert[];
   useNetScoring?: boolean;
   matchGroup: TournamentMatchGroup;
+  holeOutcomes?: HoleOutcomesMap;
+  pairingOutcomes?: PairingOutcomesMap;
 };
 
 export function buildPseudoTournamentScores(
@@ -72,11 +79,77 @@ export function buildMatchSyncPayload(params: {
   };
 }
 
+export function buildDirectResultSyncPayload(params: {
+  matchGroup: TournamentMatchGroup;
+  roundNumber: number;
+  format: TournamentFormat;
+  holeOutcomes?: HoleOutcomesMap;
+  pairingOutcomes?: PairingOutcomesMap;
+}) {
+  const holeResults = allOutcomesToHoleResults({
+    matchGroupId: params.matchGroup.id,
+    roundNumber: params.roundNumber,
+    holeOutcomes: params.holeOutcomes,
+    pairingOutcomes: params.pairingOutcomes,
+  });
+
+  const matchPoints = computeMatchPointsFromHoleResults({
+    matchGroup: params.matchGroup,
+    format: params.format,
+    holeResults,
+  });
+
+  return {
+    roundNumber: params.roundNumber,
+    scores: [] as TournamentScoreInsert[],
+    holeResults,
+    matchPoints,
+  };
+}
+
+type DirectResultSyncParams = {
+  tournamentId: string;
+  matchGroupId: string;
+  roundNumber: number;
+  format: TournamentFormat;
+  matchGroup: TournamentMatchGroup;
+  holeOutcomes?: HoleOutcomesMap;
+  pairingOutcomes?: PairingOutcomesMap;
+};
+
 async function syncTournamentMatchScoresViaSupabase(
   params: MatchScoreSyncParams
 ): Promise<{ success: boolean; error?: string }> {
   const memberToken = getMemberAccessToken();
   const writeAuth = memberToken ? { accessToken: memberToken } : {};
+
+  const useDirectResult =
+    params.holeOutcomes != null || params.pairingOutcomes != null;
+
+  if (useDirectResult) {
+    const payload = buildDirectResultSyncPayload({
+      matchGroup: params.matchGroup,
+      roundNumber: params.roundNumber,
+      format: params.format,
+      holeOutcomes: params.holeOutcomes,
+      pairingOutcomes: params.pairingOutcomes,
+    });
+
+    try {
+      const { syncMatchHoleResultsDirect } = await import('./tournament-match-service');
+      await syncMatchHoleResultsDirect({
+        matchGroupId: params.matchGroupId,
+        roundNumber: params.roundNumber,
+        holeResults: payload.holeResults,
+        matchPoints: payload.matchPoints,
+        accessToken: memberToken,
+      });
+      return { success: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to sync match results';
+      return { success: false, error: message };
+    }
+  }
 
   for (const score of params.scores) {
     const result = await saveTournamentScore(
@@ -163,13 +236,24 @@ export async function syncTournamentMatchScoresViaBackend(
     return { success: false, error: 'Not signed in' };
   }
 
-  const payload = buildMatchSyncPayload({
-    matchGroup: params.matchGroup,
-    roundNumber: params.roundNumber,
-    format: params.format,
-    scores: params.scores,
-    useNetScoring: params.useNetScoring,
-  });
+  const useDirectResult =
+    params.holeOutcomes != null || params.pairingOutcomes != null;
+
+  const payload = useDirectResult
+    ? buildDirectResultSyncPayload({
+        matchGroup: params.matchGroup,
+        roundNumber: params.roundNumber,
+        format: params.format,
+        holeOutcomes: params.holeOutcomes,
+        pairingOutcomes: params.pairingOutcomes,
+      })
+    : buildMatchSyncPayload({
+        matchGroup: params.matchGroup,
+        roundNumber: params.roundNumber,
+        format: params.format,
+        scores: params.scores,
+        useNetScoring: params.useNetScoring,
+      });
 
   let backendError: string | undefined;
 

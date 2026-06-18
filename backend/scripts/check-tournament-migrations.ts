@@ -18,6 +18,7 @@ const REQUIRED_POLICIES = [
 const REQUIRED_COLUMNS = [
   { table: 'tournaments', column: 'display_token' },
   { table: 'ad_placements', column: 'display_position' },
+  { table: 'tournament_match_hole_results', column: 'pairing_index' },
 ] as const;
 
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -60,7 +61,11 @@ async function main() {
       const text = await probe.text();
       if (text.includes(column) && text.includes('42703')) {
         console.error(`✗ Missing column ${table}.${column}`);
-        console.error(`  Run supabase/migrations/20260628000000_tournament_tv_display.sql`);
+        const hint =
+          column === 'pairing_index'
+            ? 'Run supabase/migrations/20260718000000_direct_result_hole_outcomes.sql'
+            : 'Run supabase/migrations/20260628000000_tournament_tv_display.sql';
+        console.error(`  ${hint}`);
         ok = false;
       } else {
         console.error(`✗ Could not probe ${table}.${column}: ${text.slice(0, 120)}`);

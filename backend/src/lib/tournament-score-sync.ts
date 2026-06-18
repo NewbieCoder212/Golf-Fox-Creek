@@ -1,4 +1,5 @@
 import { adminFetch, getErrorMessage } from './supabase-admin';
+import { computeMatchPointsFromHoleResults } from './tournament-match-points';
 
 type TournamentScoreInsert = {
   tournament_id: string;
@@ -16,14 +17,16 @@ type MatchHoleResultInsert = {
   match_group_id: string;
   round_number: number;
   hole: number;
-  side_a_net: number;
-  side_b_net: number;
+  side_a_net?: number | null;
+  side_b_net?: number | null;
   hole_winner: 'side_a' | 'side_b' | 'tie';
+  pairing_index?: number;
 };
 
 type MatchGroupRow = {
   id: string;
   tournament_id: string;
+  format: string;
   side_a_player_ids: string[];
   side_b_player_ids: string[];
 };
@@ -43,7 +46,7 @@ export async function assertUserCanWriteMatchGroup(
 ): Promise<{ ok: true; matchGroup: MatchGroupRow } | { ok: false; error: string }> {
   if (role === 'manager' || role === 'super_admin') {
     const groupRes = await adminFetch<MatchGroupRow[]>(
-      `/rest/v1/tournament_match_groups?id=eq.${matchGroupId}&select=id,tournament_id,side_a_player_ids,side_b_player_ids`
+      `/rest/v1/tournament_match_groups?id=eq.${matchGroupId}&select=id,tournament_id,format,side_a_player_ids,side_b_player_ids`
     );
     if (!groupRes.ok || !groupRes.data[0]) {
       return { ok: false, error: 'Match pairing not found' };
@@ -52,7 +55,7 @@ export async function assertUserCanWriteMatchGroup(
   }
 
   const groupRes = await adminFetch<MatchGroupRow[]>(
-    `/rest/v1/tournament_match_groups?id=eq.${matchGroupId}&select=id,tournament_id,side_a_player_ids,side_b_player_ids`
+    `/rest/v1/tournament_match_groups?id=eq.${matchGroupId}&select=id,tournament_id,format,side_a_player_ids,side_b_player_ids`
   );
   if (!groupRes.ok || !groupRes.data[0]) {
     return { ok: false, error: 'Match pairing not found' };
@@ -143,7 +146,7 @@ export async function syncTournamentMatchScores(params: {
   roundNumber: number;
   scores: TournamentScoreInsert[];
   holeResults: MatchHoleResultInsert[];
-  matchPoints: {
+  matchPoints?: {
     match_winner: 'side_a' | 'side_b' | 'tie' | null;
     match_points_a: number;
     match_points_b: number;
@@ -158,12 +161,24 @@ export async function syncTournamentMatchScores(params: {
     return { success: false, error: access.error };
   }
 
+  const matchGroup = access.matchGroup;
+
+  const recomputedPoints = computeMatchPointsFromHoleResults({
+    format: matchGroup.format,
+    matchGroup,
+    holeResults: params.holeResults,
+  });
+
+  const matchPoints = params.matchPoints ?? recomputedPoints;
+
   try {
-    for (const score of params.scores) {
-      await upsertTournamentScore({
-        ...score,
-        match_group_id: score.match_group_id ?? params.matchGroupId,
-      });
+    if (params.scores.length > 0) {
+      for (const score of params.scores) {
+        await upsertTournamentScore({
+          ...score,
+          match_group_id: score.match_group_id ?? params.matchGroupId,
+        });
+      }
     }
 
     const clearRes = await adminFetch<unknown>(
@@ -189,7 +204,7 @@ export async function syncTournamentMatchScores(params: {
       `/rest/v1/tournament_match_groups?id=eq.${params.matchGroupId}`,
       {
         method: 'PATCH',
-        body: params.matchPoints,
+        body: matchPoints,
         prefer: 'return=minimal',
       }
     );

@@ -9,11 +9,12 @@ import {
 } from '@/lib/tournament-match-grid';
 import type { MatchGridModel } from '@/lib/tournament-match-grid';
 import { cn } from '@/lib/cn';
-import type { TournamentMatchGroup, TournamentScore } from '@/types';
+import type { TournamentMatchGroup, TournamentMatchHoleResult, TournamentScore } from '@/types';
 
 interface TournamentLiveMatchGridsProps {
   matchGroups: TournamentMatchGroup[];
   scores: TournamentScore[];
+  holeResults?: TournamentMatchHoleResult[];
   teamNameById: Record<string, string>;
   playerNameById: Record<string, string>;
   useNetScoring: boolean;
@@ -215,6 +216,7 @@ function TvMatchCarousel({
 export function TournamentLiveMatchGrids({
   matchGroups,
   scores,
+  holeResults = [],
   teamNameById,
   playerNameById,
   useNetScoring,
@@ -247,11 +249,12 @@ export function TournamentLiveMatchGrids({
       buildMatchGridModels({
         matchGroups: filteredGroups,
         allScores: filteredScores,
+        allHoleResults: holeResults,
         teamNameById,
         playerNameById,
         useNetScoring,
       }),
-    [filteredGroups, filteredScores, teamNameById, playerNameById, useNetScoring]
+    [filteredGroups, filteredScores, holeResults, teamNameById, playerNameById, useNetScoring]
   );
 
   const rounds = useMemo(() => groupMatchGridsByRound(models), [models]);

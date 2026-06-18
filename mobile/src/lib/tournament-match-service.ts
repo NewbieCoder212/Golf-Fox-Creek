@@ -222,6 +222,62 @@ export async function syncMatchHoleResults(params: {
   return holeResults;
 }
 
+export async function syncMatchHoleResultsDirect(params: {
+  matchGroupId: string;
+  roundNumber: number;
+  holeResults: Omit<TournamentMatchHoleResult, 'id'>[];
+  matchPoints: {
+    match_winner: 'side_a' | 'side_b' | 'tie' | null;
+    match_points_a: number;
+    match_points_b: number;
+  };
+  accessToken?: string | null;
+}): Promise<TournamentMatchHoleResult[]> {
+  const token =
+    params.accessToken ??
+    getManagerAccessToken() ??
+    useMemberAuthStore.getState().accessToken;
+
+  requireMatchMutation(
+    await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+      method: 'DELETE',
+      query: {
+        match_group_id: `eq.${params.matchGroupId}`,
+        round_number: `eq.${params.roundNumber}`,
+      },
+      accessToken: token,
+    }),
+    'clear prior match hole results'
+  );
+
+  if (params.holeResults.length === 0) return [];
+
+  const saved = requireMatchMutation(
+    await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+      method: 'POST',
+      body: params.holeResults as unknown as Record<string, unknown>[],
+      accessToken: token,
+    }),
+    'save match hole results'
+  );
+
+  requireMatchMutation(
+    await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+      method: 'PATCH',
+      query: { id: `eq.${params.matchGroupId}` },
+      body: {
+        match_winner: params.matchPoints.match_winner,
+        match_points_a: params.matchPoints.match_points_a,
+        match_points_b: params.matchPoints.match_points_b,
+      },
+      accessToken: token,
+    }),
+    'update match points'
+  );
+
+  return saved ?? [];
+}
+
 export async function computeAndSaveMatchResults(params: {
   matchGroup: TournamentMatchGroup;
   format: TournamentFormat;

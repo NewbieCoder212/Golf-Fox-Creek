@@ -33,6 +33,8 @@ export interface MatchGridCell {
   isWinner?: boolean;
   isHalved?: boolean;
   isPlayed?: boolean;
+  /** Direct result: which side won this hole */
+  holeWinner?: TournamentMatchHoleWinner | null;
 }
 
 export type MatchGridRowKind = 'score' | 'status';
@@ -76,15 +78,18 @@ function buildScoreCells(params: {
   value: number | null;
   wonHole: boolean;
   halved: boolean;
+  holeWinner?: TournamentMatchHoleWinner | null;
 }): MatchGridCell {
-  const { hole, value, wonHole, halved } = params;
+  const { hole, value, wonHole, halved, holeWinner } = params;
+  const isDirectResult = value == null && holeWinner != null;
   return {
     hole,
     value,
-    display: value == null ? '–' : String(value),
-    isPlayed: value != null,
+    display: isDirectResult ? '' : value == null ? '–' : String(value),
+    isPlayed: value != null || holeWinner != null,
     isWinner: wonHole,
     isHalved: halved,
+    holeWinner: holeWinner ?? null,
   };
 }
 
@@ -201,7 +206,8 @@ function buildTeamScoreRow(params: {
       hole,
       value,
       wonHole,
-      halved: winner === 'tie' && value != null,
+      halved: winner === 'tie' && (value != null || winner != null),
+      holeWinner: winner,
     });
   });
 
@@ -217,23 +223,33 @@ function buildTeamScoreRow(params: {
 export function buildMatchGridModel(params: {
   matchGroup: TournamentMatchGroup;
   allScores: TournamentScore[];
+  allHoleResults?: TournamentMatchHoleResult[];
   teamNameById: Record<string, string>;
   playerNameById: Record<string, string>;
   useNetScoring: boolean;
 }): MatchGridModel {
-  const { matchGroup, allScores, teamNameById, playerNameById, useNetScoring } = params;
+  const { matchGroup, allScores, allHoleResults, teamNameById, playerNameById, useNetScoring } = params;
   const scores = scoresForMatchGroup(allScores, matchGroup);
   const format = matchGroup.format;
-  const sideAName = teamNameById[matchGroup.side_a_team_id] ?? 'Side A';
-  const sideBName = teamNameById[matchGroup.side_b_team_id] ?? 'Side B';
+  const sideAName = teamNameById[matchGroup.side_a_team_id] ?? 'TBD';
+  const sideBName = teamNameById[matchGroup.side_b_team_id] ?? 'TBD';
 
-  const overallHoleResults = computeMatchHoleResults(
-    matchGroup,
-    matchGroup.round_number,
-    format,
-    scores,
-    { useNetScoring }
-  );
+  const savedHoleResults =
+    allHoleResults?.filter(
+      (r) =>
+        r.match_group_id === matchGroup.id && r.round_number === matchGroup.round_number
+    ) ?? [];
+
+  const overallHoleResults =
+    savedHoleResults.length > 0
+      ? savedHoleResults.filter((r) => (r.pairing_index ?? 0) === 0 || !isSinglesFormat(format))
+      : computeMatchHoleResults(
+          matchGroup,
+          matchGroup.round_number,
+          format,
+          scores,
+          { useNetScoring }
+        );
 
   const holeWinners = new Map<number, TournamentMatchHoleWinner | null>(
     TOURNAMENT_MATCH_HOLES.map((hole) => {
@@ -255,14 +271,20 @@ export function buildMatchGridModel(params: {
       const playerBId = matchGroup.side_b_player_ids[i];
       if (!playerAId || !playerBId) continue;
 
-      const pairResults = computeSinglesPairHoleResults(
-        matchGroup,
-        matchGroup.round_number,
-        playerAId,
-        playerBId,
-        scores,
-        useNetScoring
+      const pairResults = savedHoleResults.filter(
+        (r) => (r.pairing_index ?? 0) === i
       );
+      const pairHoleResults =
+        pairResults.length > 0
+          ? pairResults
+          : computeSinglesPairHoleResults(
+              matchGroup,
+              matchGroup.round_number,
+              playerAId,
+              playerBId,
+              scores,
+              useNetScoring
+            );
 
       rows.push(
         buildPlayerScoreRow({
@@ -288,7 +310,7 @@ export function buildMatchGridModel(params: {
         buildRunningStatusRow(
           `${matchGroup.id}-pair-status-${i}`,
           'Match',
-          pairResults,
+          pairHoleResults,
           i
         )
       );
@@ -374,6 +396,7 @@ export function buildMatchGridModel(params: {
 export function buildMatchGridModels(params: {
   matchGroups: TournamentMatchGroup[];
   allScores: TournamentScore[];
+  allHoleResults?: TournamentMatchHoleResult[];
   teamNameById: Record<string, string>;
   playerNameById: Record<string, string>;
   useNetScoring: boolean;
@@ -389,6 +412,7 @@ export function buildMatchGridModels(params: {
       buildMatchGridModel({
         matchGroup,
         allScores: params.allScores,
+        allHoleResults: params.allHoleResults,
         teamNameById: params.teamNameById,
         playerNameById: params.playerNameById,
         useNetScoring: params.useNetScoring,

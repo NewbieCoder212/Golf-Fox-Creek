@@ -1,4 +1,5 @@
-import { SponsorBanner } from '@/components/SponsorBanner';
+import { SponsorBanner, useAdPlacement } from '@/components/SponsorBanner';
+import { pickTournamentEventHeaderAds } from '@/lib/ad-placement-service';
 import type { AdPlacementType } from '@/types';
 
 export type TournamentEventTab = 'schedule' | 'match' | 'teams';
@@ -15,8 +16,21 @@ interface TournamentTabAdBannerProps {
 }
 
 export function TournamentTabAdBanner({ tab, className }: TournamentTabAdBannerProps) {
+  const placementType = TAB_PLACEMENT[tab];
+  const { data: ads = [] } = useAdPlacement(placementType);
+  const { ads: headerAds, variant } = pickTournamentEventHeaderAds(ads);
+
+  if (headerAds.length === 0) {
+    return null;
+  }
+
   return (
-    <SponsorBanner placementType={TAB_PLACEMENT[tab]} variant="auto" className={className} />
+    <SponsorBanner
+      ads={headerAds}
+      placementType={placementType}
+      variant={variant}
+      className={className}
+    />
   );
 }
 

@@ -257,6 +257,8 @@ async function setupMatchGroups(
     '2026-06-19T16:00:00+00:00',
   ];
 
+  const ROUND_FORMATS = ['best_ball', 'scramble', 'singles'] as const;
+
   for (let round = 1; round <= 3; round++) {
     const { data: existing } = await adminFetch<Array<{ id: string }>>(
       `/rest/v1/tournament_match_groups?tournament_id=eq.${TOURNAMENT_ID}&round_number=eq.${round}&select=id`
@@ -265,6 +267,7 @@ async function setupMatchGroups(
     const payload = {
       tournament_id: TOURNAMENT_ID,
       round_number: round,
+      format: ROUND_FORMATS[round - 1],
       side_a_team_id: TEAM_DIAPERS_ID,
       side_b_team_id: TEAM_DEPENDS_ID,
       side_a_player_ids: sideA,

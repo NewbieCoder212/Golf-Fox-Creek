@@ -113,102 +113,11 @@ export function ScorecardAssistPanel({
             </View>
           ) : null}
 
-          <View className="bg-[#141414] rounded-xl border border-neutral-800 overflow-hidden mb-3">
-            <View className="flex-row items-center justify-between p-3 border-b border-neutral-800">
-              <Pressable
-                onPress={() => currentHole > 1 && onSetCurrentHole(currentHole - 1)}
-                disabled={currentHole === 1}
-                className="p-2 active:opacity-50"
-              >
-                <ChevronLeft size={22} color={currentHole === 1 ? '#404040' : '#a3e635'} />
-              </Pressable>
-              <View className="items-center">
-                <Text className="text-neutral-500 text-[10px] uppercase tracking-widest">Quick Entry</Text>
-                <Text className="text-white text-2xl font-bold">Hole {currentHole}</Text>
-                <Text className="text-lime-400 text-sm">Par {holePar}</Text>
-              </View>
-              <Pressable
-                onPress={() => currentHole < 18 && onSetCurrentHole(currentHole + 1)}
-                disabled={currentHole === 18}
-                className="p-2 active:opacity-50"
-              >
-                <ChevronRight size={22} color={currentHole === 18 ? '#404040' : '#a3e635'} />
-              </Pressable>
+            <View className="bg-[#141414] rounded-xl border border-neutral-800 overflow-hidden mb-3 p-4">
+              <Text className="text-neutral-400 text-sm text-center">
+                Enter match results in the scorecard below — tap the winning side's +1, Halved, or the other side's +1.
+              </Text>
             </View>
-
-            {players.map((player, index) => {
-              const score = holeScores[index];
-              const relativeToPar = getRelativeToPar(index);
-              return (
-                <View
-                  key={player.id}
-                  className={cn(
-                    'flex-row items-center px-3 py-2.5',
-                    index < players.length - 1 && 'border-b border-neutral-800/50'
-                  )}
-                >
-                  <View className="w-8 h-8 rounded-full bg-neutral-800 items-center justify-center mr-2">
-                    <Text className="text-lime-400 font-bold text-xs">{player.initials}</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-white font-medium text-sm">{player.name}</Text>
-                    <Text
-                      className={cn(
-                        'text-[10px]',
-                        relativeToPar === 0
-                          ? 'text-neutral-500'
-                          : relativeToPar > 0
-                          ? 'text-red-400'
-                          : 'text-lime-400'
-                      )}
-                    >
-                      {relativeToPar === 0
-                        ? 'E'
-                        : relativeToPar > 0
-                        ? `+${relativeToPar}`
-                        : relativeToPar}
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center">
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        onScoreAdjust(index, -1);
-                      }}
-                      className="w-8 h-8 rounded-full bg-neutral-800 items-center justify-center"
-                    >
-                      <Text className="text-lime-400 text-lg font-bold">−</Text>
-                    </Pressable>
-                    <View className="w-10 items-center">
-                      <Text
-                        className={cn(
-                          'text-xl font-bold',
-                          score === null
-                            ? 'text-neutral-600'
-                            : score === holePar
-                            ? 'text-white'
-                            : score < holePar
-                            ? 'text-lime-400'
-                            : 'text-red-400'
-                        )}
-                      >
-                        {score ?? '–'}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        onScoreAdjust(index, 1);
-                      }}
-                      className="w-8 h-8 rounded-full bg-neutral-800 items-center justify-center"
-                    >
-                      <Text className="text-lime-400 text-lg font-bold">+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
 
           <MatchHoleAdBanners holeNumber={currentHole} className="mb-3" />
 

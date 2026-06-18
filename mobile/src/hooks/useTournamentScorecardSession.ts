@@ -20,8 +20,11 @@ import {
 } from '@/lib/tournament-match-scoring';
 import {
   computeLiveMatchStatus,
-  recentHoleOutcomeRows,
 } from '@/lib/tournament-match-status';
+import {
+  outcomesMapToHoleResultRows,
+  getSinglesPairingCount,
+} from '@/lib/match-hole-outcomes';
 import {
   buildTournamentPlayerMaps,
   getTournamentPlayers,
@@ -33,6 +36,8 @@ import { findMatchGroupForRosterPlayer } from '@/lib/tournament-scorecard-routin
 import {
   getMatchGroupFormat,
   getRoundFormat,
+  getTeamNameById,
+  getTeamSideDisplayName,
   isFoursomePlayerScorecardFormat,
   isSideScopedTeamFormat,
   isSinglesFormat,
@@ -46,7 +51,7 @@ import {
   useTournamentIsDirty,
 } from '@/lib/tournament-store';
 import type { TournamentTeamSide } from '@/types';
-import type { MatchPanelPlayer } from '@/components/TournamentMatchHolePanel';
+import type { DirectResultPlayer } from '@/components/TournamentDirectResultPanel';
 
 export interface TournamentScorecardParams {
   id: string;
@@ -86,6 +91,11 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
   const syncScoresToSupabase = useTournamentStore((s) => s.syncScoresToSupabase);
   const clearMatchRoundScores = useTournamentStore((s) => s.clearMatchRoundScores);
   const persistSession = useTournamentStore((s) => s.persistSession);
+  const setHoleOutcome = useTournamentStore((s) => s.setHoleOutcome);
+  const setActivePairingIndex = useTournamentStore((s) => s.setActivePairingIndex);
+  const holeOutcomes = useTournamentStore((s) => s.holeOutcomes);
+  const pairingOutcomes = useTournamentStore((s) => s.pairingOutcomes);
+  const activePairingIndex = useTournamentStore((s) => s.activePairingIndex);
   const getPlayerHoleDetails = useTournamentStore((s) => s.getPlayerHoleDetails);
 
   const format = useTournamentStore((s) => s.format);
@@ -265,9 +275,11 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
             ? null
             : viewerTeamId;
 
-        const teamName =
-          allTeams.find((t) => t.id === teamId)?.team_name ??
-          (effectiveSide === 'side_a' ? 'Team A' : effectiveSide === 'side_b' ? 'Team B' : null);
+        const teamName = teamId
+          ? getTeamNameById(teamId, allTeams)
+          : effectiveSide
+            ? getTeamSideDisplayName(effectiveSide, allTeams)
+            : null;
 
         return {
           teamId,
@@ -541,13 +553,13 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
   const isTeamFormat = format ? isTeamScorecardFormat(format) : false;
 
   const sideAName = useMemo(() => {
-    if (!activeMatchGroup) return 'Side A';
-    return allTeams.find((t) => t.id === activeMatchGroup.side_a_team_id)?.team_name ?? 'Side A';
+    if (!activeMatchGroup) return getTeamSideDisplayName('side_a', allTeams);
+    return getTeamNameById(activeMatchGroup.side_a_team_id, allTeams);
   }, [activeMatchGroup, allTeams]);
 
   const sideBName = useMemo(() => {
-    if (!activeMatchGroup) return 'Side B';
-    return allTeams.find((t) => t.id === activeMatchGroup.side_b_team_id)?.team_name ?? 'Side B';
+    if (!activeMatchGroup) return getTeamSideDisplayName('side_b', allTeams);
+    return getTeamNameById(activeMatchGroup.side_b_team_id, allTeams);
   }, [activeMatchGroup, allTeams]);
 
   const viewerSide: TournamentTeamSide = useMemo(() => {
@@ -641,35 +653,24 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
   const liveHoleResults = useMemo(() => {
     if (!activeMatchGroup || !format) return [];
 
-    const liveScores = buildLiveMatchScores({
-      matchGroup: activeMatchGroup,
-      format,
-      players: playersForMatchStatus,
-      grossScores: grossScoresForMatchStatus,
-      teamGrossScores,
-      teePlayed,
-    });
+    if (isSinglesFormat(format)) {
+      const rows: Array<{ hole: number; hole_winner: 'side_a' | 'side_b' | 'tie'; pairing_index?: number }> = [];
+      for (const [idxStr, outcomes] of Object.entries(pairingOutcomes)) {
+        const pairingIndex = Number(idxStr);
+        for (const [holeStr, winner] of Object.entries(outcomes)) {
+          if (!winner) continue;
+          rows.push({
+            hole: Number(holeStr),
+            hole_winner: winner,
+            pairing_index: pairingIndex,
+          });
+        }
+      }
+      return rows;
+    }
 
-    const mergedScores = mergeMatchScoresForStatus(savedMatchScores, liveScores);
-
-    return computeMatchHoleResults(
-      activeMatchGroup,
-      roundNumber,
-      format,
-      mergedScores,
-      { useNetScoring: tournament?.match_use_net_scoring ?? false }
-    );
-  }, [
-    activeMatchGroup,
-    format,
-    playersForMatchStatus,
-    grossScoresForMatchStatus,
-    teamGrossScores,
-    teePlayed,
-    roundNumber,
-    savedMatchScores,
-    tournament?.match_use_net_scoring,
-  ]);
+    return outcomesMapToHoleResultRows(holeOutcomes);
+  }, [activeMatchGroup, format, holeOutcomes, pairingOutcomes]);
 
   const matchStatus = useMemo(
     () =>
@@ -780,8 +781,8 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
   );
 
   const matchRecentHoleRows = useMemo(
-    () => recentHoleOutcomeRows(liveHoleResults, viewerSide, 6),
-    [liveHoleResults, viewerSide]
+    () => [],
+    []
   );
 
   const matchScoringModeLabel = useMemo(() => {
@@ -936,32 +937,40 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
   }, [bestBallByHole, currentHole]);
 
   const buildSidePlayers = useCallback(
-    (side: 'a' | 'b'): MatchPanelPlayer[] => {
+    (side: 'a' | 'b'): DirectResultPlayer[] => {
       if (!activeMatchGroup) return [];
       const ids =
         side === 'a' ? activeMatchGroup.side_a_player_ids : activeMatchGroup.side_b_player_ids;
-      return ids.map((pid) => {
-        const storePlayer = players.find((p) => p.id === pid);
-        return {
-          id: pid,
-          name: playerNameById[pid] ?? storePlayer?.name ?? 'Player',
-          gross: grossScoresForMatchStatus[pid]?.[currentHole] ?? null,
-          isCounting: bestBallHighlightIds.has(pid),
-        };
-      });
+      return ids.map((pid) => ({
+        id: pid,
+        name: playerNameById[pid] ?? players.find((p) => p.id === pid)?.name ?? 'Player',
+      }));
     },
-    [
-      activeMatchGroup,
-      players,
-      playerNameById,
-      grossScoresForMatchStatus,
-      currentHole,
-      bestBallHighlightIds,
-    ]
+    [activeMatchGroup, players, playerNameById]
   );
 
   const sideAPlayers = useMemo(() => buildSidePlayers('a'), [buildSidePlayers]);
   const sideBPlayers = useMemo(() => buildSidePlayers('b'), [buildSidePlayers]);
+
+  const singlesPairings = useMemo(() => {
+    if (!activeMatchGroup || !format || !isSinglesFormat(format)) return [];
+    const count = getSinglesPairingCount(activeMatchGroup);
+    return Array.from({ length: count }, (_, pairingIndex) => ({
+      pairingIndex,
+      sideAPlayer: {
+        id: activeMatchGroup.side_a_player_ids[pairingIndex] ?? `a-${pairingIndex}`,
+        name:
+          playerNameById[activeMatchGroup.side_a_player_ids[pairingIndex]] ??
+          `Player ${pairingIndex + 1}`,
+      },
+      sideBPlayer: {
+        id: activeMatchGroup.side_b_player_ids[pairingIndex] ?? `b-${pairingIndex}`,
+        name:
+          playerNameById[activeMatchGroup.side_b_player_ids[pairingIndex]] ??
+          `Opponent ${pairingIndex + 1}`,
+      },
+    }));
+  }, [activeMatchGroup, format, playerNameById]);
 
   const handleMatchPlayerAdjust = useCallback(
     (side: 'a' | 'b', playerIndex: number, delta: number) => {
@@ -1069,6 +1078,14 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     void handleSync();
   }, [currentHole, id, isDirty]);
 
+  useEffect(() => {
+    if (!id || !isDirty) return;
+    const timer = setTimeout(() => {
+      void handleSync();
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [holeOutcomes, pairingOutcomes]);
+
   const isMatchComplete = useMemo(
     () =>
       matchStatus.throughHole > 0 &&
@@ -1126,6 +1143,12 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     nextRoundNumber,
     sideAPlayers,
     sideBPlayers,
+    holeOutcomes,
+    pairingOutcomes,
+    activePairingIndex,
+    setHoleOutcome,
+    setActivePairingIndex,
+    singlesPairings,
     sideATeamGross,
     sideBTeamGross,
     currentHoleOutcomeLabel,

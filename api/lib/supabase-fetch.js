@@ -18,7 +18,7 @@ function fetchWithTimeout(url, init = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   ]);
 }
 
-async function adminFetch(path, options = {}) {
+async function adminFetch(path, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const { supabaseUrl, serviceRoleKey } = getConfig();
   const method = options.method ?? 'GET';
   const headers = {
@@ -33,7 +33,7 @@ async function adminFetch(path, options = {}) {
       method,
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-    });
+    }, timeoutMs);
     const text = await response.text();
     let data = null;
     if (text) {

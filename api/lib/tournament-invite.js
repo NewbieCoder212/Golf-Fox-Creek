@@ -136,35 +136,82 @@ async function generateMagicLink(email, redirectTo) {
   return result.data?.action_link ?? properties?.action_link ?? null;
 }
 
-async function ensureAuthUserId({ email, firstName, lastName, redirectTo }) {
-  const inviteResult = await adminFetch('/auth/v1/invite', {
-    method: 'POST',
-    body: {
-      email: email.trim().toLowerCase(),
-      data: {
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        full_name: buildFullName(firstName, lastName),
-      },
-      redirect_to: redirectTo,
-    },
-  });
+function emailEqFilter(email) {
+  return encodeURIComponent(email.trim().toLowerCase());
+}
 
-  if (inviteResult.ok) {
-    const user = inviteResult.data?.user;
-    const userId = user?.id ?? inviteResult.data?.id;
-    if (userId) return { userId, authInviteSent: true };
-  }
-
-  const quotedEmail = `"${email.trim().toLowerCase().replace(/"/g, '')}"`;
+async function lookupAuthUserIdByEmail(email) {
+  const normalized = email.trim().toLowerCase();
   const profileResult = await adminFetch(
-    `/rest/v1/user_profiles?email=eq.${quotedEmail}&select=id&limit=1`
+    `/rest/v1/user_profiles?email=eq.${emailEqFilter(normalized)}&select=id&limit=1`
   );
   if (profileResult.ok && profileResult.data?.[0]?.id) {
-    return { userId: profileResult.data[0].id, authInviteSent: false };
+    return profileResult.data[0].id;
   }
 
-  throw new Error(inviteResult.data?.message ?? inviteResult.data?.msg ?? 'Could not create auth user');
+  const usersResult = await adminFetch('/auth/v1/admin/users?page=1&per_page=200', {}, 30_000);
+  if (usersResult.ok && usersResult.data?.users) {
+    const match = usersResult.data.users.find(
+      (user) => user.email?.trim().toLowerCase() === normalized
+    );
+    if (match?.id) return match.id;
+  }
+  return null;
+}
+
+async function createAuthUserInviteLink({ email, firstName, lastName, redirectTo }) {
+  const result = await adminFetch('/auth/v1/admin/generate_link', {
+    method: 'POST',
+    body: {
+      type: 'invite',
+      email: email.trim().toLowerCase(),
+      options: {
+        redirect_to: redirectTo,
+        data: {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          full_name: buildFullName(firstName, lastName),
+        },
+      },
+    },
+  }, 30_000);
+
+  if (!result.ok) {
+    const message = result.data?.message ?? result.data?.msg ?? 'Could not create auth user';
+    if (/already been registered|already exists|duplicate/i.test(String(message))) {
+      const existingId = await lookupAuthUserIdByEmail(email);
+      if (existingId) {
+        return { userId: existingId, setupUrl: null };
+      }
+    }
+    throw new Error(message);
+  }
+
+  const userId = result.data?.user?.id ?? result.data?.id;
+  if (!userId) {
+    throw new Error('Could not create auth user');
+  }
+
+  const properties = result.data?.properties;
+  const setupUrl = result.data?.action_link ?? properties?.action_link ?? null;
+  return { userId, setupUrl };
+}
+
+async function ensureAuthUserId({ email, firstName, lastName, redirectTo }) {
+  const existingId = await lookupAuthUserIdByEmail(email);
+  if (existingId) {
+    return { userId: existingId, setupUrl: null };
+  }
+
+  try {
+    return await createAuthUserInviteLink({ email, firstName, lastName, redirectTo });
+  } catch (error) {
+    const retryId = await lookupAuthUserIdByEmail(email);
+    if (retryId) {
+      return { userId: retryId, setupUrl: null };
+    }
+    throw error;
+  }
 }
 
 async function sendParticipantInvite(tournamentId, playerId, { resend = false } = {}) {
@@ -211,9 +258,8 @@ async function sendParticipantInvite(tournamentId, playerId, { resend = false } 
     );
     profile = profileResult.ok ? profileResult.data?.[0] ?? null : null;
   } else if (player.email?.trim()) {
-    const quotedEmail = `"${player.email.trim().toLowerCase().replace(/"/g, '')}"`;
     const profileResult = await adminFetch(
-      `/rest/v1/user_profiles?email=eq.${quotedEmail}&select=id,email,full_name,first_name,last_name,invite_status`
+      `/rest/v1/user_profiles?email=eq.${emailEqFilter(player.email)}&select=id,email,full_name,first_name,last_name,invite_status`
     );
     profile = profileResult.ok ? profileResult.data?.[0] ?? null : null;
   }
@@ -239,6 +285,7 @@ async function sendParticipantInvite(tournamentId, playerId, { resend = false } 
   let linkedUserId = player.user_id ?? profile?.id ?? null;
   let isPendingMember = profile?.invite_status === 'pending';
   let invitesSent = 0;
+  let accountSetupUrl = tournamentUrl;
 
   if (!linkedUserId) {
     const { firstName, lastName } = splitDisplayName(player.display_name);
@@ -249,12 +296,13 @@ async function sendParticipantInvite(tournamentId, playerId, { resend = false } 
       redirectTo: inviteRedirect,
     });
     linkedUserId = ensured.userId;
-    if (ensured.authInviteSent) invitesSent += 1;
     isPendingMember = true;
+    if (ensured.setupUrl) {
+      accountSetupUrl = ensured.setupUrl;
+    }
   }
 
-  let accountSetupUrl = tournamentUrl;
-  if (isPendingMember) {
+  if (isPendingMember && accountSetupUrl === tournamentUrl) {
     const actionLink = await generateMagicLink(email, inviteRedirect);
     if (actionLink) {
       accountSetupUrl = actionLink;

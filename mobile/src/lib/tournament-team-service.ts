@@ -3,7 +3,7 @@ import { ensureManagerAccessToken } from './admin-auth-bridge';
 import { getBackendUrl, isBackendReachableInBrowser, isLocalhostBackendUrl } from './backend-url';
 
 const BACKEND_REQUEST_TIMEOUT_MS = 4_000;
-const BACKEND_INVITE_TIMEOUT_MS = 60_000;
+const BACKEND_INVITE_TIMEOUT_MS = 120_000;
 
 function backendReachabilityError(): string {
   if (typeof window !== 'undefined' && isLocalhostBackendUrl()) {

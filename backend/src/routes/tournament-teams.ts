@@ -201,26 +201,28 @@ function splitDisplayName(displayName: string): { firstName: string; lastName: s
   return { firstName: parts[0]!, lastName: parts.slice(1).join(' ') };
 }
 
-async function inviteUserByEmail(params: {
+/** Create auth user and return a setup link without triggering Supabase's own invite email (slow on serverless). */
+async function createAuthUserInviteLink(params: {
   email: string;
   firstName: string;
   lastName: string;
   redirectTo: string;
-}): Promise<{ userId: string }> {
+}): Promise<{ userId: string; setupUrl: string | null }> {
   const fullName = buildFullName(params.firstName, params.lastName);
   const supabase = getSupabaseAdminClient();
 
-  const { data, error } = await supabase.auth.admin.inviteUserByEmail(
-    params.email.trim().toLowerCase(),
-    {
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: 'invite',
+    email: params.email.trim().toLowerCase(),
+    options: {
       redirectTo: params.redirectTo,
       data: {
         first_name: params.firstName.trim(),
         last_name: params.lastName.trim(),
         full_name: fullName,
       },
-    }
-  );
+    },
+  });
 
   if (error) {
     throw new Error(error.message);
@@ -228,10 +230,10 @@ async function inviteUserByEmail(params: {
 
   const userId = data.user?.id;
   if (!userId) {
-    throw new Error('Invite succeeded but no user id returned');
+    throw new Error('Could not create auth user');
   }
 
-  return { userId };
+  return { userId, setupUrl: data.properties?.action_link ?? null };
 }
 
 async function findAuthUserIdByEmail(email: string): Promise<string | null> {
@@ -269,14 +271,18 @@ async function ensureAuthUserIdForInvite(params: {
   firstName: string;
   lastName: string;
   redirectTo: string;
-}): Promise<{ userId: string; authInviteSent: boolean }> {
+}): Promise<{ userId: string; setupUrl: string | null }> {
+  const existingId = await findAuthUserIdByEmail(params.email);
+  if (existingId) {
+    return { userId: existingId, setupUrl: null };
+  }
+
   try {
-    const invited = await inviteUserByEmail(params);
-    return { userId: invited.userId, authInviteSent: true };
+    return await createAuthUserInviteLink(params);
   } catch (error) {
-    const existingId = await findAuthUserIdByEmail(params.email);
-    if (existingId) {
-      return { userId: existingId, authInviteSent: false };
+    const retryId = await findAuthUserIdByEmail(params.email);
+    if (retryId) {
+      return { userId: retryId, setupUrl: null };
     }
     throw error;
   }
@@ -530,6 +536,8 @@ async function sendParticipantInviteForPlayer(
   let invitesSent = 0;
 
   try {
+    let accountSetupUrl = context.tournamentUrl;
+
     if (!linkedUserId) {
       const { firstName, lastName } = splitDisplayName(player.display_name);
       const ensured = await ensureAuthUserIdForInvite({
@@ -539,14 +547,13 @@ async function sendParticipantInviteForPlayer(
         redirectTo: context.inviteRedirect,
       });
       linkedUserId = ensured.userId;
-      if (ensured.authInviteSent) {
-        invitesSent += 1;
-      }
       isPendingMember = true;
+      if (ensured.setupUrl) {
+        accountSetupUrl = ensured.setupUrl;
+      }
     }
 
-    let accountSetupUrl = context.tournamentUrl;
-    if (isPendingMember) {
+    if (isPendingMember && accountSetupUrl === context.tournamentUrl) {
       const { firstName, lastName } = splitDisplayName(recipientName);
       const actionLink = await generateInviteLink({
         email,

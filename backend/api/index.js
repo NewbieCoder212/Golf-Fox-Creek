@@ -918,15 +918,19 @@ function splitDisplayName(displayName) {
     return { firstName: parts[0], lastName: "" };
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
-async function inviteUserByEmail2(params) {
+async function createAuthUserInviteLink(params) {
   const fullName = buildFullName2(params.firstName, params.lastName);
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.auth.admin.inviteUserByEmail(params.email.trim().toLowerCase(), {
-    redirectTo: params.redirectTo,
-    data: {
-      first_name: params.firstName.trim(),
-      last_name: params.lastName.trim(),
-      full_name: fullName
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: "invite",
+    email: params.email.trim().toLowerCase(),
+    options: {
+      redirectTo: params.redirectTo,
+      data: {
+        first_name: params.firstName.trim(),
+        last_name: params.lastName.trim(),
+        full_name: fullName
+      }
     }
   });
   if (error) {
@@ -934,9 +938,9 @@ async function inviteUserByEmail2(params) {
   }
   const userId = data.user?.id;
   if (!userId) {
-    throw new Error("Invite succeeded but no user id returned");
+    throw new Error("Could not create auth user");
   }
-  return { userId };
+  return { userId, setupUrl: data.properties?.action_link ?? null };
 }
 async function findAuthUserIdByEmail(email) {
   const normalized = email.trim().toLowerCase();
@@ -956,13 +960,16 @@ async function findAuthUserIdByEmail(email) {
   return match?.id ?? null;
 }
 async function ensureAuthUserIdForInvite(params) {
+  const existingId = await findAuthUserIdByEmail(params.email);
+  if (existingId) {
+    return { userId: existingId, setupUrl: null };
+  }
   try {
-    const invited = await inviteUserByEmail2(params);
-    return { userId: invited.userId, authInviteSent: true };
+    return await createAuthUserInviteLink(params);
   } catch (error) {
-    const existingId = await findAuthUserIdByEmail(params.email);
-    if (existingId) {
-      return { userId: existingId, authInviteSent: false };
+    const retryId = await findAuthUserIdByEmail(params.email);
+    if (retryId) {
+      return { userId: retryId, setupUrl: null };
     }
     throw error;
   }
@@ -1096,6 +1103,7 @@ async function sendParticipantInviteForPlayer(player, context, options = {}) {
   let linkedUserId = player.user_id ?? profile?.id ?? null;
   let invitesSent = 0;
   try {
+    let accountSetupUrl = context.tournamentUrl;
     if (!linkedUserId) {
       const { firstName, lastName } = splitDisplayName(player.display_name);
       const ensured = await ensureAuthUserIdForInvite({
@@ -1105,13 +1113,12 @@ async function sendParticipantInviteForPlayer(player, context, options = {}) {
         redirectTo: context.inviteRedirect
       });
       linkedUserId = ensured.userId;
-      if (ensured.authInviteSent) {
-        invitesSent += 1;
-      }
       isPendingMember = true;
+      if (ensured.setupUrl) {
+        accountSetupUrl = ensured.setupUrl;
+      }
     }
-    let accountSetupUrl = context.tournamentUrl;
-    if (isPendingMember) {
+    if (isPendingMember && accountSetupUrl === context.tournamentUrl) {
       const { firstName, lastName } = splitDisplayName(recipientName);
       const actionLink = await generateInviteLink2({
         email,

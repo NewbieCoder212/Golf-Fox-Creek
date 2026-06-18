@@ -1,5 +1,5 @@
-const { requireManager, setCors } = require('../../../lib/supabase-fetch');
-const { loadParticipantOnboarding } = require('../../../lib/tournament-onboarding');
+const { requireManager, setCors } = require('../../lib/supabase-fetch');
+const { loadParticipantOnboarding } = require('../../lib/tournament-onboarding');
 
 module.exports = async function handler(req, res) {
   setCors(req, res);

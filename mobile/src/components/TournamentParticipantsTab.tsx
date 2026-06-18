@@ -462,7 +462,13 @@ export function TournamentParticipantsTab({
             inviteMutation.isPending && inviteMutation.variables?.playerId === player.id;
           const hasEmail = Boolean(resolvedEmail ?? player.email?.trim());
           const onboardingEntry = onboardingByPlayerId[player.id];
-          const onboardingStatus = onboardingEntry?.status ?? (hasEmail ? 'not_invited' : 'no_email');
+          const onboardingStatus =
+            onboardingEntry?.status ??
+            (player.invite_email_sent_at
+              ? 'pending_setup'
+              : hasEmail
+                ? 'not_invited'
+                : 'no_email');
           const onboardingBadge = onboardingBadgeStyles(onboardingStatus);
           const lastSignInLabel = formatParticipantLastSignIn(onboardingEntry?.lastSignInAt ?? null);
 

@@ -79,12 +79,16 @@ function getErrorMessage(data) {
 async function supabaseFetch(url, init = {}, timeoutMs = ADMIN_FETCH_TIMEOUT_MS) {
   const controller = new AbortController;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const fetchPromise = fetch(url, {
+    ...init,
+    signal: init.signal ?? controller.signal,
+    cache: "no-store"
+  });
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Supabase request timed out")), timeoutMs);
+  });
   try {
-    return await fetch(url, {
-      ...init,
-      signal: init.signal ?? controller.signal,
-      cache: "no-store"
-    });
+    return await Promise.race([fetchPromise, timeoutPromise]);
   } finally {
     clearTimeout(timeout);
   }

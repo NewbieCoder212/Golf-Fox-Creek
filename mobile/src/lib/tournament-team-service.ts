@@ -2,10 +2,15 @@ import type { TournamentPlayer, TournamentTeam } from '@/types';
 import { getBackendUrl } from './backend-url';
 
 const BACKEND_REQUEST_TIMEOUT_MS = 4_000;
+const BACKEND_INVITE_TIMEOUT_MS = 30_000;
 
-async function fetchBackend(path: string, init: RequestInit = {}): Promise<Response> {
+async function fetchBackend(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = BACKEND_REQUEST_TIMEOUT_MS
+): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), BACKEND_REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(`${getBackendUrl()}${path}`, {
       ...init,
@@ -126,7 +131,8 @@ export async function sendParticipantInvites(params: {
         headers: {
           Authorization: `Bearer ${params.accessToken}`,
         },
-      }
+      },
+      BACKEND_INVITE_TIMEOUT_MS
     );
 
     const data = (await response.json()) as SendParticipantInvitesResult & { error?: string };
@@ -142,6 +148,59 @@ export async function sendParticipantInvites(params: {
       skippedNoEmail: data.skippedNoEmail,
       skippedAlreadySent: data.skippedAlreadySent,
       errors: data.errors,
+    };
+  } catch {
+    return { success: false, error: 'Could not reach tournament service' };
+  }
+}
+
+export interface SendParticipantInviteResult {
+  success: boolean;
+  emailed?: number;
+  invitesSent?: number;
+  email?: string;
+  skippedAlreadySent?: boolean;
+  error?: string;
+}
+
+export async function sendParticipantInvite(params: {
+  tournamentId: string;
+  playerId: string;
+  accessToken: string;
+  resend?: boolean;
+}): Promise<SendParticipantInviteResult> {
+  try {
+    const response = await fetchBackend(
+      `/api/tournaments/${params.tournamentId}/participants/${params.playerId}/send-invite`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${params.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ resend: params.resend === true }),
+      },
+      BACKEND_INVITE_TIMEOUT_MS
+    );
+
+    const data = (await response.json()) as SendParticipantInviteResult & {
+      error?: string;
+      skippedAlreadySent?: boolean;
+    };
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.error ?? 'Could not send invite',
+        skippedAlreadySent: data.skippedAlreadySent,
+      };
+    }
+
+    return {
+      success: true,
+      emailed: data.emailed,
+      invitesSent: data.invitesSent,
+      email: data.email,
     };
   } catch {
     return { success: false, error: 'Could not reach tournament service' };

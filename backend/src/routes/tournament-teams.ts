@@ -223,6 +223,214 @@ async function inviteUserByEmail(params: {
   return { userId };
 }
 
+type ParticipantInviteContext = {
+  inviteRedirect: string;
+  tournamentUrl: string;
+  tournament: TournamentRow;
+  tournamentDates: string;
+  teamByPlayerId: Map<string, TeamRow>;
+  allPlayers: TournamentPlayerRow[];
+  profileById: Map<string, UserProfileRow>;
+  profilesByEmail: Map<string, UserProfileRow>;
+};
+
+type ParticipantInviteAttemptResult = {
+  emailed: boolean;
+  invitesSent: number;
+  email?: string;
+  error?: string;
+  skippedAlreadySent?: boolean;
+  skippedNoEmail?: boolean;
+};
+
+async function loadParticipantInviteContext(
+  tournamentId: string
+): Promise<{ context: ParticipantInviteContext } | { error: string; status: number }> {
+  const inviteRedirect =
+    process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? 'http://localhost:8081/accept-invite';
+  const tournamentUrl = buildTournamentDeepLink(tournamentId);
+
+  const tournamentResult = await adminFetch<TournamentRow[]>(
+    `/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`
+  );
+  if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
+    return { error: 'Tournament not found', status: 404 };
+  }
+  const tournament = tournamentResult.data[0];
+  const tournamentDates = formatTournamentDates(tournament.start_date, tournament.end_date);
+
+  const playersResult = await adminFetch<TournamentPlayerRow[]>(
+    `/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`
+  );
+  if (!playersResult.ok || !playersResult.data) {
+    return { error: 'Could not load participants', status: 500 };
+  }
+
+  const teamsResult = await adminFetch<TeamRow[]>(
+    `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`
+  );
+  if (!teamsResult.ok || !teamsResult.data) {
+    return { error: 'Could not load teams', status: 500 };
+  }
+
+  const teamByPlayerId = new Map<string, TeamRow>();
+  for (const team of teamsResult.data) {
+    for (const playerId of team.player_ids ?? []) {
+      teamByPlayerId.set(playerId, team);
+    }
+  }
+
+  const userIds = playersResult.data
+    .map((player) => player.user_id)
+    .filter((id): id is string => Boolean(id));
+
+  let profiles: UserProfileRow[] = [];
+  if (userIds.length > 0) {
+    const profilesResult = await adminFetch<UserProfileRow[]>(
+      `/rest/v1/user_profiles?id=in.(${userIds.join(',')})&select=id,email,full_name,first_name,last_name,invite_status`
+    );
+    if (profilesResult.ok && profilesResult.data) {
+      profiles = profilesResult.data;
+    }
+  }
+
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+  const emailsToLookup = playersResult.data
+    .filter((player) => !player.user_id && player.email?.trim())
+    .map((player) => player.email!.trim().toLowerCase());
+
+  let profilesByEmail = new Map<string, UserProfileRow>();
+  if (emailsToLookup.length > 0) {
+    const inList = emailsToLookup.map((email) => `"${email.replace(/"/g, '')}"`).join(',');
+    const byEmailResult = await adminFetch<UserProfileRow[]>(
+      `/rest/v1/user_profiles?email=in.(${inList})&select=id,email,full_name,first_name,last_name,invite_status`
+    );
+    if (byEmailResult.ok && byEmailResult.data) {
+      profilesByEmail = new Map(
+        byEmailResult.data.map((profile) => [profile.email?.toLowerCase() ?? '', profile])
+      );
+    }
+  }
+
+  return {
+    context: {
+      inviteRedirect,
+      tournamentUrl,
+      tournament,
+      tournamentDates,
+      teamByPlayerId,
+      allPlayers: playersResult.data,
+      profileById,
+      profilesByEmail,
+    },
+  };
+}
+
+async function sendParticipantInviteForPlayer(
+  player: TournamentPlayerRow,
+  context: ParticipantInviteContext,
+  options: { allowResend?: boolean; now?: string } = {}
+): Promise<ParticipantInviteAttemptResult> {
+  const now = options.now ?? new Date().toISOString();
+
+  if (player.invite_email_sent_at && !options.allowResend) {
+    return { emailed: false, invitesSent: 0, skippedAlreadySent: true };
+  }
+
+  let profile = player.user_id ? context.profileById.get(player.user_id) : null;
+  let email = profile?.email?.trim() ?? player.email?.trim() ?? null;
+
+  if (!email && player.email?.trim()) {
+    const byEmail = context.profilesByEmail.get(player.email.trim().toLowerCase());
+    if (byEmail) {
+      profile = byEmail;
+      email = byEmail.email?.trim() ?? player.email.trim();
+    }
+  }
+
+  if (!email) {
+    return { emailed: false, invitesSent: 0, skippedNoEmail: true };
+  }
+
+  const team = context.teamByPlayerId.get(player.id);
+  const rosterNames = team
+    ? context.allPlayers
+        .filter((entry) => team.player_ids.includes(entry.id))
+        .map((entry) => entry.display_name)
+    : [];
+
+  const recipientName =
+    profile?.full_name?.trim() ||
+    buildFullName(profile?.first_name ?? '', profile?.last_name ?? '') ||
+    player.display_name;
+
+  let isPendingMember = profile?.invite_status === 'pending';
+  let linkedUserId = player.user_id ?? profile?.id ?? null;
+  let invitesSent = 0;
+
+  try {
+    if (!linkedUserId) {
+      const { firstName, lastName } = splitDisplayName(player.display_name);
+      const invited = await inviteUserByEmail({
+        email,
+        firstName,
+        lastName,
+        redirectTo: context.inviteRedirect,
+      });
+      linkedUserId = invited.userId;
+      invitesSent += 1;
+      isPendingMember = true;
+    } else if (profile?.invite_status === 'pending') {
+      const { firstName, lastName } = splitDisplayName(recipientName);
+      await generateInviteLink({
+        email,
+        firstName,
+        lastName,
+        redirectTo: context.inviteRedirect,
+      });
+      invitesSent += 1;
+    }
+
+    if (!player.user_id && linkedUserId) {
+      await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
+        method: 'PATCH',
+        body: { user_id: linkedUserId },
+      });
+    }
+
+    const emailResult = await sendTournamentOnboardEmail({
+      to: email,
+      recipientName,
+      tournamentName: context.tournament.name,
+      tournamentDates: context.tournamentDates,
+      teamName: team?.team_name ?? null,
+      teamSideLabel: null,
+      rosterNames,
+      tournamentUrl: isPendingMember ? context.inviteRedirect : context.tournamentUrl,
+      isPendingMember,
+    });
+
+    if (emailResult.sent) {
+      await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
+        method: 'PATCH',
+        body: { invite_email_sent_at: now },
+      });
+      return { emailed: true, invitesSent, email };
+    }
+
+    return {
+      emailed: false,
+      invitesSent,
+      email,
+      error: emailResult.error ?? 'Email was not sent',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Email failed';
+    return { emailed: false, invitesSent, email, error: message };
+  }
+}
+
 tournamentTeamsRouter.patch(
   '/:tournamentId/participants/:playerId',
   requireManagerAuth,
@@ -376,77 +584,80 @@ tournamentTeamsRouter.delete(
 );
 
 tournamentTeamsRouter.post(
+  '/:tournamentId/participants/:playerId/send-invite',
+  requireManagerAuth,
+  async (c) => {
+    const tournamentId = c.req.param('tournamentId');
+    const playerId = c.req.param('playerId');
+
+    let resend = false;
+    try {
+      const body = await c.req.json<{ resend?: boolean }>();
+      resend = body.resend === true;
+    } catch {
+      // Empty body is fine for first-time sends.
+    }
+
+    const loaded = await loadParticipantInviteContext(tournamentId);
+    if ('error' in loaded) {
+      return c.json({ error: loaded.error }, loaded.status as 404 | 500);
+    }
+
+    const player = loaded.context.allPlayers.find((entry) => entry.id === playerId);
+    if (!player) {
+      return c.json({ error: 'Participant not found' }, 404);
+    }
+
+    if (player.invite_email_sent_at && !resend) {
+      return c.json(
+        {
+          error: 'Invite was already sent to this participant. Send again with resend enabled.',
+          skippedAlreadySent: true,
+        },
+        409
+      );
+    }
+
+    const result = await sendParticipantInviteForPlayer(player, loaded.context, {
+      allowResend: resend,
+    });
+
+    if (result.skippedNoEmail) {
+      return c.json({ error: 'Participant has no email address' }, 400);
+    }
+
+    if (!result.emailed) {
+      return c.json(
+        {
+          error: result.error ?? 'Could not send invite',
+          invitesSent: result.invitesSent,
+          email: result.email,
+        },
+        500
+      );
+    }
+
+    return c.json({
+      success: true,
+      emailed: 1,
+      invitesSent: result.invitesSent,
+      email: result.email,
+    });
+  }
+);
+
+tournamentTeamsRouter.post(
   '/:tournamentId/send-participant-invites',
   requireManagerAuth,
   async (c) => {
     const tournamentId = c.req.param('tournamentId');
-    const inviteRedirect =
-      process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? 'http://localhost:8081/accept-invite';
-    const tournamentUrl = buildTournamentDeepLink(tournamentId);
 
-    const tournamentResult = await adminFetch<TournamentRow[]>(
-      `/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`
-    );
-    if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
-      return c.json({ error: 'Tournament not found' }, 404);
-    }
-    const tournament = tournamentResult.data[0];
-    const tournamentDates = formatTournamentDates(tournament.start_date, tournament.end_date);
-
-    const playersResult = await adminFetch<TournamentPlayerRow[]>(
-      `/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`
-    );
-    if (!playersResult.ok || !playersResult.data) {
-      return c.json({ error: 'Could not load participants' }, 500);
+    const loaded = await loadParticipantInviteContext(tournamentId);
+    if ('error' in loaded) {
+      return c.json({ error: loaded.error }, loaded.status as 404 | 500);
     }
 
-    const teamsResult = await adminFetch<TeamRow[]>(
-      `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`
-    );
-    if (!teamsResult.ok || !teamsResult.data) {
-      return c.json({ error: 'Could not load teams' }, 500);
-    }
-
-    const teams = teamsResult.data;
-    const teamByPlayerId = new Map<string, TeamRow>();
-    for (const team of teams) {
-      for (const playerId of team.player_ids ?? []) {
-        teamByPlayerId.set(playerId, team);
-      }
-    }
-
-    const userIds = playersResult.data
-      .map((player) => player.user_id)
-      .filter((id): id is string => Boolean(id));
-
-    let profiles: UserProfileRow[] = [];
-    if (userIds.length > 0) {
-      const profilesResult = await adminFetch<UserProfileRow[]>(
-        `/rest/v1/user_profiles?id=in.(${userIds.join(',')})&select=id,email,full_name,first_name,last_name,invite_status`
-      );
-      if (profilesResult.ok && profilesResult.data) {
-        profiles = profilesResult.data;
-      }
-    }
-
-    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-
-    const emailsToLookup = playersResult.data
-      .filter((player) => !player.user_id && player.email?.trim())
-      .map((player) => player.email!.trim().toLowerCase());
-
-    let profilesByEmail = new Map<string, UserProfileRow>();
-    if (emailsToLookup.length > 0) {
-      const inList = emailsToLookup.map((email) => `"${email.replace(/"/g, '')}"`).join(',');
-      const byEmailResult = await adminFetch<UserProfileRow[]>(
-        `/rest/v1/user_profiles?email=in.(${inList})&select=id,email,full_name,first_name,last_name,invite_status`
-      );
-      if (byEmailResult.ok && byEmailResult.data) {
-        profilesByEmail = new Map(
-          byEmailResult.data.map((profile) => [profile.email?.toLowerCase() ?? '', profile])
-        );
-      }
-    }
+    const { context } = loaded;
 
     let emailed = 0;
     let invitesSent = 0;
@@ -455,99 +666,30 @@ tournamentTeamsRouter.post(
     const errors: string[] = [];
     const now = new Date().toISOString();
 
-    for (const player of playersResult.data) {
-      if (player.invite_email_sent_at) {
+    for (const player of context.allPlayers) {
+      const result = await sendParticipantInviteForPlayer(player, context, { now });
+
+      if (result.skippedAlreadySent) {
         skippedAlreadySent += 1;
         continue;
       }
-
-      let profile = player.user_id ? profileById.get(player.user_id) : null;
-      let email = profile?.email?.trim() ?? player.email?.trim() ?? null;
-
-      if (!email && player.email?.trim()) {
-        const byEmail = profilesByEmail.get(player.email.trim().toLowerCase());
-        if (byEmail) {
-          profile = byEmail;
-          email = byEmail.email?.trim() ?? player.email.trim();
-        }
-      }
-
-      if (!email) {
+      if (result.skippedNoEmail) {
         skippedNoEmail += 1;
         continue;
       }
 
-      const team = teamByPlayerId.get(player.id);
-      const rosterNames = team
-        ? playersResult.data
-            .filter((entry) => team.player_ids.includes(entry.id))
-            .map((entry) => entry.display_name)
-        : [];
-
-      const recipientName =
-        profile?.full_name?.trim() ||
-        buildFullName(profile?.first_name ?? '', profile?.last_name ?? '') ||
-        player.display_name;
-
-      let isPendingMember = profile?.invite_status === 'pending';
-      let linkedUserId = player.user_id ?? profile?.id ?? null;
-
-      try {
-        if (!linkedUserId) {
-          const { firstName, lastName } = splitDisplayName(player.display_name);
-          const invited = await inviteUserByEmail({
-            email,
-            firstName,
-            lastName,
-            redirectTo: inviteRedirect,
-          });
-          linkedUserId = invited.userId;
-          invitesSent += 1;
-          isPendingMember = true;
-        } else if (profile?.invite_status === 'pending') {
-          const { firstName, lastName } = splitDisplayName(recipientName);
-          await generateInviteLink({
-            email,
-            firstName,
-            lastName,
-            redirectTo: inviteRedirect,
-          });
-          invitesSent += 1;
-        }
-
-        if (!player.user_id && linkedUserId) {
-          await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
-            method: 'PATCH',
-            body: { user_id: linkedUserId },
-          });
-        }
-
-        const emailResult = await sendTournamentOnboardEmail({
-          to: email,
-          recipientName,
-          tournamentName: tournament.name,
-          tournamentDates,
-          teamName: team?.team_name ?? null,
-          teamSideLabel: null,
-          rosterNames,
-          tournamentUrl: isPendingMember ? inviteRedirect : tournamentUrl,
-          isPendingMember,
-        });
-
-        if (emailResult.sent) {
-          emailed += 1;
-          await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
-            method: 'PATCH',
-            body: { invite_email_sent_at: now },
-          });
-        } else if (emailResult.error) {
-          errors.push(`${email}: ${emailResult.error}`);
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Email failed';
-        errors.push(`${email}: ${message}`);
+      invitesSent += result.invitesSent;
+      if (result.emailed) {
+        emailed += 1;
+      } else if (result.error && result.email) {
+        errors.push(`${result.email}: ${result.error}`);
       }
     }
+
+    const teamsResult = await adminFetch<TeamRow[]>(
+      `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,player_ids`
+    );
+    const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
 
     await adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}`, {
       method: 'PATCH',

@@ -531,7 +531,7 @@ function sanitizeSponsors(ads) {
   };
 }
 function buildTournamentDisplayPayload(params) {
-  const { tournament, teams, players, scores, matchGroups, holeResults, ads, fullMatchGroups, fullScores } = params;
+  const { tournament, teams, players, scores, matchGroups, holeResults, ads, fullMatchGroups, fullScores, fullHoleResults } = params;
   const nameByKey = buildNameMap(teams, players);
   const sideATeam = teams.find((t) => t.side === "side_a");
   const sideBTeam = teams.find((t) => t.side === "side_b");
@@ -550,7 +550,8 @@ function buildTournamentDisplayPayload(params) {
       id: team.id,
       tournament_id: team.tournament_id,
       team_name: team.team_name,
-      side: team.side
+      side: team.side,
+      logo_url: team.logo_url ?? null
     })),
     players: players.map((player) => ({
       id: player.id,
@@ -559,6 +560,7 @@ function buildTournamentDisplayPayload(params) {
     })),
     matchGroups: fullMatchGroups ?? [],
     scores: fullScores ?? [],
+    holeResults: params.fullHoleResults ?? [],
     grossStandings: buildLeaderboard(scores, nameByKey, "gross"),
     netStandings: buildLeaderboard(scores, nameByKey, "net"),
     matchPoints: buildMatchPoints(teams, matchGroups),
@@ -599,7 +601,7 @@ displayRouter.get("/tournament/:id", async (c) => {
   }
   const matchGroupSelect = "id,tournament_id,round_number,format,side_a_team_id,side_b_team_id,side_a_player_ids,side_b_player_ids,tee_time,starting_hole,group_number,notes,match_winner,match_points_a,match_points_b,created_at";
   const [teams, players, scores, matchGroups, fullMatchGroups, ads] = await Promise.all([
-    fetchRows(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_name,side`),
+    fetchRows(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_name,side,logo_url`),
     fetchRows(`/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,tournament_id,display_name`),
     fetchRows(`/rest/v1/tournament_scores?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_id,tournament_player_id,user_id,match_group_id,round_number,hole_scores,total_gross,total_net,created_at&order=round_number.asc`),
     fetchRows(`/rest/v1/tournament_match_groups?tournament_id=eq.${tournamentId}&select=tournament_id,side_a_team_id,side_b_team_id,match_points_a,match_points_b,match_winner`),
@@ -608,9 +610,11 @@ displayRouter.get("/tournament/:id", async (c) => {
   ]);
   const matchGroupIds = await fetchRows(`/rest/v1/tournament_match_groups?tournament_id=eq.${tournamentId}&select=id`);
   let holeResults = [];
+  let fullHoleResults = [];
   if (matchGroupIds.length > 0) {
     const ids = matchGroupIds.map((row) => row.id).join(",");
     holeResults = await fetchRows(`/rest/v1/tournament_match_hole_results?match_group_id=in.(${ids})&select=hole_winner`);
+    fullHoleResults = await fetchRows(`/rest/v1/tournament_match_hole_results?match_group_id=in.(${ids})&select=id,match_group_id,round_number,hole,hole_winner,pairing_index,side_a_net,side_b_net&order=round_number.asc,hole.asc`);
   }
   const payload = buildTournamentDisplayPayload({
     tournament,
@@ -621,7 +625,8 @@ displayRouter.get("/tournament/:id", async (c) => {
     holeResults,
     ads,
     fullMatchGroups,
-    fullScores: scores
+    fullScores: scores,
+    fullHoleResults
   });
   return c.json(payload);
 });
@@ -842,6 +847,140 @@ async function inviteUserByEmail2(params) {
   }
   return { userId };
 }
+async function loadParticipantInviteContext(tournamentId) {
+  const inviteRedirect = process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? "http://localhost:8081/accept-invite";
+  const tournamentUrl = buildTournamentDeepLink(tournamentId);
+  const tournamentResult = await adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`);
+  if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
+    return { error: "Tournament not found", status: 404 };
+  }
+  const tournament = tournamentResult.data[0];
+  const tournamentDates = formatTournamentDates(tournament.start_date, tournament.end_date);
+  const playersResult = await adminFetch(`/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`);
+  if (!playersResult.ok || !playersResult.data) {
+    return { error: "Could not load participants", status: 500 };
+  }
+  const teamsResult = await adminFetch(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`);
+  if (!teamsResult.ok || !teamsResult.data) {
+    return { error: "Could not load teams", status: 500 };
+  }
+  const teamByPlayerId = new Map;
+  for (const team of teamsResult.data) {
+    for (const playerId of team.player_ids ?? []) {
+      teamByPlayerId.set(playerId, team);
+    }
+  }
+  const userIds = playersResult.data.map((player) => player.user_id).filter((id) => Boolean(id));
+  let profiles = [];
+  if (userIds.length > 0) {
+    const profilesResult = await adminFetch(`/rest/v1/user_profiles?id=in.(${userIds.join(",")})&select=id,email,full_name,first_name,last_name,invite_status`);
+    if (profilesResult.ok && profilesResult.data) {
+      profiles = profilesResult.data;
+    }
+  }
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const emailsToLookup = playersResult.data.filter((player) => !player.user_id && player.email?.trim()).map((player) => player.email.trim().toLowerCase());
+  let profilesByEmail = new Map;
+  if (emailsToLookup.length > 0) {
+    const inList = emailsToLookup.map((email) => `"${email.replace(/"/g, "")}"`).join(",");
+    const byEmailResult = await adminFetch(`/rest/v1/user_profiles?email=in.(${inList})&select=id,email,full_name,first_name,last_name,invite_status`);
+    if (byEmailResult.ok && byEmailResult.data) {
+      profilesByEmail = new Map(byEmailResult.data.map((profile) => [profile.email?.toLowerCase() ?? "", profile]));
+    }
+  }
+  return {
+    context: {
+      inviteRedirect,
+      tournamentUrl,
+      tournament,
+      tournamentDates,
+      teamByPlayerId,
+      allPlayers: playersResult.data,
+      profileById,
+      profilesByEmail
+    }
+  };
+}
+async function sendParticipantInviteForPlayer(player, context, options = {}) {
+  const now = options.now ?? new Date().toISOString();
+  if (player.invite_email_sent_at && !options.allowResend) {
+    return { emailed: false, invitesSent: 0, skippedAlreadySent: true };
+  }
+  let profile = player.user_id ? context.profileById.get(player.user_id) : null;
+  let email = profile?.email?.trim() ?? player.email?.trim() ?? null;
+  if (!email && player.email?.trim()) {
+    const byEmail = context.profilesByEmail.get(player.email.trim().toLowerCase());
+    if (byEmail) {
+      profile = byEmail;
+      email = byEmail.email?.trim() ?? player.email.trim();
+    }
+  }
+  if (!email) {
+    return { emailed: false, invitesSent: 0, skippedNoEmail: true };
+  }
+  const team = context.teamByPlayerId.get(player.id);
+  const rosterNames = team ? context.allPlayers.filter((entry) => team.player_ids.includes(entry.id)).map((entry) => entry.display_name) : [];
+  const recipientName = profile?.full_name?.trim() || buildFullName2(profile?.first_name ?? "", profile?.last_name ?? "") || player.display_name;
+  let isPendingMember = profile?.invite_status === "pending";
+  let linkedUserId = player.user_id ?? profile?.id ?? null;
+  let invitesSent = 0;
+  try {
+    if (!linkedUserId) {
+      const { firstName, lastName } = splitDisplayName(player.display_name);
+      const invited = await inviteUserByEmail2({
+        email,
+        firstName,
+        lastName,
+        redirectTo: context.inviteRedirect
+      });
+      linkedUserId = invited.userId;
+      invitesSent += 1;
+      isPendingMember = true;
+    } else if (profile?.invite_status === "pending") {
+      const { firstName, lastName } = splitDisplayName(recipientName);
+      await generateInviteLink2({
+        email,
+        firstName,
+        lastName,
+        redirectTo: context.inviteRedirect
+      });
+      invitesSent += 1;
+    }
+    if (!player.user_id && linkedUserId) {
+      await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
+        method: "PATCH",
+        body: { user_id: linkedUserId }
+      });
+    }
+    const emailResult = await sendTournamentOnboardEmail({
+      to: email,
+      recipientName,
+      tournamentName: context.tournament.name,
+      tournamentDates: context.tournamentDates,
+      teamName: team?.team_name ?? null,
+      teamSideLabel: null,
+      rosterNames,
+      tournamentUrl: isPendingMember ? context.inviteRedirect : context.tournamentUrl,
+      isPendingMember
+    });
+    if (emailResult.sent) {
+      await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
+        method: "PATCH",
+        body: { invite_email_sent_at: now }
+      });
+      return { emailed: true, invitesSent, email };
+    }
+    return {
+      emailed: false,
+      invitesSent,
+      email,
+      error: emailResult.error ?? "Email was not sent"
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Email failed";
+    return { emailed: false, invitesSent, email, error: message };
+  }
+}
 tournamentTeamsRouter.patch("/:tournamentId/participants/:playerId", requireManagerAuth, async (c) => {
   const tournamentId = c.req.param("tournamentId");
   const playerId = c.req.param("playerId");
@@ -937,131 +1076,80 @@ tournamentTeamsRouter.delete("/:tournamentId/participants/:playerId", requireMan
   }
   return c.json({ success: true });
 });
+tournamentTeamsRouter.post("/:tournamentId/participants/:playerId/send-invite", requireManagerAuth, async (c) => {
+  const tournamentId = c.req.param("tournamentId");
+  const playerId = c.req.param("playerId");
+  let resend = false;
+  try {
+    const body = await c.req.json();
+    resend = body.resend === true;
+  } catch {}
+  const loaded = await loadParticipantInviteContext(tournamentId);
+  if ("error" in loaded) {
+    return c.json({ error: loaded.error }, loaded.status);
+  }
+  const player = loaded.context.allPlayers.find((entry) => entry.id === playerId);
+  if (!player) {
+    return c.json({ error: "Participant not found" }, 404);
+  }
+  if (player.invite_email_sent_at && !resend) {
+    return c.json({
+      error: "Invite was already sent to this participant. Send again with resend enabled.",
+      skippedAlreadySent: true
+    }, 409);
+  }
+  const result = await sendParticipantInviteForPlayer(player, loaded.context, {
+    allowResend: resend
+  });
+  if (result.skippedNoEmail) {
+    return c.json({ error: "Participant has no email address" }, 400);
+  }
+  if (!result.emailed) {
+    return c.json({
+      error: result.error ?? "Could not send invite",
+      invitesSent: result.invitesSent,
+      email: result.email
+    }, 500);
+  }
+  return c.json({
+    success: true,
+    emailed: 1,
+    invitesSent: result.invitesSent,
+    email: result.email
+  });
+});
 tournamentTeamsRouter.post("/:tournamentId/send-participant-invites", requireManagerAuth, async (c) => {
   const tournamentId = c.req.param("tournamentId");
-  const inviteRedirect = process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? "http://localhost:8081/accept-invite";
-  const tournamentUrl = buildTournamentDeepLink(tournamentId);
-  const tournamentResult = await adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`);
-  if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
-    return c.json({ error: "Tournament not found" }, 404);
+  const loaded = await loadParticipantInviteContext(tournamentId);
+  if ("error" in loaded) {
+    return c.json({ error: loaded.error }, loaded.status);
   }
-  const tournament = tournamentResult.data[0];
-  const tournamentDates = formatTournamentDates(tournament.start_date, tournament.end_date);
-  const playersResult = await adminFetch(`/rest/v1/tournament_players?tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`);
-  if (!playersResult.ok || !playersResult.data) {
-    return c.json({ error: "Could not load participants" }, 500);
-  }
-  const teamsResult = await adminFetch(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`);
-  if (!teamsResult.ok || !teamsResult.data) {
-    return c.json({ error: "Could not load teams" }, 500);
-  }
-  const teams = teamsResult.data;
-  const teamByPlayerId = new Map;
-  for (const team of teams) {
-    for (const playerId of team.player_ids ?? []) {
-      teamByPlayerId.set(playerId, team);
-    }
-  }
-  const userIds = playersResult.data.map((player) => player.user_id).filter((id) => Boolean(id));
-  let profiles = [];
-  if (userIds.length > 0) {
-    const profilesResult = await adminFetch(`/rest/v1/user_profiles?id=in.(${userIds.join(",")})&select=id,email,full_name,first_name,last_name,invite_status`);
-    if (profilesResult.ok && profilesResult.data) {
-      profiles = profilesResult.data;
-    }
-  }
-  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const emailsToLookup = playersResult.data.filter((player) => !player.user_id && player.email?.trim()).map((player) => player.email.trim().toLowerCase());
-  let profilesByEmail = new Map;
-  if (emailsToLookup.length > 0) {
-    const inList = emailsToLookup.map((email) => `"${email.replace(/"/g, "")}"`).join(",");
-    const byEmailResult = await adminFetch(`/rest/v1/user_profiles?email=in.(${inList})&select=id,email,full_name,first_name,last_name,invite_status`);
-    if (byEmailResult.ok && byEmailResult.data) {
-      profilesByEmail = new Map(byEmailResult.data.map((profile) => [profile.email?.toLowerCase() ?? "", profile]));
-    }
-  }
+  const { context } = loaded;
   let emailed = 0;
   let invitesSent = 0;
   let skippedNoEmail = 0;
   let skippedAlreadySent = 0;
   const errors = [];
   const now = new Date().toISOString();
-  for (const player of playersResult.data) {
-    if (player.invite_email_sent_at) {
+  for (const player of context.allPlayers) {
+    const result = await sendParticipantInviteForPlayer(player, context, { now });
+    if (result.skippedAlreadySent) {
       skippedAlreadySent += 1;
       continue;
     }
-    let profile = player.user_id ? profileById.get(player.user_id) : null;
-    let email = profile?.email?.trim() ?? player.email?.trim() ?? null;
-    if (!email && player.email?.trim()) {
-      const byEmail = profilesByEmail.get(player.email.trim().toLowerCase());
-      if (byEmail) {
-        profile = byEmail;
-        email = byEmail.email?.trim() ?? player.email.trim();
-      }
-    }
-    if (!email) {
+    if (result.skippedNoEmail) {
       skippedNoEmail += 1;
       continue;
     }
-    const team = teamByPlayerId.get(player.id);
-    const rosterNames = team ? playersResult.data.filter((entry) => team.player_ids.includes(entry.id)).map((entry) => entry.display_name) : [];
-    const recipientName = profile?.full_name?.trim() || buildFullName2(profile?.first_name ?? "", profile?.last_name ?? "") || player.display_name;
-    let isPendingMember = profile?.invite_status === "pending";
-    let linkedUserId = player.user_id ?? profile?.id ?? null;
-    try {
-      if (!linkedUserId) {
-        const { firstName, lastName } = splitDisplayName(player.display_name);
-        const invited = await inviteUserByEmail2({
-          email,
-          firstName,
-          lastName,
-          redirectTo: inviteRedirect
-        });
-        linkedUserId = invited.userId;
-        invitesSent += 1;
-        isPendingMember = true;
-      } else if (profile?.invite_status === "pending") {
-        const { firstName, lastName } = splitDisplayName(recipientName);
-        await generateInviteLink2({
-          email,
-          firstName,
-          lastName,
-          redirectTo: inviteRedirect
-        });
-        invitesSent += 1;
-      }
-      if (!player.user_id && linkedUserId) {
-        await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
-          method: "PATCH",
-          body: { user_id: linkedUserId }
-        });
-      }
-      const emailResult = await sendTournamentOnboardEmail({
-        to: email,
-        recipientName,
-        tournamentName: tournament.name,
-        tournamentDates,
-        teamName: team?.team_name ?? null,
-        teamSideLabel: null,
-        rosterNames,
-        tournamentUrl: isPendingMember ? inviteRedirect : tournamentUrl,
-        isPendingMember
-      });
-      if (emailResult.sent) {
-        emailed += 1;
-        await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
-          method: "PATCH",
-          body: { invite_email_sent_at: now }
-        });
-      } else if (emailResult.error) {
-        errors.push(`${email}: ${emailResult.error}`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Email failed";
-      errors.push(`${email}: ${message}`);
+    invitesSent += result.invitesSent;
+    if (result.emailed) {
+      emailed += 1;
+    } else if (result.error && result.email) {
+      errors.push(`${result.email}: ${result.error}`);
     }
   }
+  const teamsResult = await adminFetch(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,player_ids`);
+  const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
   await adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}`, {
     method: "PATCH",
     body: { participant_invites_sent_at: now }
@@ -1202,16 +1290,63 @@ tournamentTeamsRouter.post("/:tournamentId/teams/:teamId/mark-ready-and-notify",
 // src/routes/tournament-scores.ts
 import { Hono as Hono6 } from "hono";
 
+// src/lib/tournament-match-points.ts
+function pointsFromWinTally(aWins, bWins) {
+  if (aWins > bWins) {
+    return { match_winner: "side_a", match_points_a: 1, match_points_b: 0 };
+  }
+  if (bWins > aWins) {
+    return { match_winner: "side_b", match_points_a: 0, match_points_b: 1 };
+  }
+  return { match_winner: "tie", match_points_a: 0.5, match_points_b: 0.5 };
+}
+function countWins(rows) {
+  let side_a = 0;
+  let side_b = 0;
+  for (const row of rows) {
+    if (row.hole_winner === "side_a")
+      side_a += 1;
+    else if (row.hole_winner === "side_b")
+      side_b += 1;
+  }
+  return { side_a, side_b };
+}
+function computeMatchPointsFromHoleResults(params) {
+  const { format, matchGroup, holeResults } = params;
+  if (format === "singles" || format === "match_play") {
+    const pairCount = Math.min(matchGroup.side_a_player_ids.length, matchGroup.side_b_player_ids.length);
+    let totalA = 0;
+    let totalB = 0;
+    for (let i = 0;i < pairCount; i++) {
+      const pairingRows = holeResults.filter((r) => (r.pairing_index ?? 0) === i);
+      const wins2 = countWins(pairingRows);
+      const pairPoints = pointsFromWinTally(wins2.side_a, wins2.side_b);
+      totalA += pairPoints.match_points_a;
+      totalB += pairPoints.match_points_b;
+    }
+    if (totalA > totalB) {
+      return { match_winner: "side_a", match_points_a: totalA, match_points_b: totalB };
+    }
+    if (totalB > totalA) {
+      return { match_winner: "side_b", match_points_a: totalA, match_points_b: totalB };
+    }
+    return { match_winner: "tie", match_points_a: totalA, match_points_b: totalB };
+  }
+  const teamRows = holeResults.filter((r) => (r.pairing_index ?? 0) === 0);
+  const wins = countWins(teamRows);
+  return pointsFromWinTally(wins.side_a, wins.side_b);
+}
+
 // src/lib/tournament-score-sync.ts
 async function assertUserCanWriteMatchGroup(userId, role, matchGroupId) {
   if (role === "manager" || role === "super_admin") {
-    const groupRes2 = await adminFetch(`/rest/v1/tournament_match_groups?id=eq.${matchGroupId}&select=id,tournament_id,side_a_player_ids,side_b_player_ids`);
+    const groupRes2 = await adminFetch(`/rest/v1/tournament_match_groups?id=eq.${matchGroupId}&select=id,tournament_id,format,side_a_player_ids,side_b_player_ids`);
     if (!groupRes2.ok || !groupRes2.data[0]) {
       return { ok: false, error: "Match pairing not found" };
     }
     return { ok: true, matchGroup: groupRes2.data[0] };
   }
-  const groupRes = await adminFetch(`/rest/v1/tournament_match_groups?id=eq.${matchGroupId}&select=id,tournament_id,side_a_player_ids,side_b_player_ids`);
+  const groupRes = await adminFetch(`/rest/v1/tournament_match_groups?id=eq.${matchGroupId}&select=id,tournament_id,format,side_a_player_ids,side_b_player_ids`);
   if (!groupRes.ok || !groupRes.data[0]) {
     return { ok: false, error: "Match pairing not found" };
   }
@@ -1275,12 +1410,21 @@ async function syncTournamentMatchScores(params) {
   if (!access.ok) {
     return { success: false, error: access.error };
   }
+  const matchGroup = access.matchGroup;
+  const recomputedPoints = computeMatchPointsFromHoleResults({
+    format: matchGroup.format,
+    matchGroup,
+    holeResults: params.holeResults
+  });
+  const matchPoints = params.matchPoints ?? recomputedPoints;
   try {
-    for (const score of params.scores) {
-      await upsertTournamentScore({
-        ...score,
-        match_group_id: score.match_group_id ?? params.matchGroupId
-      });
+    if (params.scores.length > 0) {
+      for (const score of params.scores) {
+        await upsertTournamentScore({
+          ...score,
+          match_group_id: score.match_group_id ?? params.matchGroupId
+        });
+      }
     }
     const clearRes = await adminFetch(`/rest/v1/tournament_match_hole_results?match_group_id=eq.${params.matchGroupId}&round_number=eq.${params.roundNumber}`, { method: "DELETE" });
     if (!clearRes.ok) {
@@ -1298,7 +1442,7 @@ async function syncTournamentMatchScores(params) {
     }
     const patchRes = await adminFetch(`/rest/v1/tournament_match_groups?id=eq.${params.matchGroupId}`, {
       method: "PATCH",
-      body: params.matchPoints,
+      body: matchPoints,
       prefer: "return=minimal"
     });
     if (!patchRes.ok) {
@@ -1352,8 +1496,8 @@ tournamentScoresRouter.post("/:tournamentId/match-groups/:matchGroupId/sync", re
   const authUser = c.get("authUser");
   const matchGroupId = c.req.param("matchGroupId");
   const body = await c.req.json();
-  if (!body.roundNumber || !Array.isArray(body.scores) || !body.matchPoints) {
-    return c.json({ error: "roundNumber, scores, and matchPoints are required" }, 400);
+  if (!body.roundNumber || !Array.isArray(body.scores)) {
+    return c.json({ error: "roundNumber and scores array are required" }, 400);
   }
   const result = await syncTournamentMatchScores({
     userId: authUser.id,

@@ -8,11 +8,12 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { Plus, Trash2, Pencil, Check, X } from 'lucide-react-native';
+import { Plus, Trash2, Pencil, Check, X, Mail } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { createTournamentPlayer, deleteTournamentPlayer, updateTournamentPlayer } from '@/lib/tournament-player-service';
+import { sendParticipantInvite } from '@/lib/tournament-team-service';
 import { PlayerHandicapOverrideFields } from '@/components/TournamentHandicapFields';
 import {
   resolvePlayerHandicapFromConfig,
@@ -197,18 +198,6 @@ export function TournamentParticipantsTab({
     setEditManualHandicap('');
   };
 
-  const previewPlayingHandicap = (player: TournamentPlayer) =>
-    resolvePlayerHandicapFromConfig({
-      tournament: tournamentHandicapDefaults,
-      player: {
-        handicap_index: player.handicap_index,
-        handicap_use_index: player.handicap_use_index,
-        handicap_allowance_pct: player.handicap_allowance_pct as HandicapAllowancePct | null | undefined,
-        manual_handicap: player.manual_handicap,
-      },
-      format: 'best_ball',
-    });
-
   const updateMutation = useMutation({
     mutationFn: async (playerId: string) => {
       const displayName = editName.trim();
@@ -245,12 +234,74 @@ export function TournamentParticipantsTab({
     onError: (error: Error) => Alert.alert('Could not update', error.message),
   });
 
+  const previewPlayingHandicap = (player: TournamentPlayer) =>
+    resolvePlayerHandicapFromConfig({
+      tournament: tournamentHandicapDefaults,
+      player: {
+        handicap_index: player.handicap_index,
+        handicap_use_index: player.handicap_use_index,
+        handicap_allowance_pct: player.handicap_allowance_pct as HandicapAllowancePct | null | undefined,
+        manual_handicap: player.manual_handicap,
+      },
+      format: 'best_ball',
+    });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (params: { playerId: string; resend?: boolean }) => {
+      const result = await sendParticipantInvite({
+        tournamentId,
+        playerId: params.playerId,
+        accessToken,
+        resend: params.resend,
+      });
+      if (!result.success) {
+        throw new Error(result.error ?? 'Could not send invite');
+      }
+      return result;
+    },
+    onSuccess: (result) => {
+      refresh();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        'Invite sent',
+        `Login email sent to ${result.email ?? 'participant'}.`
+      );
+    },
+    onError: (error: Error) => Alert.alert('Could not send invite', error.message),
+  });
+
+  const handleSendInvite = (player: TournamentPlayer) => {
+    const resolvedEmail = resolveParticipantEmail(player, memberEmailByUserId);
+    if (!resolvedEmail && !player.email?.trim()) {
+      Alert.alert('No email', 'Add an email address before sending an invite.');
+      return;
+    }
+
+    const email = resolvedEmail ?? player.email!.trim();
+    const alreadyInvited = Boolean(player.invite_email_sent_at);
+
+    Alert.alert(
+      alreadyInvited ? 'Resend invite?' : 'Send invite?',
+      alreadyInvited
+        ? `Send another login email to ${player.display_name} (${email})?`
+        : `Email ${player.display_name} (${email}) a login invite for this event? Only this person will be emailed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: alreadyInvited ? 'Resend' : 'Send',
+          onPress: () =>
+            inviteMutation.mutate({ playerId: player.id, resend: alreadyInvited }),
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
       <View className="bg-[#141414] border border-neutral-800 rounded-xl px-4 py-3 mb-4">
         <Text className="text-neutral-300 text-sm">
           Step 1: Build the event participant list with name and email. Assign teams and matches
-          later. No emails are sent from this tab.
+          later. Use the mail icon to test a single invite, or send all invites from Publish.
         </Text>
       </View>
 
@@ -336,6 +387,9 @@ export function TournamentParticipantsTab({
           const resolvedEmail = resolveParticipantEmail(player, memberEmailByUserId);
           const isEditing = editingPlayerId === player.id;
           const isSaving = updateMutation.isPending && updateMutation.variables === player.id;
+          const isSendingInvite =
+            inviteMutation.isPending && inviteMutation.variables?.playerId === player.id;
+          const hasEmail = Boolean(resolvedEmail ?? player.email?.trim());
 
           if (isEditing) {
             return (
@@ -444,6 +498,25 @@ export function TournamentParticipantsTab({
                 </Text>
               </View>
               <View className="flex-row gap-1">
+                <Pressable
+                  onPress={webPressHandler(() => handleSendInvite(player))}
+                  disabled={!hasEmail || isSendingInvite || editingPlayerId != null}
+                  className={cn(
+                    'p-2 rounded-lg bg-neutral-900 border border-neutral-800 active:opacity-80',
+                    !hasEmail && 'opacity-40'
+                  )}
+                  accessibilityLabel={
+                    player.invite_email_sent_at
+                      ? `Resend invite to ${player.display_name}`
+                      : `Send invite to ${player.display_name}`
+                  }
+                >
+                  {isSendingInvite ? (
+                    <ActivityIndicator size="small" color="#60a5fa" />
+                  ) : (
+                    <Mail size={16} color={player.invite_email_sent_at ? '#737373' : '#60a5fa'} />
+                  )}
+                </Pressable>
                 <Pressable
                   onPress={webPressHandler(() => startEditing(player))}
                   disabled={editingPlayerId != null}

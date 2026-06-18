@@ -17,6 +17,8 @@ const allowed = [
   /^https:\/\/(www\.)?foxcreek\.golf$/,
   /^https:\/\/[a-z0-9-]+\.foxcreek\.golf$/,
   /^https:\/\/[a-z0-9-]+\.vercel\.app$/,
+  /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/,
+  /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,
 ];
 
 export function createApp() {

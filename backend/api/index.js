@@ -205,7 +205,16 @@ async function adminFetch(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined
   });
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {
+        message: text.slice(0, 200)
+      };
+    }
+  }
   return { ok: response.ok, status: response.status, data };
 }
 
@@ -730,11 +739,17 @@ var tournamentTeamsRouter = new Hono5;
 function buildFullName2(firstName, lastName) {
   return `${firstName.trim()} ${lastName.trim()}`.trim();
 }
+function parseTournamentCalendarDate(iso) {
+  const dateOnly = iso.trim().slice(0, 10);
+  return new Date(`${dateOnly}T12:00:00`);
+}
 function formatTournamentDates(startDate, endDate) {
-  const start = new Date(`${startDate}T12:00:00`);
-  const end = new Date(`${endDate}T12:00:00`);
+  const start = parseTournamentCalendarDate(startDate);
+  const end = parseTournamentCalendarDate(endDate);
   const formatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-  if (startDate === endDate)
+  const startKey = startDate.trim().slice(0, 10);
+  const endKey = endDate.trim().slice(0, 10);
+  if (startKey === endKey)
     return formatter.format(start);
   return `${formatter.format(start)} – ${formatter.format(end)}`;
 }
@@ -758,6 +773,8 @@ async function generateInviteLink2(params) {
   if (!ok) {
     throw new Error(getErrorMessage2(data));
   }
+  const properties = data.properties;
+  return typeof data.action_link === "string" && data.action_link || typeof properties?.action_link === "string" && properties.action_link || null;
 }
 tournamentTeamsRouter.use("*", async (c, next) => {
   if (!isSupabaseAdminConfigured()) {
@@ -847,6 +864,35 @@ async function inviteUserByEmail2(params) {
   }
   return { userId };
 }
+async function findAuthUserIdByEmail(email) {
+  const normalized = email.trim().toLowerCase();
+  for (let page = 1;page <= 10; page += 1) {
+    const { ok, data } = await adminFetch(`/auth/v1/admin/users?page=${page}&per_page=200`);
+    if (!ok || !data.users?.length) {
+      break;
+    }
+    const match = data.users.find((user) => user.email?.toLowerCase() === normalized);
+    if (match?.id) {
+      return match.id;
+    }
+    if (data.users.length < 200) {
+      break;
+    }
+  }
+  return null;
+}
+async function ensureAuthUserIdForInvite(params) {
+  try {
+    const invited = await inviteUserByEmail2(params);
+    return { userId: invited.userId, authInviteSent: true };
+  } catch (error) {
+    const existingId = await findAuthUserIdByEmail(params.email);
+    if (existingId) {
+      return { userId: existingId, authInviteSent: false };
+    }
+    throw error;
+  }
+}
 async function loadParticipantInviteContext(tournamentId) {
   const inviteRedirect = process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? "http://localhost:8081/accept-invite";
   const tournamentUrl = buildTournamentDeepLink(tournamentId);
@@ -901,6 +947,55 @@ async function loadParticipantInviteContext(tournamentId) {
     }
   };
 }
+async function loadSingleParticipantInviteContext(tournamentId, playerId) {
+  const inviteRedirect = process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? "http://localhost:8081/accept-invite";
+  const tournamentUrl = buildTournamentDeepLink(tournamentId);
+  const [tournamentResult, playerResult, teamsResult] = await Promise.all([
+    adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`),
+    adminFetch(`/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`),
+    adminFetch(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&player_ids=cs.{${playerId}}&select=id,team_name,side,player_ids`)
+  ]);
+  if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
+    return { error: "Tournament not found", status: 404 };
+  }
+  if (!playerResult.ok || !playerResult.data?.[0]) {
+    return { error: "Participant not found", status: 404 };
+  }
+  const tournament = tournamentResult.data[0];
+  const player = playerResult.data[0];
+  const team = teamsResult.ok && teamsResult.data?.[0] ? teamsResult.data[0] : undefined;
+  const profileById = new Map;
+  const profilesByEmail = new Map;
+  const rosterPromise = team?.player_ids?.length && team.player_ids.length > 0 ? adminFetch(`/rest/v1/tournament_players?id=in.(${team.player_ids.join(",")})&select=id,display_name,user_id,email,invite_email_sent_at`) : Promise.resolve({ ok: true, status: 200, data: [player] });
+  const profilePromise = player.user_id ? adminFetch(`/rest/v1/user_profiles?id=eq.${player.user_id}&select=id,email,full_name,first_name,last_name,invite_status`) : player.email?.trim() ? adminFetch(`/rest/v1/user_profiles?email=eq."${player.email.trim().toLowerCase().replace(/"/g, "")}"&select=id,email,full_name,first_name,last_name,invite_status`) : Promise.resolve({ ok: true, status: 200, data: [] });
+  const [rosterResult, profileResult] = await Promise.all([rosterPromise, profilePromise]);
+  const rosterPlayers = rosterResult.ok && rosterResult.data?.length ? rosterResult.data : [player];
+  if (profileResult.ok && profileResult.data?.[0]) {
+    const profile = profileResult.data[0];
+    if (player.user_id) {
+      profileById.set(player.user_id, profile);
+    } else if (profile.email) {
+      profilesByEmail.set(profile.email.toLowerCase(), profile);
+    }
+  }
+  const teamByPlayerId = new Map;
+  if (team) {
+    teamByPlayerId.set(player.id, team);
+  }
+  return {
+    player,
+    context: {
+      inviteRedirect,
+      tournamentUrl,
+      tournament,
+      tournamentDates: formatTournamentDates(tournament.start_date, tournament.end_date),
+      teamByPlayerId,
+      allPlayers: rosterPlayers,
+      profileById,
+      profilesByEmail
+    }
+  };
+}
 async function sendParticipantInviteForPlayer(player, context, options = {}) {
   const now = options.now ?? new Date().toISOString();
   if (player.invite_email_sent_at && !options.allowResend) {
@@ -927,24 +1022,33 @@ async function sendParticipantInviteForPlayer(player, context, options = {}) {
   try {
     if (!linkedUserId) {
       const { firstName, lastName } = splitDisplayName(player.display_name);
-      const invited = await inviteUserByEmail2({
+      const ensured = await ensureAuthUserIdForInvite({
         email,
         firstName,
         lastName,
         redirectTo: context.inviteRedirect
       });
-      linkedUserId = invited.userId;
-      invitesSent += 1;
+      linkedUserId = ensured.userId;
+      if (ensured.authInviteSent) {
+        invitesSent += 1;
+      }
       isPendingMember = true;
-    } else if (profile?.invite_status === "pending") {
+    }
+    let accountSetupUrl = context.tournamentUrl;
+    if (isPendingMember) {
       const { firstName, lastName } = splitDisplayName(recipientName);
-      await generateInviteLink2({
+      const actionLink = await generateInviteLink2({
         email,
         firstName,
         lastName,
         redirectTo: context.inviteRedirect
       });
-      invitesSent += 1;
+      if (actionLink) {
+        accountSetupUrl = actionLink;
+        invitesSent += 1;
+      } else {
+        accountSetupUrl = context.inviteRedirect;
+      }
     }
     if (!player.user_id && linkedUserId) {
       await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
@@ -960,7 +1064,7 @@ async function sendParticipantInviteForPlayer(player, context, options = {}) {
       teamName: team?.team_name ?? null,
       teamSideLabel: null,
       rosterNames,
-      tournamentUrl: isPendingMember ? context.inviteRedirect : context.tournamentUrl,
+      tournamentUrl: isPendingMember ? accountSetupUrl : context.tournamentUrl,
       isPendingMember
     });
     if (emailResult.sent) {
@@ -1077,46 +1181,49 @@ tournamentTeamsRouter.delete("/:tournamentId/participants/:playerId", requireMan
   return c.json({ success: true });
 });
 tournamentTeamsRouter.post("/:tournamentId/participants/:playerId/send-invite", requireManagerAuth, async (c) => {
-  const tournamentId = c.req.param("tournamentId");
-  const playerId = c.req.param("playerId");
-  let resend = false;
   try {
-    const body = await c.req.json();
-    resend = body.resend === true;
-  } catch {}
-  const loaded = await loadParticipantInviteContext(tournamentId);
-  if ("error" in loaded) {
-    return c.json({ error: loaded.error }, loaded.status);
-  }
-  const player = loaded.context.allPlayers.find((entry) => entry.id === playerId);
-  if (!player) {
-    return c.json({ error: "Participant not found" }, 404);
-  }
-  if (player.invite_email_sent_at && !resend) {
+    const tournamentId = c.req.param("tournamentId");
+    const playerId = c.req.param("playerId");
+    let resend = false;
+    try {
+      const body = await c.req.json();
+      resend = body.resend === true;
+    } catch {}
+    const loaded = await loadSingleParticipantInviteContext(tournamentId, playerId);
+    if ("error" in loaded) {
+      return c.json({ error: loaded.error }, loaded.status);
+    }
+    const { player, context } = loaded;
+    if (player.invite_email_sent_at && !resend) {
+      return c.json({
+        error: "Invite was already sent to this participant. Send again with resend enabled.",
+        skippedAlreadySent: true
+      }, 409);
+    }
+    const result = await sendParticipantInviteForPlayer(player, context, {
+      allowResend: resend
+    });
+    if (result.skippedNoEmail) {
+      return c.json({ error: "Participant has no email address" }, 400);
+    }
+    if (!result.emailed) {
+      return c.json({
+        error: result.error ?? "Could not send invite",
+        invitesSent: result.invitesSent,
+        email: result.email
+      }, 500);
+    }
     return c.json({
-      error: "Invite was already sent to this participant. Send again with resend enabled.",
-      skippedAlreadySent: true
-    }, 409);
-  }
-  const result = await sendParticipantInviteForPlayer(player, loaded.context, {
-    allowResend: resend
-  });
-  if (result.skippedNoEmail) {
-    return c.json({ error: "Participant has no email address" }, 400);
-  }
-  if (!result.emailed) {
-    return c.json({
-      error: result.error ?? "Could not send invite",
+      success: true,
+      emailed: 1,
       invitesSent: result.invitesSent,
       email: result.email
-    }, 500);
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not send invite";
+    console.error("[Tournament] send-invite failed:", message);
+    return c.json({ error: message }, 500);
   }
-  return c.json({
-    success: true,
-    emailed: 1,
-    invitesSent: result.invitesSent,
-    email: result.email
-  });
 });
 tournamentTeamsRouter.post("/:tournamentId/send-participant-invites", requireManagerAuth, async (c) => {
   const tournamentId = c.req.param("tournamentId");
@@ -1543,7 +1650,9 @@ var allowed = [
   /^https:\/\/[a-z0-9-]+\.vibecode\.run$/,
   /^https:\/\/(www\.)?foxcreek\.golf$/,
   /^https:\/\/[a-z0-9-]+\.foxcreek\.golf$/,
-  /^https:\/\/[a-z0-9-]+\.vercel\.app$/
+  /^https:\/\/[a-z0-9-]+\.vercel\.app$/,
+  /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/,
+  /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/
 ];
 function createApp() {
   const app = new Hono7;

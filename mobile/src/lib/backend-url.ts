@@ -15,6 +15,17 @@ export function getBackendUrl(): string {
   const configured =
     process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL ?? process.env.EXPO_PUBLIC_BACKEND_URL;
 
+  if (typeof window !== 'undefined' && isLocalWebHost(window.location.hostname)) {
+    if (
+      process.env.EXPO_PUBLIC_USE_REMOTE_BACKEND === 'true' &&
+      configured &&
+      !isLocalhostBackendUrl(configured)
+    ) {
+      return normalizeBackendUrl(configured);
+    }
+    return 'http://localhost:3000';
+  }
+
   if (isProductionWebHost()) {
     if (configured && /^https:\/\//i.test(configured) && !isLocalhostBackendUrl(configured)) {
       return normalizeBackendUrl(configured);
@@ -29,10 +40,26 @@ export function getBackendUrl(): string {
   return normalizeBackendUrl(configured ?? 'http://localhost:3000');
 }
 
+function isLocalWebHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
+/**
+ * True when the web app is served from a deployed host (not local dev).
+ * Includes foxcreek.golf, Vercel previews, and LAN IPs used for device testing.
+ */
 export function isProductionWebHost(): boolean {
   if (typeof window === 'undefined') return false;
   const host = window.location.hostname;
-  return host === 'foxcreek.golf' || host === 'www.foxcreek.golf' || host.endsWith('.foxcreek.golf');
+  if (isLocalWebHost(host)) return false;
+  return (
+    host === 'foxcreek.golf' ||
+    host === 'www.foxcreek.golf' ||
+    host.endsWith('.foxcreek.golf') ||
+    host.endsWith('.vercel.app') ||
+    /^192\.168\.\d+\.\d+$/.test(host) ||
+    /^10\.\d+\.\d+\.\d+$/.test(host)
+  );
 }
 
 export function isLocalhostBackendUrl(url: string = getBackendUrl()): boolean {

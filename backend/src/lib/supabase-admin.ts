@@ -42,6 +42,15 @@ export async function adminFetch<T = Record<string, unknown>>(
   });
 
   const text = await response.text();
-  const data = (text ? JSON.parse(text) : null) as T;
+  let data = null as T;
+  if (text) {
+    try {
+      data = JSON.parse(text) as T;
+    } catch {
+      data = {
+        message: text.slice(0, 200),
+      } as T;
+    }
+  }
   return { ok: response.ok, status: response.status, data };
 }

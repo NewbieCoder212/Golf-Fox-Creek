@@ -1,8 +1,28 @@
 import type { TournamentPlayer, TournamentTeam } from '@/types';
-import { getBackendUrl } from './backend-url';
+import { ensureManagerAccessToken } from './admin-auth-bridge';
+import { getBackendUrl, isBackendReachableInBrowser, isLocalhostBackendUrl } from './backend-url';
 
 const BACKEND_REQUEST_TIMEOUT_MS = 4_000;
-const BACKEND_INVITE_TIMEOUT_MS = 30_000;
+const BACKEND_INVITE_TIMEOUT_MS = 60_000;
+
+function backendReachabilityError(): string {
+  if (typeof window !== 'undefined' && isLocalhostBackendUrl()) {
+    return 'Tournament service is not reachable. Start the backend on port 3000 or set EXPO_PUBLIC_VIBECODE_BACKEND_URL to your deployed API URL in mobile/.env, then restart Expo.';
+  }
+  return 'Could not reach tournament service. Check your connection and try again.';
+}
+
+function fetchFailureMessage(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return 'Tournament service timed out. Try again in a moment.';
+    }
+    if (error.message) {
+      return error.message;
+    }
+  }
+  return backendReachabilityError();
+}
 
 async function fetchBackend(
   path: string,
@@ -18,6 +38,71 @@ async function fetchBackend(
     });
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function readBackendJson<T>(response: Response): Promise<T & { error?: string }> {
+  const text = await response.text();
+  if (!text.trim()) {
+    return {} as T & { error?: string };
+  }
+  try {
+    return JSON.parse(text) as T & { error?: string };
+  } catch {
+    return { error: response.ok ? undefined : `Unexpected response (${response.status})` } as T & {
+      error?: string;
+    };
+  }
+}
+
+async function postBackendWithManagerAuth<T extends { error?: string }>(
+  path: string,
+  accessToken: string,
+  options: {
+    body?: Record<string, unknown>;
+    timeoutMs?: number;
+    retried?: boolean;
+  } = {}
+): Promise<{ response: Response; data: T; accessToken: string } | { error: string }> {
+  if (!isBackendReachableInBrowser()) {
+    return { error: backendReachabilityError() };
+  }
+
+  const token = (await ensureManagerAccessToken(accessToken)) ?? accessToken;
+  if (!token) {
+    return { error: 'Session expired. Log out and log back in, then try again.' };
+  }
+
+  try {
+    const response = await fetchBackend(
+      path,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      },
+      options.timeoutMs ?? BACKEND_REQUEST_TIMEOUT_MS
+    );
+
+    const data = await readBackendJson<T>(response);
+
+    if (response.status === 401 && !options.retried) {
+      const refreshed = await ensureManagerAccessToken(null);
+      if (refreshed && refreshed !== token) {
+        return postBackendWithManagerAuth(path, refreshed, { ...options, retried: true });
+      }
+    }
+
+    if (!response.ok) {
+      return { error: data.error ?? data.message ?? `Request failed (${response.status})` };
+    }
+
+    return { response, data, accessToken: token };
+  } catch (error) {
+    return { error: fetchFailureMessage(error) };
   }
 }
 
@@ -123,35 +208,24 @@ export async function sendParticipantInvites(params: {
   tournamentId: string;
   accessToken: string;
 }): Promise<SendParticipantInvitesResult> {
-  try {
-    const response = await fetchBackend(
-      `/api/tournaments/${params.tournamentId}/send-participant-invites`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${params.accessToken}`,
-        },
-      },
-      BACKEND_INVITE_TIMEOUT_MS
-    );
+  const result = await postBackendWithManagerAuth<SendParticipantInvitesResult>(
+    `/api/tournaments/${params.tournamentId}/send-participant-invites`,
+    params.accessToken,
+    { timeoutMs: BACKEND_INVITE_TIMEOUT_MS }
+  );
 
-    const data = (await response.json()) as SendParticipantInvitesResult & { error?: string };
-
-    if (!response.ok) {
-      return { success: false, error: data.error ?? 'Could not send invites' };
-    }
-
-    return {
-      success: true,
-      emailed: data.emailed,
-      invitesSent: data.invitesSent,
-      skippedNoEmail: data.skippedNoEmail,
-      skippedAlreadySent: data.skippedAlreadySent,
-      errors: data.errors,
-    };
-  } catch {
-    return { success: false, error: 'Could not reach tournament service' };
+  if ('error' in result) {
+    return { success: false, error: result.error };
   }
+
+  return {
+    success: true,
+    emailed: result.data.emailed,
+    invitesSent: result.data.invitesSent,
+    skippedNoEmail: result.data.skippedNoEmail,
+    skippedAlreadySent: result.data.skippedAlreadySent,
+    errors: result.data.errors,
+  };
 }
 
 export interface SendParticipantInviteResult {
@@ -169,42 +243,31 @@ export async function sendParticipantInvite(params: {
   accessToken: string;
   resend?: boolean;
 }): Promise<SendParticipantInviteResult> {
-  try {
-    const response = await fetchBackend(
-      `/api/tournaments/${params.tournamentId}/participants/${params.playerId}/send-invite`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${params.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ resend: params.resend === true }),
-      },
-      BACKEND_INVITE_TIMEOUT_MS
-    );
-
-    const data = (await response.json()) as SendParticipantInviteResult & {
-      error?: string;
-      skippedAlreadySent?: boolean;
-    };
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: data.error ?? 'Could not send invite',
-        skippedAlreadySent: data.skippedAlreadySent,
-      };
+  const result = await postBackendWithManagerAuth<
+    SendParticipantInviteResult & { skippedAlreadySent?: boolean }
+  >(
+    `/api/tournaments/${params.tournamentId}/participants/${params.playerId}/send-invite`,
+    params.accessToken,
+    {
+      body: { resend: params.resend === true },
+      timeoutMs: BACKEND_INVITE_TIMEOUT_MS,
     }
+  );
 
+  if ('error' in result) {
     return {
-      success: true,
-      emailed: data.emailed,
-      invitesSent: data.invitesSent,
-      email: data.email,
+      success: false,
+      error: result.error,
+      skippedAlreadySent: result.error.includes('already sent'),
     };
-  } catch {
-    return { success: false, error: 'Could not reach tournament service' };
   }
+
+  return {
+    success: true,
+    emailed: result.data.emailed,
+    invitesSent: result.data.invitesSent,
+    email: result.data.email,
+  };
 }
 
 export async function deleteTournamentParticipantViaBackend(params: {

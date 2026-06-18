@@ -1,11 +1,25 @@
 import type { Context, Next } from 'hono';
-import { adminFetch, isSupabaseAdminConfigured } from '../lib/supabase-admin';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { isSupabaseAdminConfigured, readServiceRoleKey, readSupabaseUrl } from '../lib/supabase-admin';
 
 export type AuthUser = {
   id: string;
   email: string;
   role: 'member' | 'manager' | 'super_admin';
 };
+
+let adminClient: SupabaseClient | null = null;
+
+function getSupabaseAdminClient(): SupabaseClient {
+  const url = readSupabaseUrl();
+  const key = readServiceRoleKey();
+  if (!adminClient) {
+    adminClient = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return adminClient;
+}
 
 function parseSupabaseAccessToken(token: string): { id: string; email?: string } | null {
   const parts = token.split('.');
@@ -33,12 +47,35 @@ function parseSupabaseAccessToken(token: string): { id: string; email?: string }
   }
 }
 
+function readKnownUserRole(userId: string): AuthUser['role'] | null {
+  const superAdmins = (process.env.SUPER_ADMIN_USER_IDS ?? 'aefb52cc-7c08-4799-a6bc-907ec439287d')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (superAdmins.includes(userId)) return 'super_admin';
+
+  const managers = (process.env.MANAGER_USER_IDS ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (managers.includes(userId)) return 'manager';
+
+  return null;
+}
+
 async function fetchUserRole(userId: string): Promise<AuthUser['role'] | null> {
-  const result = await adminFetch<Array<{ role?: AuthUser['role'] }>>(
-    `/rest/v1/user_profiles?id=eq.${userId}&select=role&limit=1`
-  );
-  if (!result.ok || !result.data?.[0]) return null;
-  return result.data[0].role ?? null;
+  const knownRole = readKnownUserRole(userId);
+  if (knownRole) return knownRole;
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error || !data?.role) return null;
+  return data.role as AuthUser['role'];
 }
 
 function validateAccessToken(token: string): { id: string; email?: string } | null {

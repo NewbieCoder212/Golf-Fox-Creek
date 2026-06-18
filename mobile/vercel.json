@@ -2,9 +2,14 @@
   "buildCommand": "bun run vercel-build",
   "outputDirectory": "dist",
   "installCommand": "bun install",
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
-      "source": "/((?!_expo/).*)",
+      "source": "/((?!_expo/|api/).*)",
       "destination": "/index.html"
     }
   ]

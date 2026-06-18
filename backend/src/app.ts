@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
 import { adminFetch, isSupabaseAdminConfigured } from './lib/supabase-admin';
+import { requireManagerAuth, type AuthUser } from './middleware/auth';
 import { sampleRouter } from './routes/sample';
 import { devAuthRouter } from './routes/dev-auth';
 import { membersRouter } from './routes/members';
@@ -50,6 +51,11 @@ export function createApp() {
       status: result.status,
       latencyMs: Date.now() - started,
     });
+  });
+
+  app.post('/health/manager-ping', requireManagerAuth, (c) => {
+    const user = c.get('authUser' as never) as AuthUser;
+    return c.json({ ok: true, user });
   });
 
   app.route('/api/sample', sampleRouter);

@@ -1,4 +1,4 @@
-const ADMIN_FETCH_TIMEOUT_MS = 12_000;
+const ADMIN_FETCH_TIMEOUT_MS = 8_000;
 
 function readSupabaseUrl(): string {
   return process.env.SUPABASE_URL?.trim() ?? '';
@@ -7,6 +7,8 @@ function readSupabaseUrl(): string {
 function readServiceRoleKey(): string {
   return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? '';
 }
+
+export { readServiceRoleKey, readSupabaseUrl };
 
 export function getSupabaseAnonKey(): string {
   return (
@@ -72,6 +74,7 @@ export async function adminFetch<T = Record<string, unknown>>(
   const headers: Record<string, string> = {
     apikey: key,
     Authorization: `Bearer ${key}`,
+    Connection: 'close',
   };
   if (options.prefer) {
     headers.Prefer = options.prefer;

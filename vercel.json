@@ -2,8 +2,9 @@
   "buildCommand": "cd mobile && bun install && bun run vercel-build",
   "outputDirectory": "mobile/dist",
   "installCommand": "cd mobile && bun install",
+  "framework": null,
   "functions": {
-    "api/**/*.js": {
+    "mobile/api/**/*.js": {
       "maxDuration": 60
     }
   },

@@ -55,7 +55,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 // src/lib/supabase-admin.ts
-var ADMIN_FETCH_TIMEOUT_MS = 12000;
+var ADMIN_FETCH_TIMEOUT_MS = 8000;
 function readSupabaseUrl() {
   return process.env.SUPABASE_URL?.trim() ?? "";
 }
@@ -98,7 +98,8 @@ async function adminFetch(path, options = {}) {
   const method = options.method ?? "GET";
   const headers = {
     apikey: key,
-    Authorization: `Bearer ${key}`
+    Authorization: `Bearer ${key}`,
+    Connection: "close"
   };
   if (options.prefer) {
     headers.Prefer = options.prefer;
@@ -129,6 +130,108 @@ async function adminFetch(path, options = {}) {
     }
   }
   return { ok: response.ok, status: response.status, data };
+}
+
+// src/middleware/auth.ts
+import { createClient } from "@supabase/supabase-js";
+var adminClient = null;
+function getSupabaseAdminClient() {
+  const url = readSupabaseUrl();
+  const key = readServiceRoleKey();
+  if (!adminClient) {
+    adminClient = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+  }
+  return adminClient;
+}
+function parseSupabaseAccessToken(token) {
+  const parts = token.split(".");
+  if (parts.length !== 3)
+    return null;
+  const payloadPart = parts[1];
+  if (!payloadPart)
+    return null;
+  try {
+    const payload = JSON.parse(Buffer.from(payloadPart.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    if (!payload.sub)
+      return null;
+    if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) {
+      return null;
+    }
+    return {
+      id: payload.sub,
+      email: typeof payload.email === "string" ? payload.email : undefined
+    };
+  } catch {
+    return null;
+  }
+}
+function readKnownUserRole(userId) {
+  const superAdmins = (process.env.SUPER_ADMIN_USER_IDS ?? "aefb52cc-7c08-4799-a6bc-907ec439287d").split(",").map((value) => value.trim()).filter(Boolean);
+  if (superAdmins.includes(userId))
+    return "super_admin";
+  const managers = (process.env.MANAGER_USER_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (managers.includes(userId))
+    return "manager";
+  return null;
+}
+async function fetchUserRole(userId) {
+  const knownRole = readKnownUserRole(userId);
+  if (knownRole)
+    return knownRole;
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("user_profiles").select("role").eq("id", userId).maybeSingle();
+  if (error || !data?.role)
+    return null;
+  return data.role;
+}
+function validateAccessToken(token) {
+  if (!isSupabaseAdminConfigured())
+    return null;
+  return parseSupabaseAccessToken(token);
+}
+async function requireMemberAuth(c, next) {
+  const authHeader = c.req.header("Authorization");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  try {
+    const user = validateAccessToken(token);
+    if (!user) {
+      return c.json({ error: "Invalid or expired token" }, 401);
+    }
+    const role = await fetchUserRole(user.id);
+    if (!role) {
+      return c.json({ error: "Profile not found" }, 403);
+    }
+    c.set("authUser", { id: user.id, email: user.email ?? "", role });
+    await next();
+  } catch {
+    return c.json({ error: "Auth service unavailable" }, 503);
+  }
+}
+async function requireManagerAuth(c, next) {
+  const authHeader = c.req.header("Authorization");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  try {
+    const user = validateAccessToken(token);
+    if (!user) {
+      return c.json({ error: "Invalid or expired token" }, 401);
+    }
+    const role = await fetchUserRole(user.id);
+    if (!role || role !== "manager" && role !== "super_admin") {
+      return c.json({ error: "Manager access required" }, 403);
+    }
+    c.set("authUser", { id: user.id, email: user.email ?? "", role });
+    await next();
+  } catch {
+    return c.json({ error: "Auth service unavailable" }, 503);
+  }
 }
 
 // src/routes/sample.ts
@@ -250,85 +353,6 @@ devAuthRouter.post("/set-password", async (c) => {
 
 // src/routes/members.ts
 import { Hono as Hono3 } from "hono";
-
-// src/middleware/auth.ts
-function parseSupabaseAccessToken(token) {
-  const parts = token.split(".");
-  if (parts.length !== 3)
-    return null;
-  const payloadPart = parts[1];
-  if (!payloadPart)
-    return null;
-  try {
-    const payload = JSON.parse(Buffer.from(payloadPart.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-    if (!payload.sub)
-      return null;
-    if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) {
-      return null;
-    }
-    return {
-      id: payload.sub,
-      email: typeof payload.email === "string" ? payload.email : undefined
-    };
-  } catch {
-    return null;
-  }
-}
-async function fetchUserRole(userId) {
-  const result = await adminFetch(`/rest/v1/user_profiles?id=eq.${userId}&select=role&limit=1`);
-  if (!result.ok || !result.data?.[0])
-    return null;
-  return result.data[0].role ?? null;
-}
-function validateAccessToken(token) {
-  if (!isSupabaseAdminConfigured())
-    return null;
-  return parseSupabaseAccessToken(token);
-}
-async function requireMemberAuth(c, next) {
-  const authHeader = c.req.header("Authorization");
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-  try {
-    const user = validateAccessToken(token);
-    if (!user) {
-      return c.json({ error: "Invalid or expired token" }, 401);
-    }
-    const role = await fetchUserRole(user.id);
-    if (!role) {
-      return c.json({ error: "Profile not found" }, 403);
-    }
-    c.set("authUser", { id: user.id, email: user.email ?? "", role });
-    await next();
-  } catch {
-    return c.json({ error: "Auth service unavailable" }, 503);
-  }
-}
-async function requireManagerAuth(c, next) {
-  const authHeader = c.req.header("Authorization");
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-  try {
-    const user = validateAccessToken(token);
-    if (!user) {
-      return c.json({ error: "Invalid or expired token" }, 401);
-    }
-    const role = await fetchUserRole(user.id);
-    if (!role || role !== "manager" && role !== "super_admin") {
-      return c.json({ error: "Manager access required" }, 403);
-    }
-    c.set("authUser", { id: user.id, email: user.email ?? "", role });
-    await next();
-  } catch {
-    return c.json({ error: "Auth service unavailable" }, 503);
-  }
-}
-
-// src/routes/members.ts
 var membersRouter = new Hono3;
 function buildFullName(firstName, lastName) {
   return `${firstName.trim()} ${lastName.trim()}`.trim();
@@ -1717,6 +1741,10 @@ function createApp() {
       status: result.status,
       latencyMs: Date.now() - started
     });
+  });
+  app.post("/health/manager-ping", requireManagerAuth, (c) => {
+    const user = c.get("authUser");
+    return c.json({ ok: true, user });
   });
   app.route("/api/sample", sampleRouter);
   app.route("/api/dev", devAuthRouter);

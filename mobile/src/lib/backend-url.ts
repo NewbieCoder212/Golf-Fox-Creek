@@ -9,11 +9,15 @@ function normalizeBackendUrl(url: string): string {
 
 /**
  * Resolve the Hono backend base URL for API calls.
- * In production web builds, localhost must not be used — callers should fall back to Supabase.
+ * Production web uses same-origin /api rewrites (see root vercel.json).
  */
 export function getBackendUrl(): string {
   const configured =
     process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL ?? process.env.EXPO_PUBLIC_BACKEND_URL;
+
+  if (typeof window !== 'undefined' && isProductionWebHost()) {
+    return window.location.origin;
+  }
 
   if (typeof window !== 'undefined' && isLocalWebHost(window.location.hostname)) {
     if (

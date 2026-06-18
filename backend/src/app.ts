@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
+import { adminFetch, isSupabaseAdminConfigured } from './lib/supabase-admin';
 import { sampleRouter } from './routes/sample';
 import { devAuthRouter } from './routes/dev-auth';
 import { membersRouter } from './routes/members';
@@ -35,6 +36,21 @@ export function createApp() {
   app.use('*', logger());
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  app.get('/health/supabase-admin', async (c) => {
+    if (!isSupabaseAdminConfigured()) {
+      return c.json({ ok: false, error: 'Supabase admin is not configured' }, 503);
+    }
+    const started = Date.now();
+    const result = await adminFetch<Array<{ id: string }>>(
+      '/rest/v1/user_profiles?select=id&limit=1'
+    );
+    return c.json({
+      ok: result.ok,
+      status: result.status,
+      latencyMs: Date.now() - started,
+    });
+  });
 
   app.route('/api/sample', sampleRouter);
   app.route('/api/dev', devAuthRouter);

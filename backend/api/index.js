@@ -54,6 +54,82 @@ import { Hono as Hono7 } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
+// src/lib/supabase-admin.ts
+var ADMIN_FETCH_TIMEOUT_MS = 12000;
+function readSupabaseUrl() {
+  return process.env.SUPABASE_URL?.trim() ?? "";
+}
+function readServiceRoleKey() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
+}
+function getSupabaseAnonKey() {
+  return process.env.SUPABASE_ANON_KEY?.trim() ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+}
+function isSupabaseAdminConfigured() {
+  return Boolean(readSupabaseUrl() && readServiceRoleKey());
+}
+function getSupabaseAdminConfig() {
+  const supabaseUrl = readSupabaseUrl();
+  const serviceRoleKey = readServiceRoleKey();
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Supabase admin is not configured");
+  }
+  return { supabaseUrl, serviceRoleKey };
+}
+function getErrorMessage(data) {
+  return typeof data.error_description === "string" && data.error_description || typeof data.msg === "string" && data.msg || typeof data.message === "string" && data.message || "Request failed";
+}
+async function supabaseFetch(url, init = {}, timeoutMs = ADMIN_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: init.signal ?? controller.signal,
+      cache: "no-store"
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function adminFetch(path, options = {}) {
+  const { supabaseUrl: url, serviceRoleKey: key } = getSupabaseAdminConfig();
+  const method = options.method ?? "GET";
+  const headers = {
+    apikey: key,
+    Authorization: `Bearer ${key}`
+  };
+  if (options.prefer) {
+    headers.Prefer = options.prefer;
+  }
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+  let response;
+  try {
+    response = await supabaseFetch(`${url}${path}`, {
+      method,
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined
+    });
+  } catch (error) {
+    const message = error instanceof Error && error.name === "AbortError" ? "Supabase request timed out" : "Supabase request failed";
+    return { ok: false, status: 504, data: { message } };
+  }
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {
+        message: text.slice(0, 200)
+      };
+    }
+  }
+  return { ok: response.ok, status: response.status, data };
+}
+
 // src/routes/sample.ts
 import { Hono } from "hono";
 var sampleRouter = new Hono;
@@ -91,7 +167,7 @@ async function findUserIdByEmail(email) {
   const user = data.users?.find((entry) => entry.email?.toLowerCase() === email.toLowerCase());
   return user?.id ?? null;
 }
-function getErrorMessage(data) {
+function getErrorMessage2(data) {
   return typeof data.error_description === "string" && data.error_description || typeof data.msg === "string" && data.msg || typeof data.message === "string" && data.message || "Request failed";
 }
 devAuthRouter.post("/generate-reset-link", async (c) => {
@@ -124,7 +200,7 @@ devAuthRouter.post("/generate-reset-link", async (c) => {
   });
   const data = await response.json();
   if (!response.ok) {
-    return c.json({ error: getErrorMessage(data) }, 400);
+    return c.json({ error: getErrorMessage2(data) }, 400);
   }
   const properties = data.properties;
   const actionLink = typeof data.action_link === "string" && data.action_link || typeof properties?.action_link === "string" && properties.action_link || typeof properties?.redirect_to === "string" && properties.redirect_to || null;
@@ -166,7 +242,7 @@ devAuthRouter.post("/set-password", async (c) => {
   });
   const data = await response.json();
   if (!response.ok) {
-    return c.json({ error: getErrorMessage(data) }, 400);
+    return c.json({ error: getErrorMessage2(data) }, 400);
   }
   return c.json({ success: true, email });
 });
@@ -174,67 +250,63 @@ devAuthRouter.post("/set-password", async (c) => {
 // src/routes/members.ts
 import { Hono as Hono3 } from "hono";
 
-// src/lib/supabase-admin.ts
-var supabaseUrl = process.env.SUPABASE_URL?.trim() ?? "";
-var serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
-function isSupabaseAdminConfigured() {
-  return Boolean(supabaseUrl && serviceRoleKey);
-}
-function getSupabaseAdminConfig() {
-  if (!isSupabaseAdminConfigured()) {
-    throw new Error("Supabase admin is not configured");
-  }
-  return { supabaseUrl, serviceRoleKey };
-}
-function getErrorMessage2(data) {
-  return typeof data.error_description === "string" && data.error_description || typeof data.msg === "string" && data.msg || typeof data.message === "string" && data.message || "Request failed";
-}
-async function adminFetch(path, options = {}) {
-  const { supabaseUrl: url, serviceRoleKey: key } = getSupabaseAdminConfig();
-  const headers = {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json"
-  };
-  if (options.prefer) {
-    headers.Prefer = options.prefer;
-  }
-  const response = await fetch(`${url}${path}`, {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-  const text = await response.text();
-  let data = null;
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = {
-        message: text.slice(0, 200)
-      };
-    }
-  }
-  return { ok: response.ok, status: response.status, data };
-}
-
 // src/middleware/auth.ts
-async function fetchUserRole(userId) {
-  const { supabaseUrl: supabaseUrl2, serviceRoleKey: serviceRoleKey2 } = getSupabaseAdminConfig();
-  const url = new URL(`${supabaseUrl2}/rest/v1/user_profiles`);
-  url.searchParams.set("id", `eq.${userId}`);
-  url.searchParams.set("select", "role");
-  const response = await fetch(url.toString(), {
-    headers: {
-      apikey: serviceRoleKey2,
-      Authorization: `Bearer ${serviceRoleKey2}`,
+var AUTH_FETCH_TIMEOUT_MS = 8000;
+async function authFetch(url, headers) {
+  const controller = new AbortController;
+  const timeout = setTimeout(() => controller.abort(), AUTH_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      headers,
+      signal: controller.signal,
+      cache: "no-store"
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function fetchUserRole(userId, accessToken) {
+  const { supabaseUrl, serviceRoleKey } = getSupabaseAdminConfig();
+  const anonKey = getSupabaseAnonKey();
+  const profileUrl = new URL(`${supabaseUrl}/rest/v1/user_profiles`);
+  profileUrl.searchParams.set("id", `eq.${userId}`);
+  profileUrl.searchParams.set("select", "role");
+  if (anonKey) {
+    const response2 = await authFetch(profileUrl.toString(), {
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`,
       Accept: "application/vnd.pgrst.object+json"
+    });
+    if (response2.ok) {
+      const profile2 = await response2.json();
+      return profile2.role ?? null;
     }
+  }
+  const response = await authFetch(profileUrl.toString(), {
+    apikey: serviceRoleKey,
+    Authorization: `Bearer ${serviceRoleKey}`,
+    Accept: "application/vnd.pgrst.object+json"
   });
   if (!response.ok)
     return null;
   const profile = await response.json();
   return profile.role ?? null;
+}
+async function validateAccessToken(token) {
+  if (!isSupabaseAdminConfigured()) {
+    return null;
+  }
+  const { supabaseUrl, serviceRoleKey } = getSupabaseAdminConfig();
+  const anonKey = getSupabaseAnonKey();
+  const apikey = anonKey || serviceRoleKey;
+  const response = await authFetch(`${supabaseUrl}/auth/v1/user`, {
+    apikey,
+    Authorization: `Bearer ${token}`
+  });
+  if (!response.ok) {
+    return null;
+  }
+  return await response.json();
 }
 async function requireMemberAuth(c, next) {
   const authHeader = c.req.header("Authorization");
@@ -243,18 +315,11 @@ async function requireMemberAuth(c, next) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   try {
-    const { supabaseUrl: supabaseUrl2, serviceRoleKey: serviceRoleKey2 } = getSupabaseAdminConfig();
-    const response = await fetch(`${supabaseUrl2}/auth/v1/user`, {
-      headers: {
-        apikey: serviceRoleKey2,
-        Authorization: `Bearer ${token}`
-      }
-    });
-    if (!response.ok) {
+    const user = await validateAccessToken(token);
+    if (!user) {
       return c.json({ error: "Invalid or expired token" }, 401);
     }
-    const user = await response.json();
-    const role = await fetchUserRole(user.id);
+    const role = await fetchUserRole(user.id, token);
     if (!role) {
       return c.json({ error: "Profile not found" }, 403);
     }
@@ -271,18 +336,11 @@ async function requireManagerAuth(c, next) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   try {
-    const { supabaseUrl: supabaseUrl2, serviceRoleKey: serviceRoleKey2 } = getSupabaseAdminConfig();
-    const response = await fetch(`${supabaseUrl2}/auth/v1/user`, {
-      headers: {
-        apikey: serviceRoleKey2,
-        Authorization: `Bearer ${token}`
-      }
-    });
-    if (!response.ok) {
+    const user = await validateAccessToken(token);
+    if (!user) {
       return c.json({ error: "Invalid or expired token" }, 401);
     }
-    const user = await response.json();
-    const role = await fetchUserRole(user.id);
+    const role = await fetchUserRole(user.id, token);
     if (!role || role !== "manager" && role !== "super_admin") {
       return c.json({ error: "Manager access required" }, 403);
     }
@@ -318,7 +376,7 @@ async function updateProfileAfterInvite(params) {
     body
   });
   if (!ok) {
-    throw new Error(getErrorMessage2(data));
+    throw new Error(getErrorMessage(data));
   }
 }
 async function inviteUserByEmail(params) {
@@ -336,7 +394,7 @@ async function inviteUserByEmail(params) {
     }
   });
   if (!ok) {
-    throw new Error(getErrorMessage2(data));
+    throw new Error(getErrorMessage(data));
   }
   const user = data.user;
   const userId = user?.id ?? (typeof data.id === "string" ? data.id : null);
@@ -363,7 +421,7 @@ async function generateInviteLink(params) {
     }
   });
   if (!ok) {
-    throw new Error(getErrorMessage2(data));
+    throw new Error(getErrorMessage(data));
   }
 }
 membersRouter.use("*", async (c, next) => {
@@ -771,7 +829,7 @@ async function generateInviteLink2(params) {
     }
   });
   if (!ok) {
-    throw new Error(getErrorMessage2(data));
+    throw new Error(getErrorMessage(data));
   }
   const properties = data.properties;
   return typeof data.action_link === "string" && data.action_link || typeof properties?.action_link === "string" && properties.action_link || null;
@@ -820,7 +878,7 @@ tournamentTeamsRouter.patch("/:tournamentId/teams/:teamId", requireManagerAuth, 
     prefer: "return=representation"
   });
   if (!patchResult.ok) {
-    const details = getErrorMessage2(patchResult.data);
+    const details = getErrorMessage(patchResult.data);
     console.error("[TournamentTeams] PATCH failed:", details);
     return c.json({
       error: details.includes("captain_player_id") && details.includes("column") ? "Database missing captain_player_id column. Run migration 20260716000000_tournament_team_captain_player.sql" : `Team was not updated: ${details}`
@@ -855,7 +913,7 @@ async function inviteUserByEmail2(params) {
     }
   });
   if (!ok) {
-    throw new Error(getErrorMessage2(data));
+    throw new Error(getErrorMessage(data));
   }
   const user = data.user;
   const userId = user?.id ?? (typeof data.id === "string" ? data.id : null);
@@ -866,18 +924,14 @@ async function inviteUserByEmail2(params) {
 }
 async function findAuthUserIdByEmail(email) {
   const normalized = email.trim().toLowerCase();
-  for (let page = 1;page <= 10; page += 1) {
-    const { ok, data } = await adminFetch(`/auth/v1/admin/users?page=${page}&per_page=200`);
-    if (!ok || !data.users?.length) {
-      break;
-    }
-    const match = data.users.find((user) => user.email?.toLowerCase() === normalized);
-    if (match?.id) {
-      return match.id;
-    }
-    if (data.users.length < 200) {
-      break;
-    }
+  const quotedEmail = `"${normalized.replace(/"/g, "")}"`;
+  const profileResult = await adminFetch(`/rest/v1/user_profiles?email=eq.${quotedEmail}&select=id&limit=1`);
+  if (profileResult.ok && profileResult.data?.[0]?.id) {
+    return profileResult.data[0].id;
+  }
+  const authResult = await adminFetch(`/auth/v1/admin/users?filter=email:eq.${encodeURIComponent(normalized)}&page=1&per_page=1`);
+  if (authResult.ok && authResult.data?.users?.[0]?.id) {
+    return authResult.data.users[0].id;
   }
   return null;
 }
@@ -1498,7 +1552,7 @@ async function upsertTournamentScore(score) {
       prefer: "return=representation"
     });
     if (!res2.ok) {
-      throw new Error(getErrorMessage2(res2.data));
+      throw new Error(getErrorMessage(res2.data));
     }
     return res2.data?.[0]?.id ?? existing.id;
   }
@@ -1508,7 +1562,7 @@ async function upsertTournamentScore(score) {
     prefer: "return=representation"
   });
   if (!res.ok) {
-    throw new Error(getErrorMessage2(res.data));
+    throw new Error(getErrorMessage(res.data));
   }
   return res.data?.[0]?.id ?? null;
 }
@@ -1535,7 +1589,7 @@ async function syncTournamentMatchScores(params) {
     }
     const clearRes = await adminFetch(`/rest/v1/tournament_match_hole_results?match_group_id=eq.${params.matchGroupId}&round_number=eq.${params.roundNumber}`, { method: "DELETE" });
     if (!clearRes.ok) {
-      throw new Error(getErrorMessage2(clearRes.data));
+      throw new Error(getErrorMessage(clearRes.data));
     }
     if (params.holeResults.length > 0) {
       const insertRes = await adminFetch(`/rest/v1/tournament_match_hole_results`, {
@@ -1544,7 +1598,7 @@ async function syncTournamentMatchScores(params) {
         prefer: "return=representation"
       });
       if (!insertRes.ok) {
-        throw new Error(getErrorMessage2(insertRes.data));
+        throw new Error(getErrorMessage(insertRes.data));
       }
     }
     const patchRes = await adminFetch(`/rest/v1/tournament_match_groups?id=eq.${params.matchGroupId}`, {
@@ -1553,7 +1607,7 @@ async function syncTournamentMatchScores(params) {
       prefer: "return=minimal"
     });
     if (!patchRes.ok) {
-      throw new Error(getErrorMessage2(patchRes.data));
+      throw new Error(getErrorMessage(patchRes.data));
     }
     return { success: true };
   } catch (err) {
@@ -1569,11 +1623,11 @@ async function clearTournamentMatchScores(params) {
   try {
     const scoresRes = await adminFetch(`/rest/v1/tournament_scores?match_group_id=eq.${params.matchGroupId}&round_number=eq.${params.roundNumber}`, { method: "DELETE" });
     if (!scoresRes.ok) {
-      throw new Error(getErrorMessage2(scoresRes.data));
+      throw new Error(getErrorMessage(scoresRes.data));
     }
     const holesRes = await adminFetch(`/rest/v1/tournament_match_hole_results?match_group_id=eq.${params.matchGroupId}&round_number=eq.${params.roundNumber}`, { method: "DELETE" });
     if (!holesRes.ok) {
-      throw new Error(getErrorMessage2(holesRes.data));
+      throw new Error(getErrorMessage(holesRes.data));
     }
     const patchRes = await adminFetch(`/rest/v1/tournament_match_groups?id=eq.${params.matchGroupId}`, {
       method: "PATCH",
@@ -1585,7 +1639,7 @@ async function clearTournamentMatchScores(params) {
       prefer: "return=minimal"
     });
     if (!patchRes.ok) {
-      throw new Error(getErrorMessage2(patchRes.data));
+      throw new Error(getErrorMessage(patchRes.data));
     }
     return { success: true };
   } catch (err) {
@@ -1662,6 +1716,18 @@ function createApp() {
   }));
   app.use("*", logger());
   app.get("/health", (c) => c.json({ status: "ok" }));
+  app.get("/health/supabase-admin", async (c) => {
+    if (!isSupabaseAdminConfigured()) {
+      return c.json({ ok: false, error: "Supabase admin is not configured" }, 503);
+    }
+    const started = Date.now();
+    const result = await adminFetch("/rest/v1/user_profiles?select=id&limit=1");
+    return c.json({
+      ok: result.ok,
+      status: result.status,
+      latencyMs: Date.now() - started
+    });
+  });
   app.route("/api/sample", sampleRouter);
   app.route("/api/dev", devAuthRouter);
   app.route("/api/members", membersRouter);

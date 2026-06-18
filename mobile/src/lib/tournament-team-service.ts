@@ -17,6 +17,9 @@ function fetchFailureMessage(error: unknown): string {
     if (error.name === 'AbortError') {
       return 'Tournament service timed out. Try again in a moment.';
     }
+    if (error.message === 'Load failed') {
+      return 'Could not reach tournament service. Check your connection and try again.';
+    }
     if (error.message) {
       return error.message;
     }
@@ -97,7 +100,12 @@ async function postBackendWithManagerAuth<T extends { error?: string }>(
     }
 
     if (!response.ok) {
-      return { error: data.error ?? data.message ?? `Request failed (${response.status})` };
+      const message =
+        data.error ??
+        (typeof (data as { message?: string }).message === 'string'
+          ? (data as { message?: string }).message
+          : undefined);
+      return { error: message ?? `Request failed (${response.status})` };
     }
 
     return { response, data, accessToken: token };

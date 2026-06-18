@@ -239,23 +239,20 @@ async function inviteUserByEmail(params: {
 
 async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   const normalized = email.trim().toLowerCase();
+  const quotedEmail = `"${normalized.replace(/"/g, '')}"`;
 
-  for (let page = 1; page <= 10; page += 1) {
-    const { ok, data } = await adminFetch<{ users?: Array<{ id: string; email?: string }> }>(
-      `/auth/v1/admin/users?page=${page}&per_page=200`
-    );
-    if (!ok || !data.users?.length) {
-      break;
-    }
+  const profileResult = await adminFetch<Array<{ id: string }>>(
+    `/rest/v1/user_profiles?email=eq.${quotedEmail}&select=id&limit=1`
+  );
+  if (profileResult.ok && profileResult.data?.[0]?.id) {
+    return profileResult.data[0].id;
+  }
 
-    const match = data.users.find((user) => user.email?.toLowerCase() === normalized);
-    if (match?.id) {
-      return match.id;
-    }
-
-    if (data.users.length < 200) {
-      break;
-    }
+  const authResult = await adminFetch<{ users?: Array<{ id: string; email?: string }> }>(
+    `/auth/v1/admin/users?filter=email:eq.${encodeURIComponent(normalized)}&page=1&per_page=1`
+  );
+  if (authResult.ok && authResult.data?.users?.[0]?.id) {
+    return authResult.data.users[0].id;
   }
 
   return null;

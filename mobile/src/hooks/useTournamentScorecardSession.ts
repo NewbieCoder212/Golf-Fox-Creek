@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
+
+import type { DirectResultPlayer } from '@/components/TournamentDirectResultPanel';
 import { useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 

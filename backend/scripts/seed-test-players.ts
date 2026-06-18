@@ -216,7 +216,7 @@ async function upsertTournamentPlayer(
   });
 
   if (!ok || !data?.[0]?.id) {
-    throw new Error(`Create tournament player ${player.displayName}: ${getError(data as Record<string, unknown>)}`);
+    throw new Error(`Create tournament player ${player.displayName}: ${getError(data as unknown as Record<string, unknown>)}`);
   }
 
   console.log(`  ✓ Created roster entry: ${player.displayName}`);
@@ -314,13 +314,13 @@ async function main() {
     console.log(`\n${player.displayName} (${player.email})`);
     const userId = await createOrUpdateAuthUser(player);
     const rosterId = await upsertTournamentPlayer(player, userId);
-    rosterByTeam[player.teamId].push(rosterId);
+    rosterByTeam[player.teamId]!.push(rosterId);
     await addPlayerToTeam(player.teamId, rosterId);
     console.log(`  ✓ Added to team roster`);
   }
 
   console.log('\nSetting up match groups (rounds 1–3)...');
-  await setupMatchGroups(rosterByTeam[TEAM_DIAPERS_ID], rosterByTeam[TEAM_DEPENDS_ID]);
+  await setupMatchGroups(rosterByTeam[TEAM_DIAPERS_ID]!, rosterByTeam[TEAM_DEPENDS_ID]!);
 
   console.log('\n✅ Done! Test credentials:\n');
   console.log('Password for all accounts: FoxCreek123!\n');

@@ -86,7 +86,7 @@ export function countTeamsWithResolvedPlayers(
 }
 
 export function resolveParticipantEmail(
-  player: TournamentPlayer,
+  player: Pick<TournamentPlayer, 'user_id' | 'email'>,
   memberEmailByUserId: Record<string, string>
 ): string | null {
   if (player.user_id && memberEmailByUserId[player.user_id]) {

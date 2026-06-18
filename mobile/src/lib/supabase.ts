@@ -568,7 +568,7 @@ export async function getGMAnnouncementSettings(): Promise<GMAnnouncement> {
 
   return {
     ...defaults,
-    ...(data.setting_value as GMAnnouncement),
+    ...(data.setting_value as unknown as GMAnnouncement),
   };
 }
 
@@ -632,7 +632,7 @@ export async function getTurnMessaging(): Promise<TurnMessagingSettings> {
 
   return {
     ...getDefaultTurnMessagingSettings(),
-    ...(data.setting_value as TurnMessagingSettings),
+    ...(data.setting_value as unknown as TurnMessagingSettings),
   };
 }
 
@@ -696,7 +696,7 @@ export async function getAdRotationSettings(): Promise<AdRotationSettings> {
 
   if (!data) return getDefaultAdRotationSettings();
 
-  const value = data.setting_value as AdRotationSettings;
+  const value = data.setting_value as unknown as AdRotationSettings;
   return {
     ...getDefaultAdRotationSettings(),
     ...value,
@@ -851,6 +851,24 @@ export function parseRecoveryTokenFromUrl(url: string): string | null {
 
 export function parseInviteTokenFromUrl(url: string): string | null {
   return parseRecoveryTokenFromUrl(url);
+}
+
+/** Route for a Supabase email auth link (recovery → reset, invite → accept). */
+export function getAuthCallbackRouteFromUrl(url: string): '/reset-password' | '/accept-invite' | null {
+  try {
+    const parsed = new URL(url);
+    const params = parsed.hash
+      ? new URLSearchParams(parsed.hash.substring(1))
+      : parsed.searchParams;
+    const token = params.get('access_token');
+    const type = params.get('type');
+    if (!token) return null;
+    if (type === 'recovery') return '/reset-password';
+    if (type === 'invite' || type === 'signup') return '/accept-invite';
+  } catch {
+    // Invalid URL
+  }
+  return null;
 }
 
 /**

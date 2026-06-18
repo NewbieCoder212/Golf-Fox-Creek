@@ -233,7 +233,7 @@ export function TournamentMatchGroupsTab({
   );
 
   const { data: holeResults = [], isLoading } = useQuery({
-    queryKey: ['matchHoleResults', tournamentId, roundNumber, savedGroupIds.join(',')],
+    queryKey: ['matchHoleResults', tournamentId, roundNumber, savedGroupIds],
     queryFn: () => getMatchHoleResultsForGroups(savedGroupIds, roundNumber),
     enabled: savedGroupIds.length > 0,
   });

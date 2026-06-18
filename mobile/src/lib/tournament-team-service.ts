@@ -173,7 +173,7 @@ export async function updateTournamentParticipantViaBackend(params: {
     handicap_index?: number | null;
     user_id?: string | null;
   };
-}): Promise<UpdateTournamentTeamResult & { data: TournamentPlayer | null }> {
+}): Promise<{ data: TournamentPlayer | null; error: string | null }> {
   try {
     const response = await fetch(
       `${BACKEND_URL}/api/tournaments/${params.tournamentId}/participants/${params.playerId}`,

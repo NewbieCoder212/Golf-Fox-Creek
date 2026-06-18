@@ -3,6 +3,8 @@
  */
 
 import type { AdPlacement, AdDisplayPosition, AdPlacementType, AdImageLayout } from '@/types';
+
+export type { AdPlacementType, AdImageLayout, AdDisplayPosition };
 import {
   ensureManagerAccessToken,
   isAuthTokenExpiredError,

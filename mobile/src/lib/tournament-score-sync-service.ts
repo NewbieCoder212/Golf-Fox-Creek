@@ -39,6 +39,10 @@ export function buildPseudoTournamentScores(
 ): TournamentScore[] {
   return payloads.map((payload, index) => ({
     ...payload,
+    team_id: payload.team_id ?? null,
+    user_id: payload.user_id ?? null,
+    tournament_player_id: payload.tournament_player_id ?? null,
+    match_group_id: payload.match_group_id ?? null,
     id: `local-${index}`,
     created_at: new Date().toISOString(),
   }));
@@ -59,22 +63,17 @@ export function buildMatchSyncPayload(params: {
     pseudoScores,
     { useNetScoring: params.useNetScoring ?? false }
   );
+  const holeResultRows: TournamentMatchHoleResult[] = holeResults.map((row, index) => ({
+    id: `local-${index}`,
+    ...row,
+  }));
   const matchPoints = computeMatchPoints({
     matchGroup: params.matchGroup,
     format: params.format,
     scores: pseudoScores,
-    holeResults,
+    holeResults: holeResultRows,
     useNetScoring: params.useNetScoring ?? false,
   });
-
-  const holeResultRows: Omit<TournamentMatchHoleResult, 'id'>[] = holeResults.map((row) => ({
-    match_group_id: params.matchGroup.id,
-    round_number: params.roundNumber,
-    hole: row.hole,
-    side_a_net: row.side_a_net,
-    side_b_net: row.side_b_net,
-    hole_winner: row.hole_winner,
-  }));
 
   return {
     roundNumber: params.roundNumber,

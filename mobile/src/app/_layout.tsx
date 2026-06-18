@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -19,6 +19,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { useAdminAuthStore } from '@/lib/admin-auth-store';
 import { getPostLoginRoute, syncStoredAuthStores } from '@/lib/admin-auth-bridge';
+import { getAuthCallbackRouteFromUrl } from '@/lib/supabase';
 import { foxColors } from '@/theme/tokens';
 
 export const unstable_settings = {
@@ -30,6 +31,27 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+/** Supabase email links may land on `/` with tokens in the hash — send users to the right screen. */
+function useAuthEmailLinkRedirect() {
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const callbackRoute = getAuthCallbackRouteFromUrl(window.location.href);
+    if (!callbackRoute) return;
+
+    const segmentRoute =
+      callbackRoute === '/reset-password' ? 'reset-password' : 'accept-invite';
+    if (segments[0] === segmentRoute) return;
+
+    // Keep hash tokens on the URL when moving to the auth callback route.
+    window.history.replaceState(null, '', `${callbackRoute}${window.location.hash}`);
+    router.replace(callbackRoute);
+  }, [router, segments]);
+}
 
 function useProtectedRoute() {
   const segments = useSegments();
@@ -83,6 +105,7 @@ function useProtectedRoute() {
 }
 
 function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null | undefined }) {
+  useAuthEmailLinkRedirect();
   const { isLoading } = useProtectedRoute();
 
   // Show loading screen while checking auth

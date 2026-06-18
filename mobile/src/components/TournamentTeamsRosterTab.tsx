@@ -398,7 +398,7 @@ export function TournamentTeamsRosterTab({
       const result = await updateTournamentTeam(
         params.teamId,
         { team_name: params.team_name },
-        { tournamentId, accessToken }
+        { tournamentId, accessToken: accessToken ?? undefined }
       );
       return requireData(result, 'Could not update team name');
     },

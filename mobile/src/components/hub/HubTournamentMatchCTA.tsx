@@ -53,7 +53,7 @@ export function HubTournamentMatchCTA({
   const tournament = activeTournaments[0] ?? null;
 
   const { data: matchContext, isPending } = useQuery({
-    queryKey: ['hubTodayMatch', userId, tournament?.id],
+    queryKey: ['hubTodayMatch', userId, tournament],
     queryFn: async () => {
       if (!userId || !tournament) return null;
       const [matchGroups, rosterPlayerIds] = await Promise.all([

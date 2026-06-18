@@ -236,7 +236,7 @@ export function buildSinglesHoleScores(
           entered: true,
         };
       })
-      .filter((row): row is TournamentHoleScore => row !== null)
+      .filter((row): row is NonNullable<typeof row> => row !== null)
       .sort((a, b) => a.hole - b.hole);
   }
 
@@ -278,7 +278,7 @@ export function buildBestBallHoleScores(
 
   return holeData
     .map((hole) => {
-      const rows = playerCards.map((card) => card.find((row) => row.hole === hole.holeNumber) ?? null);
+      const rows = playerCards.map((card) => card.find((row) => row.hole === hole.hole) ?? null);
       const played = rows.filter((row): row is TournamentHoleScore => row !== null);
 
       if (!includeUnplayedHoles && played.length === 0) {
@@ -290,7 +290,7 @@ export function buildBestBallHoleScores(
       const bestNetIndex = nets.indexOf(Math.min(...nets));
 
       return {
-        hole: hole.holeNumber,
+        hole: hole.hole,
         par: hole.par,
         gross: grosses[bestNetIndex] ?? hole.par,
         net: Math.min(...nets),

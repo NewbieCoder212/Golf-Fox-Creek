@@ -52,7 +52,7 @@ async function main() {
     `/rest/v1/tournament_match_groups?tournament_id=eq.${TOURNAMENT_ID}&select=id,round_number`
   );
   if (!groupsRes.ok) {
-    console.error('Failed to load match groups:', getError(groupsRes.data as Record<string, unknown>));
+    console.error('Failed to load match groups:', getError(groupsRes.data as unknown as Record<string, unknown>));
     process.exit(1);
   }
 

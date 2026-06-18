@@ -1005,7 +1005,11 @@ export const useTournamentStore = create<TournamentStoreState>((set, get) => ({
       } else if (hasDirectOutcomes) {
         return { success: false, error: 'Match pairing required to save direct results' };
       } else {
-        const scorePayloads = buildScoreInsertPayloads(state);
+        const scorePayloads = buildScoreInsertPayloads({
+          ...state,
+          tournamentId: state.tournamentId,
+          format: state.format,
+        });
         for (const payload of scorePayloads) {
           const result = await saveTournamentScore(payload);
           if (result.error || !result.data) {

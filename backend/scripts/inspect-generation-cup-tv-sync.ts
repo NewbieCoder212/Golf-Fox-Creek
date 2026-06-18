@@ -117,7 +117,7 @@ async function main() {
   }
 
   if (diapersUserScores.length > 0) {
-    const latest = diapersUserScores[0];
+    const latest = diapersUserScores[0]!;
     console.log(
       `\nLatest diapers user score: match_group_id=${latest.match_group_id ?? 'MISSING'} through=${throughHole(latest.hole_scores)}`
     );

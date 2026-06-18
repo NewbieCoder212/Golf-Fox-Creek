@@ -74,7 +74,7 @@ function TeeGuideBadge({ teeName }: { teeName: string }) {
   if (isCombo) {
     return (
       <LinearGradient
-        colors={[colors[0], colors[1]]}
+        colors={[colors[0] ?? TEE_COLORS.white, colors[1] ?? colors[0] ?? TEE_COLORS.white]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={{

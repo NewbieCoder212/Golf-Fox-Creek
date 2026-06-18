@@ -3,6 +3,7 @@ import { Users, Construction } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useTabScreenPadding } from '@/components/navigation/TopTabBar';
+import { foxColors } from '@/theme/tokens';
 
 export default function SocialScreen() {
   const topPadding = useTabScreenPadding(16);

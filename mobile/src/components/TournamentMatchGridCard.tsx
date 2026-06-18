@@ -99,7 +99,7 @@ function MatchGridRowView({
   variant,
 }: {
   row: MatchGridRow;
-  sizes: (typeof GRID_SIZES)['default'];
+  sizes: (typeof GRID_SIZES)[MatchGridCardVariant];
   variant: MatchGridCardVariant;
 }) {
   const isStatusRow = row.kind === 'status';

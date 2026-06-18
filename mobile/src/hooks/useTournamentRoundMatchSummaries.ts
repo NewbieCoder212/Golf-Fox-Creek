@@ -85,7 +85,7 @@ export function useTournamentRoundMatchSummaries(
   const groupIds = useMemo(() => roundGroups.map((group) => group.id), [roundGroups]);
 
   const { data: holeResults = [], isPending } = useQuery({
-    queryKey: ['matchHoleResults', 'round', tournament?.id, roundNumber, groupIds.join(',')],
+    queryKey: ['matchHoleResults', 'round', tournament?.id, roundNumber, groupIds],
     queryFn: () => getMatchHoleResultsForGroups(groupIds, roundNumber),
     enabled: Boolean(tournament?.id) && groupIds.length > 0,
     refetchInterval: 15_000,

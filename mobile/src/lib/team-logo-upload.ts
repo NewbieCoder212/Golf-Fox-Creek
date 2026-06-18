@@ -65,7 +65,7 @@ export async function uploadTeamLogoImage(
       'Content-Type': contentType,
       'x-upsert': 'true',
     },
-    body: bytes,
+    body: new Blob([Uint8Array.from(bytes)], { type: contentType }),
   });
 
   if (!response.ok) {

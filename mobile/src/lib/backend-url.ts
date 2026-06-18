@@ -1,5 +1,12 @@
 const PRODUCTION_FALLBACK_BACKEND_URL = 'https://golf-fox-creek-9yt1.vercel.app';
 
+function normalizeBackendUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/$/, '');
+  if (!trimmed) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 /**
  * Resolve the Hono backend base URL for API calls.
  * In production web builds, localhost must not be used — callers should fall back to Supabase.
@@ -7,13 +14,19 @@ const PRODUCTION_FALLBACK_BACKEND_URL = 'https://golf-fox-creek-9yt1.vercel.app'
 export function getBackendUrl(): string {
   const configured =
     process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL ?? process.env.EXPO_PUBLIC_BACKEND_URL;
-  if (configured && !isLocalhostBackendUrl(configured)) {
-    return configured.replace(/\/$/, '');
-  }
+
   if (isProductionWebHost()) {
+    if (configured && /^https:\/\//i.test(configured) && !isLocalhostBackendUrl(configured)) {
+      return normalizeBackendUrl(configured);
+    }
     return PRODUCTION_FALLBACK_BACKEND_URL;
   }
-  return configured?.replace(/\/$/, '') ?? 'http://localhost:3000';
+
+  if (configured && !isLocalhostBackendUrl(configured)) {
+    return normalizeBackendUrl(configured);
+  }
+
+  return normalizeBackendUrl(configured ?? 'http://localhost:3000');
 }
 
 export function isProductionWebHost(): boolean {

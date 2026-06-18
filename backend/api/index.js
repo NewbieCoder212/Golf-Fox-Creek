@@ -62,9 +62,6 @@ function readSupabaseUrl() {
 function readServiceRoleKey() {
   return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
 }
-function getSupabaseAnonKey() {
-  return process.env.SUPABASE_ANON_KEY?.trim() ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
-}
 function isSupabaseAdminConfigured() {
   return Boolean(readSupabaseUrl() && readServiceRoleKey());
 }
@@ -251,46 +248,38 @@ devAuthRouter.post("/set-password", async (c) => {
 import { Hono as Hono3 } from "hono";
 
 // src/middleware/auth.ts
-var AUTH_FETCH_TIMEOUT_MS = 8000;
-async function authFetch(url, headers) {
-  const controller = new AbortController;
-  const timeout = setTimeout(() => controller.abort(), AUTH_FETCH_TIMEOUT_MS);
+function parseSupabaseAccessToken(token) {
+  const parts = token.split(".");
+  if (parts.length !== 3)
+    return null;
+  const payloadPart = parts[1];
+  if (!payloadPart)
+    return null;
   try {
-    return await fetch(url, {
-      headers,
-      signal: controller.signal,
-      cache: "no-store"
-    });
-  } finally {
-    clearTimeout(timeout);
+    const payload = JSON.parse(Buffer.from(payloadPart.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    if (!payload.sub)
+      return null;
+    if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) {
+      return null;
+    }
+    return {
+      id: payload.sub,
+      email: typeof payload.email === "string" ? payload.email : undefined
+    };
+  } catch {
+    return null;
   }
 }
-async function fetchUserRole(userId, _accessToken) {
-  const { supabaseUrl, serviceRoleKey } = getSupabaseAdminConfig();
-  const response = await authFetch(`${supabaseUrl}/rest/v1/user_profiles?id=eq.${userId}&select=role&limit=1`, {
-    apikey: serviceRoleKey,
-    Authorization: `Bearer ${serviceRoleKey}`
-  });
-  if (!response.ok)
+async function fetchUserRole(userId) {
+  const result = await adminFetch(`/rest/v1/user_profiles?id=eq.${userId}&select=role&limit=1`);
+  if (!result.ok || !result.data?.[0])
     return null;
-  const rows = await response.json();
-  return rows[0]?.role ?? null;
+  return result.data[0].role ?? null;
 }
-async function validateAccessToken(token) {
-  if (!isSupabaseAdminConfigured()) {
+function validateAccessToken(token) {
+  if (!isSupabaseAdminConfigured())
     return null;
-  }
-  const { supabaseUrl, serviceRoleKey } = getSupabaseAdminConfig();
-  const anonKey = getSupabaseAnonKey();
-  const apikey = anonKey || serviceRoleKey;
-  const response = await authFetch(`${supabaseUrl}/auth/v1/user`, {
-    apikey,
-    Authorization: `Bearer ${token}`
-  });
-  if (!response.ok) {
-    return null;
-  }
-  return await response.json();
+  return parseSupabaseAccessToken(token);
 }
 async function requireMemberAuth(c, next) {
   const authHeader = c.req.header("Authorization");
@@ -299,11 +288,11 @@ async function requireMemberAuth(c, next) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   try {
-    const user = await validateAccessToken(token);
+    const user = validateAccessToken(token);
     if (!user) {
       return c.json({ error: "Invalid or expired token" }, 401);
     }
-    const role = await fetchUserRole(user.id, token);
+    const role = await fetchUserRole(user.id);
     if (!role) {
       return c.json({ error: "Profile not found" }, 403);
     }
@@ -320,11 +309,11 @@ async function requireManagerAuth(c, next) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   try {
-    const user = await validateAccessToken(token);
+    const user = validateAccessToken(token);
     if (!user) {
       return c.json({ error: "Invalid or expired token" }, 401);
     }
-    const role = await fetchUserRole(user.id, token);
+    const role = await fetchUserRole(user.id);
     if (!role || role !== "manager" && role !== "super_admin") {
       return c.json({ error: "Manager access required" }, 403);
     }
@@ -812,7 +801,7 @@ async function generateInviteLink2(params) {
   const { ok, data } = await adminFetch("/auth/v1/admin/generate_link", {
     method: "POST",
     body: {
-      type: "invite",
+      type: "magiclink",
       email: params.email.trim().toLowerCase(),
       options: {
         redirect_to: params.redirectTo,

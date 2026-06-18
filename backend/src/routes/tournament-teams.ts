@@ -84,7 +84,7 @@ async function generateInviteLink(params: {
   const { ok, data } = await adminFetch<Record<string, unknown>>('/auth/v1/admin/generate_link', {
     method: 'POST',
     body: {
-      type: 'invite',
+      type: 'magiclink',
       email: params.email.trim().toLowerCase(),
       options: {
         redirect_to: params.redirectTo,

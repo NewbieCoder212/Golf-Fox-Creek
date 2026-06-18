@@ -51,7 +51,7 @@ import {
   useTournamentIsDirty,
 } from '@/lib/tournament-store';
 import type { TournamentTeamSide } from '@/types';
-import type { DirectResultPlayer } from '@/components/TournamentDirectResultPanel';
+import { peekScorecardReturnDestination } from '@/lib/scorecard-navigation';
 
 export interface TournamentScorecardParams {
   id: string;
@@ -517,6 +517,9 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
       ) {
         nextParams.side = inferredSide;
       }
+    }
+    if (peekScorecardReturnDestination() === 'admin') {
+      nextParams.returnTo = 'admin';
     }
     router.setParams(nextParams);
 

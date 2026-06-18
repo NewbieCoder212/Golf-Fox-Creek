@@ -7,6 +7,16 @@ import type { TournamentMatchGroup, TournamentMatchHoleResult } from '@/types';
 
 export type MatchPlayStatus = 'not_started' | 'in_progress' | 'complete';
 
+export function hasRecordedMatchResult(
+  group: Pick<TournamentMatchGroup, 'match_winner' | 'match_points_a' | 'match_points_b'>
+): boolean {
+  return (
+    group.match_winner != null ||
+    group.match_points_a > 0 ||
+    group.match_points_b > 0
+  );
+}
+
 export function isMatchPlayComplete(
   status: MatchStatus,
   group?: Pick<TournamentMatchGroup, 'match_winner' | 'match_points_a' | 'match_points_b'> | null

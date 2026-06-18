@@ -486,6 +486,7 @@ export function AdminTournamentManagementSection({
               members={members}
               playerNameById={playerNameById}
               isManager
+              scorecardReturnTo="admin"
             />
           </ScrollView>
         ) : (

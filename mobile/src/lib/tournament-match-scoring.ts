@@ -511,6 +511,23 @@ function pointsFromWinTally(aWins: number, bWins: number): {
   return { match_winner: 'tie', match_points_a: 0.5, match_points_b: 0.5 };
 }
 
+/** Cup points when a manager declares the match result without hole-by-hole entry. */
+export function matchPointsForDeclaredWinner(
+  winner: TournamentTeamSide | 'tie'
+): {
+  match_winner: TournamentTeamSide | 'tie';
+  match_points_a: number;
+  match_points_b: number;
+} {
+  if (winner === 'side_a') {
+    return { match_winner: 'side_a', match_points_a: 1, match_points_b: 0 };
+  }
+  if (winner === 'side_b') {
+    return { match_winner: 'side_b', match_points_a: 0, match_points_b: 1 };
+  }
+  return { match_winner: 'tie', match_points_a: 0.5, match_points_b: 0.5 };
+}
+
 export function computeMatchPoints(params: {
   matchGroup: TournamentMatchGroup;
   format: TournamentFormat;

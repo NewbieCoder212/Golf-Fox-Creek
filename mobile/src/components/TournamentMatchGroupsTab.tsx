@@ -25,6 +25,7 @@ import { TournamentDataLoadError } from '@/components/TournamentDataLoadError';
 import { formatTeeAssignmentTime } from '@/lib/tournament-tee-service';
 import { getDayNumberForRound } from '@/lib/tournament-schedule';
 import { TournamentFormatRulesCard } from '@/components/TournamentFormatRulesCard';
+import { MatchWinnerOverrideActions } from '@/components/MatchWinnerOverrideActions';
 import {
   formatLabelFromSettings,
   formatScoringHintFromSettings,
@@ -51,6 +52,9 @@ import {
 } from '@/lib/tournament-pairings-board';
 import type { Tournament, TournamentTeam, TournamentTeamSide } from '@/types';
 import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
+import { bridgeAdminAuthToMember } from '@/lib/admin-auth-bridge';
+import { setScorecardReturnDestination } from '@/lib/scorecard-navigation';
+import { hasRecordedMatchResult } from '@/lib/tournament-match-play-status';
 import { cn } from '@/lib/cn';
 
 interface MemberOption {
@@ -65,6 +69,7 @@ interface TournamentMatchGroupsTabProps {
   members: MemberOption[];
   playerNameById: Record<string, string>;
   isManager: boolean;
+  scorecardReturnTo?: 'admin' | 'tabs';
 }
 
 type ActiveSlot = {
@@ -156,6 +161,7 @@ export function TournamentMatchGroupsTab({
   members,
   playerNameById,
   isManager,
+  scorecardReturnTo = 'tabs',
 }: TournamentMatchGroupsTabProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -282,15 +288,27 @@ export function TournamentMatchGroupsTab({
     },
   });
 
-  const openScorecard = (groupId: string, side?: TournamentTeamSide) => {
+  const openScorecard = async (groupId: string, side?: TournamentTeamSide) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (scorecardReturnTo === 'admin') {
+      await bridgeAdminAuthToMember();
+      setScorecardReturnDestination('admin');
+    } else {
+      setScorecardReturnDestination(null);
+    }
     const params = new URLSearchParams({
       id: tournamentId,
       matchGroupId: groupId,
       round: String(roundNumber),
     });
     if (side) params.set('side', side);
-    router.push(`/(tabs)/scorecard?${params.toString()}`);
+    if (scorecardReturnTo === 'admin') {
+      params.set('returnTo', 'admin');
+    }
+    router.push({
+      pathname: '/(tabs)/scorecard',
+      params: Object.fromEntries(params.entries()),
+    } as never);
   };
 
   const selectRound = (nextRound: number) => {
@@ -869,7 +887,7 @@ export function TournamentMatchGroupsTab({
                 </View>
               </View>
 
-              {savedGroup && (savedGroup.match_points_a > 0 || savedGroup.match_points_b > 0) ? (
+              {savedGroup && hasRecordedMatchResult(savedGroup) ? (
                 <View className="mt-3 bg-lime-900/20 border border-lime-700/30 rounded-lg px-3 py-2">
                   <Text className="text-white text-sm font-semibold">
                     Match points: {sideAName} {savedGroup.match_points_a} –{' '}
@@ -914,6 +932,16 @@ export function TournamentMatchGroupsTab({
                     ))
                   )}
                 </View>
+              ) : null}
+
+              {isManager && row.groupId && pairingComplete && savedGroup ? (
+                <MatchWinnerOverrideActions
+                  tournamentId={tournamentId}
+                  matchGroup={savedGroup}
+                  roundNumber={roundNumber}
+                  sideAName={sideAName}
+                  sideBName={sideBName}
+                />
               ) : null}
             </View>
           );

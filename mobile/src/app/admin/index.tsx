@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useAdminAuthStore } from '@/lib/admin-auth-store';
 import { signIn, getAuthenticatedUserProfile } from '@/lib/supabase';
-import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
+import { bridgeMemberAuthToAdmin, bridgeAdminAuthToMember } from '@/lib/admin-auth-bridge';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
@@ -91,6 +91,8 @@ export default function AdminLoginScreen() {
         user: authResult.session.user,
         profile,
       });
+
+      await bridgeAdminAuthToMember();
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/admin/dashboard');

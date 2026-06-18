@@ -10,7 +10,12 @@ import { getMemberAccessToken } from './tournament-supabase';
 import { useMemberAuthStore } from './member-auth-store';
 import { clearTournamentMatchRound, syncMatchHoleResults } from './tournament-match-service';
 import { allOutcomesToHoleResults } from './match-hole-outcomes';
-import { computeMatchHoleResults, computeMatchPoints, computeMatchPointsFromHoleResults } from './tournament-match-scoring';
+import {
+  computeMatchHoleResults,
+  computeMatchPoints,
+  computeMatchPointsFromHoleResults,
+  matchPointsForDeclaredWinner,
+} from './tournament-match-scoring';
 import { saveTournamentScore } from './tournament-service';
 import type {
   HoleOutcomesMap,
@@ -290,6 +295,63 @@ export async function syncTournamentMatchScoresViaBackend(
     success: false,
     error: supabaseResult.error ?? backendError ?? 'Could not save scores. Try again in a moment.',
   };
+}
+
+export async function declareMatchWinnerOverride(params: {
+  tournamentId: string;
+  matchGroupId: string;
+  roundNumber: number;
+  winner: 'side_a' | 'side_b' | 'tie';
+}): Promise<{ success: boolean; error?: string }> {
+  const matchPoints = matchPointsForDeclaredWinner(params.winner);
+  const payload = {
+    roundNumber: params.roundNumber,
+    scores: [] as TournamentScoreInsert[],
+    holeResults: [] as Omit<TournamentMatchHoleResult, 'id'>[],
+    matchPoints,
+  };
+
+  const accessToken = useMemberAuthStore.getState().accessToken;
+  if (!accessToken) {
+    return { success: false, error: 'Not signed in' };
+  }
+
+  let backendError: string | undefined;
+
+  if (isBackendReachableInBrowser()) {
+    const backendResult = await postToBackend(
+      `/api/tournaments/${params.tournamentId}/match-groups/${params.matchGroupId}/sync`,
+      accessToken,
+      payload as unknown as Record<string, unknown>
+    );
+
+    if (backendResult.ok) {
+      return { success: true };
+    }
+
+    backendError = backendResult.error;
+    if (backendResult.status === 401) {
+      return { success: false, error: backendResult.error };
+    }
+  }
+
+  try {
+    const { syncMatchHoleResultsDirect } = await import('./tournament-match-service');
+    await syncMatchHoleResultsDirect({
+      matchGroupId: params.matchGroupId,
+      roundNumber: params.roundNumber,
+      holeResults: [],
+      matchPoints,
+      accessToken,
+    });
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to declare match result';
+    if (backendError) {
+      return { success: false, error: `${message} (API: ${backendError})` };
+    }
+    return { success: false, error: message };
+  }
 }
 
 export async function clearTournamentMatchScoresViaBackend(params: {

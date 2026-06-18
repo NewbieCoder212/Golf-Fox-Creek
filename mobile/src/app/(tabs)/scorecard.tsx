@@ -16,6 +16,13 @@ import { getTurnMessaging, getDefaultTurnMessagingSettings } from '@/lib/supabas
 import { CasualDirectResultScorecard } from '@/components/CasualDirectResultScorecard';
 import { ScorecardAssistPanel } from '@/components/ScorecardAssistPanel';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
+import { bridgeAdminAuthToMember } from '@/lib/admin-auth-bridge';
+import {
+  peekScorecardReturnDestination,
+  setScorecardReturnDestination,
+  isAdminTournamentsFlowActive,
+  setAdminTournamentsFlowActive,
+} from '@/lib/scorecard-navigation';
 import { cn } from '@/lib/cn';
 import { calculateDistance } from '@/lib/geo';
 import type { ScorecardTeeName } from '@/types';
@@ -79,12 +86,24 @@ export default function ScorecardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const t = useTranslations();
-  const { id: tournamentId, matchGroupId, round, side } = useLocalSearchParams<{
+  const { id: tournamentId, matchGroupId, round, side, returnTo: returnToRaw } = useLocalSearchParams<{
     id?: string;
     matchGroupId?: string;
     round?: string;
     side?: TournamentTeamSide;
+    returnTo?: string | string[];
   }>();
+  const returnToParam = Array.isArray(returnToRaw) ? returnToRaw[0] : returnToRaw;
+  const returnToAdmin =
+    returnToParam === 'admin' ||
+    peekScorecardReturnDestination() === 'admin' ||
+    isAdminTournamentsFlowActive();
+
+  useEffect(() => {
+    if (returnToParam === 'admin') {
+      setScorecardReturnDestination('admin');
+    }
+  }, [returnToParam]);
   const isTournamentMode = Boolean(tournamentId);
 
   const { data: turnMessaging = getDefaultTurnMessagingSettings() } = useQuery({
@@ -181,15 +200,44 @@ export default function ScorecardScreen() {
 
   const handleGoToMainMenu = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (isTournamentMode) {
-      if (tournamentSession.isDirty) {
-        await tournamentSession.handleSync();
+
+    const shouldReturnToAdmin =
+      returnToAdmin ||
+      peekScorecardReturnDestination() === 'admin' ||
+      isAdminTournamentsFlowActive();
+
+    try {
+      if (isTournamentMode) {
+        if (tournamentSession.isDirty) {
+          await tournamentSession.handleSync();
+        } else {
+          await tournamentSession.persistSession();
+        }
       } else {
-        await tournamentSession.persistSession();
+        await leaveForMainMenu();
       }
-    } else {
-      await leaveForMainMenu();
+    } catch (error) {
+      console.log('[Scorecard] Could not save before exit:', error);
     }
+
+    if (shouldReturnToAdmin) {
+      setScorecardReturnDestination(null);
+      setAdminTournamentsFlowActive(true);
+      await bridgeAdminAuthToMember();
+
+      const adminRoute = {
+        pathname: '/admin/dashboard',
+        params: { section: 'tournaments' },
+      } as never;
+
+      if (router.canDismiss()) {
+        router.dismissTo(adminRoute);
+      } else {
+        router.replace(adminRoute);
+      }
+      return;
+    }
+
     router.push('/(tabs)/' as never);
   };
 
@@ -684,7 +732,9 @@ export default function ScorecardScreen() {
             className="flex-row items-center active:opacity-70"
           >
             <Home size={18} color="#a3e635" />
-            <Text className="text-lime-400 font-semibold text-sm ml-2">{t.mainMenu}</Text>
+            <Text className="text-lime-400 font-semibold text-sm ml-2">
+              {returnToAdmin ? 'Admin' : t.mainMenu}
+            </Text>
           </Pressable>
           {!isTournamentMode && hasRoundProgress ? (
             <Text className="text-neutral-500 text-xs">

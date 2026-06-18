@@ -42,3 +42,33 @@ export async function bridgeMemberAuthToAdmin(): Promise<boolean> {
 
   return true;
 }
+
+/** Keep member JWT aligned when signing in through the admin portal only. */
+export async function bridgeAdminAuthToMember(): Promise<boolean> {
+  const admin = useAdminAuthStore.getState();
+  if (!admin.accessToken || !admin.user || !admin.profile) {
+    return false;
+  }
+
+  if (!canAccessAdminRole(admin.profile.role)) {
+    return false;
+  }
+
+  const member = useMemberAuthStore.getState();
+  if (
+    member.isAuthenticated &&
+    member.accessToken === admin.accessToken &&
+    member.profile?.id === admin.profile.id
+  ) {
+    return true;
+  }
+
+  await useMemberAuthStore.getState().setAuth({
+    accessToken: admin.accessToken,
+    refreshToken: admin.refreshToken ?? '',
+    user: admin.user,
+    profile: admin.profile,
+  });
+
+  return true;
+}

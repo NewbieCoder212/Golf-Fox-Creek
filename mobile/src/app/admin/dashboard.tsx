@@ -10,7 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Shield,
   LogOut,
@@ -53,7 +53,8 @@ import {
   signOut,
 } from '@/lib/supabase';
 import { getCourseReports, updateReportStatus } from '@/lib/course-reports';
-import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
+import { bridgeAdminAuthToMember } from '@/lib/admin-auth-bridge';
+import { setAdminTournamentsFlowActive } from '@/lib/scorecard-navigation';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import type {
   GeofenceSettings,
@@ -80,6 +81,8 @@ type AdminSection =
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
+  const { section: sectionParamRaw } = useLocalSearchParams<{ section?: string | string[] }>();
+  const sectionParam = Array.isArray(sectionParamRaw) ? sectionParamRaw[0] : sectionParamRaw;
   const { profile, accessToken, clearAuth, isSuperAdmin, isManager } = useAdminAuthStore();
 
   const [section, setSection] = useState<AdminSection>('main');
@@ -151,13 +154,23 @@ export default function AdminDashboardScreen() {
     matchesWon: row.matchesWon,
   }));
 
+  useEffect(() => {
+    setAdminTournamentsFlowActive(section === 'tournaments');
+  }, [section]);
+
+  useEffect(() => {
+    if (sectionParam === 'tournaments') {
+      setSection('tournaments');
+    }
+  }, [sectionParam]);
+
   // Verify admin access once on mount (do not re-run on router changes — that was kicking users out).
   useEffect(() => {
     let mounted = true;
 
     const initAdminAccess = async () => {
       await useAdminAuthStore.getState().loadStoredAuth();
-      await bridgeMemberAuthToAdmin();
+      await bridgeAdminAuthToMember();
       if (!mounted) return;
 
       const adminState = useAdminAuthStore.getState();

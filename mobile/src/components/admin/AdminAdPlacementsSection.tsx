@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import { Plus, Pencil, Trash2, ImageIcon } from 'lucide-react-native';
+import { Plus, Pencil, Trash2, ImageIcon, Check } from 'lucide-react-native';
 
 import { cn } from '@/lib/cn';
 import {
@@ -86,7 +86,25 @@ export function AdminAdPlacementsSection({
   const [rotationSettings, setRotationSettings] = useState<AdRotationSettings>(
     getDefaultAdRotationSettings()
   );
+  const [savedRotation, setSavedRotation] = useState<AdRotationSettings>(
+    getDefaultAdRotationSettings()
+  );
   const [isSavingRotation, setIsSavingRotation] = useState(false);
+  const [rotationSaveStatus, setRotationSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+  const rotationSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isRotationDirty = useMemo(
+    () =>
+      rotationSettings.enabled !== savedRotation.enabled ||
+      rotationSettings.interval_seconds !== savedRotation.interval_seconds,
+    [rotationSettings, savedRotation]
+  );
+
+  const rotationStatusLabel = useMemo(() => {
+    const mode = savedRotation.enabled ? 'Rotation on' : 'Rotation off';
+    const interval = `${savedRotation.interval_seconds}s per sponsor`;
+    return `${mode} · ${interval}`;
+  }, [savedRotation]);
 
   const { data: loadedRotationSettings } = useQuery({
     queryKey: ['adRotationSettings'],
@@ -96,8 +114,17 @@ export function AdminAdPlacementsSection({
   useEffect(() => {
     if (loadedRotationSettings) {
       setRotationSettings(loadedRotationSettings);
+      setSavedRotation(loadedRotationSettings);
     }
   }, [loadedRotationSettings]);
+
+  useEffect(() => {
+    return () => {
+      if (rotationSaveTimerRef.current) {
+        clearTimeout(rotationSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (initialOpenForm) {
@@ -126,18 +153,35 @@ export function AdminAdPlacementsSection({
   };
 
   const handleSaveRotation = async () => {
+    if (!accessToken) {
+      Alert.alert('Not signed in', 'Log out of admin and sign in again to save settings.');
+      return;
+    }
+
     setIsSavingRotation(true);
+    setRotationSaveStatus('idle');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
     const ok = await updateAdRotationSettingsAuth(rotationSettings, accessToken);
     setIsSavingRotation(false);
 
     if (!ok) {
+      setRotationSaveStatus('error');
       Alert.alert('Could not save rotation settings', 'Try again in a moment.');
       return;
     }
 
+    setSavedRotation(rotationSettings);
+    setRotationSaveStatus('saved');
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     invalidate();
+
+    if (rotationSaveTimerRef.current) {
+      clearTimeout(rotationSaveTimerRef.current);
+    }
+    rotationSaveTimerRef.current = setTimeout(() => {
+      setRotationSaveStatus('idle');
+    }, 4000);
   };
 
   const activeAdsBySlot = ads.reduce<Record<string, number>>((counts, ad) => {
@@ -336,13 +380,59 @@ export function AdminAdPlacementsSection({
             ))}
           </View>
 
+          <View
+            className={cn(
+              'rounded-lg px-3 py-2 mb-3 border',
+              rotationSaveStatus === 'saved'
+                ? 'bg-lime-900/30 border-lime-700'
+                : rotationSaveStatus === 'error'
+                  ? 'bg-red-900/30 border-red-700'
+                  : isRotationDirty
+                    ? 'bg-amber-950/30 border-amber-800'
+                    : 'bg-neutral-900/50 border-neutral-800'
+            )}
+          >
+            <Text
+              className={cn(
+                'text-xs font-medium',
+                rotationSaveStatus === 'saved'
+                  ? 'text-lime-300'
+                  : rotationSaveStatus === 'error'
+                    ? 'text-red-300'
+                    : isRotationDirty
+                      ? 'text-amber-200'
+                      : 'text-neutral-400'
+              )}
+            >
+              {rotationSaveStatus === 'saved'
+                ? 'Rotation settings saved.'
+                : rotationSaveStatus === 'error'
+                  ? 'Save failed — try again.'
+                  : isRotationDirty
+                    ? 'You have unsaved changes.'
+                    : `Saved: ${rotationStatusLabel}`}
+            </Text>
+          </View>
+
           <Pressable
             onPress={handleSaveRotation}
-            disabled={isSavingRotation}
-            className="bg-lime-600 rounded-xl py-3 items-center active:opacity-80"
+            disabled={isSavingRotation || (!isRotationDirty && rotationSaveStatus !== 'error')}
+            className={cn(
+              'rounded-xl py-3 items-center flex-row justify-center active:opacity-80',
+              isSavingRotation || (!isRotationDirty && rotationSaveStatus !== 'error')
+                ? 'bg-neutral-800'
+                : rotationSaveStatus === 'saved'
+                  ? 'bg-lime-700'
+                  : 'bg-lime-600'
+            )}
           >
             {isSavingRotation ? (
               <ActivityIndicator color="#fff" />
+            ) : rotationSaveStatus === 'saved' ? (
+              <>
+                <Check size={18} color="#fff" />
+                <Text className="text-white font-semibold ml-2">Saved</Text>
+              </>
             ) : (
               <Text className="text-white font-semibold">Save Rotation Settings</Text>
             )}

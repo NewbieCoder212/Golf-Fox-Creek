@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd mobile && bun install && bun run vercel-build",
+  "outputDirectory": "mobile/dist",
+  "installCommand": "cd mobile && bun install",
+  "rewrites": [
+    {
+      "source": "/((?!_expo/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

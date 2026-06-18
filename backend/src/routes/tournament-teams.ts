@@ -1,5 +1,11 @@
 import { Hono } from 'hono';
-import { adminFetch, getErrorMessage, isSupabaseAdminConfigured } from '../lib/supabase-admin';
+import {
+  adminFetch,
+  getErrorMessage,
+  getSupabaseAdminClient,
+  isSupabaseAdminConfigured,
+  markParticipantInviteSent,
+} from '../lib/supabase-admin';
 import {
   buildTournamentDeepLink,
   sendTournamentOnboardEmail,
@@ -81,34 +87,27 @@ async function generateInviteLink(params: {
       ? buildFullName(params.firstName, params.lastName)
       : undefined;
 
-  const { ok, data } = await adminFetch<Record<string, unknown>>('/auth/v1/admin/generate_link', {
-    method: 'POST',
-    body: {
-      type: 'magiclink',
-      email: params.email.trim().toLowerCase(),
-      options: {
-        redirect_to: params.redirectTo,
-        data: fullName
-          ? {
-              first_name: params.firstName,
-              last_name: params.lastName,
-              full_name: fullName,
-            }
-          : undefined,
-      },
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: 'magiclink',
+    email: params.email.trim().toLowerCase(),
+    options: {
+      redirectTo: params.redirectTo,
+      data: fullName
+        ? {
+            first_name: params.firstName,
+            last_name: params.lastName,
+            full_name: fullName,
+          }
+        : undefined,
     },
   });
 
-  if (!ok) {
-    throw new Error(getErrorMessage(data));
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const properties = data.properties as Record<string, unknown> | undefined;
-  return (
-    (typeof data.action_link === 'string' && data.action_link) ||
-    (typeof properties?.action_link === 'string' && properties.action_link) ||
-    null
-  );
+  return data.properties?.action_link ?? null;
 }
 
 tournamentTeamsRouter.use('*', async (c, next) => {
@@ -209,27 +208,25 @@ async function inviteUserByEmail(params: {
   redirectTo: string;
 }): Promise<{ userId: string }> {
   const fullName = buildFullName(params.firstName, params.lastName);
+  const supabase = getSupabaseAdminClient();
 
-  const { ok, data } = await adminFetch<Record<string, unknown>>('/auth/v1/invite', {
-    method: 'POST',
-    body: {
-      email: params.email.trim().toLowerCase(),
+  const { data, error } = await supabase.auth.admin.inviteUserByEmail(
+    params.email.trim().toLowerCase(),
+    {
+      redirectTo: params.redirectTo,
       data: {
         first_name: params.firstName.trim(),
         last_name: params.lastName.trim(),
         full_name: fullName,
       },
-      redirect_to: params.redirectTo,
-    },
-  });
+    }
+  );
 
-  if (!ok) {
-    throw new Error(getErrorMessage(data));
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const user = data.user as { id?: string } | undefined;
-  const userId = user?.id ?? (typeof data.id === 'string' ? data.id : null);
-
+  const userId = data.user?.id;
   if (!userId) {
     throw new Error('Invite succeeded but no user id returned');
   }
@@ -239,23 +236,32 @@ async function inviteUserByEmail(params: {
 
 async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   const normalized = email.trim().toLowerCase();
-  const quotedEmail = `"${normalized.replace(/"/g, '')}"`;
+  const supabase = getSupabaseAdminClient();
 
-  const profileResult = await adminFetch<Array<{ id: string }>>(
-    `/rest/v1/user_profiles?email=eq.${quotedEmail}&select=id&limit=1`
-  );
-  if (profileResult.ok && profileResult.data?.[0]?.id) {
-    return profileResult.data[0].id;
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('email', normalized)
+    .limit(1)
+    .maybeSingle();
+
+  if (profile?.id) {
+    return profile.id;
   }
 
-  const authResult = await adminFetch<{ users?: Array<{ id: string; email?: string }> }>(
-    `/auth/v1/admin/users?filter=email:eq.${encodeURIComponent(normalized)}&page=1&per_page=1`
-  );
-  if (authResult.ok && authResult.data?.users?.[0]?.id) {
-    return authResult.data.users[0].id;
+  const { data: authData, error } = await supabase.auth.admin.listUsers({
+    page: 1,
+    perPage: 200,
+  });
+
+  if (error) {
+    return null;
   }
 
-  return null;
+  const match = authData.users.find(
+    (user) => user.email?.trim().toLowerCase() === normalized
+  );
+  return match?.id ?? null;
 }
 
 async function ensureAuthUserIdForInvite(params: {
@@ -390,29 +396,36 @@ async function loadSingleParticipantInviteContext(
   const inviteRedirect =
     process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? 'http://localhost:8081/accept-invite';
   const tournamentUrl = buildTournamentDeepLink(tournamentId);
+  const supabase = getSupabaseAdminClient();
 
-  const [tournamentResult, playerResult, teamsResult] = await Promise.all([
-    adminFetch<TournamentRow[]>(
-      `/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`
-    ),
-    adminFetch<TournamentPlayerRow[]>(
-      `/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`
-    ),
-    adminFetch<TeamRow[]>(
-      `/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`
-    ),
+  const [tournamentRes, playerRes, teamsRes] = await Promise.all([
+    supabase
+      .from('tournaments')
+      .select('id,name,start_date,end_date,participant_invites_sent_at')
+      .eq('id', tournamentId)
+      .maybeSingle(),
+    supabase
+      .from('tournament_players')
+      .select('id,display_name,user_id,email,invite_email_sent_at')
+      .eq('id', playerId)
+      .eq('tournament_id', tournamentId)
+      .maybeSingle(),
+    supabase
+      .from('tournament_teams')
+      .select('id,team_name,side,player_ids')
+      .eq('tournament_id', tournamentId),
   ]);
 
-  if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
+  if (tournamentRes.error || !tournamentRes.data) {
     return { error: 'Tournament not found', status: 404 };
   }
-  if (!playerResult.ok || !playerResult.data?.[0]) {
+  if (playerRes.error || !playerRes.data) {
     return { error: 'Participant not found', status: 404 };
   }
 
-  const tournament = tournamentResult.data[0];
-  const player = playerResult.data[0];
-  const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
+  const tournament = tournamentRes.data as TournamentRow;
+  const player = playerRes.data as TournamentPlayerRow;
+  const teams = (teamsRes.data ?? []) as TeamRow[];
   const team = teams.find((entry) => entry.player_ids?.includes(playerId));
 
   const profileById = new Map<string, UserProfileRow>();
@@ -420,28 +433,33 @@ async function loadSingleParticipantInviteContext(
 
   const rosterPromise =
     team?.player_ids?.length && team.player_ids.length > 0
-      ? adminFetch<TournamentPlayerRow[]>(
-          `/rest/v1/tournament_players?id=in.(${team.player_ids.join(',')})&select=id,display_name,user_id,email,invite_email_sent_at`
-        )
-      : Promise.resolve({ ok: true, status: 200, data: [player] as TournamentPlayerRow[] });
+      ? supabase
+          .from('tournament_players')
+          .select('id,display_name,user_id,email,invite_email_sent_at')
+          .in('id', team.player_ids)
+      : Promise.resolve({ data: [player], error: null });
 
   const profilePromise = player.user_id
-    ? adminFetch<UserProfileRow[]>(
-        `/rest/v1/user_profiles?id=eq.${player.user_id}&select=id,email,full_name,first_name,last_name,invite_status`
-      )
+    ? supabase
+        .from('user_profiles')
+        .select('id,email,full_name,first_name,last_name,invite_status')
+        .eq('id', player.user_id)
+        .maybeSingle()
     : player.email?.trim()
-      ? adminFetch<UserProfileRow[]>(
-          `/rest/v1/user_profiles?email=eq."${player.email.trim().toLowerCase().replace(/"/g, '')}"&select=id,email,full_name,first_name,last_name,invite_status`
-        )
-      : Promise.resolve({ ok: true, status: 200, data: [] as UserProfileRow[] });
+      ? supabase
+          .from('user_profiles')
+          .select('id,email,full_name,first_name,last_name,invite_status')
+          .eq('email', player.email.trim().toLowerCase())
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null });
 
   const [rosterResult, profileResult] = await Promise.all([rosterPromise, profilePromise]);
 
   const rosterPlayers =
-    rosterResult.ok && rosterResult.data?.length ? rosterResult.data : [player];
+    rosterResult.data?.length ? (rosterResult.data as TournamentPlayerRow[]) : [player];
 
-  if (profileResult.ok && profileResult.data?.[0]) {
-    const profile = profileResult.data[0];
+  if (profileResult.data) {
+    const profile = profileResult.data as UserProfileRow;
     if (player.user_id) {
       profileById.set(player.user_id, profile);
     } else if (profile.email) {
@@ -545,10 +563,10 @@ async function sendParticipantInviteForPlayer(
     }
 
     if (!player.user_id && linkedUserId) {
-      await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
-        method: 'PATCH',
-        body: { user_id: linkedUserId },
-      });
+      void getSupabaseAdminClient()
+        .from('tournament_players')
+        .update({ user_id: linkedUserId })
+        .eq('id', player.id);
     }
 
     const emailResult = await sendTournamentOnboardEmail({
@@ -564,10 +582,7 @@ async function sendParticipantInviteForPlayer(
     });
 
     if (emailResult.sent) {
-      await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
-        method: 'PATCH',
-        body: { invite_email_sent_at: now },
-      });
+      void markParticipantInviteSent(player.id, now);
       return { emailed: true, invitesSent, email };
     }
 

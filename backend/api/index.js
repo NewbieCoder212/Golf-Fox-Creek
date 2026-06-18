@@ -55,6 +55,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 // src/lib/supabase-admin.ts
+import { createClient } from "@supabase/supabase-js";
 var ADMIN_FETCH_TIMEOUT_MS = 8000;
 function readSupabaseUrl() {
   return process.env.SUPABASE_URL?.trim() ?? "";
@@ -72,6 +73,27 @@ function getSupabaseAdminConfig() {
     throw new Error("Supabase admin is not configured");
   }
   return { supabaseUrl, serviceRoleKey };
+}
+var adminClient = null;
+function getSupabaseAdminClient() {
+  const { supabaseUrl, serviceRoleKey } = getSupabaseAdminConfig();
+  if (!adminClient) {
+    adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+  }
+  return adminClient;
+}
+async function markParticipantInviteSent(playerId, sentAt) {
+  const supabase = getSupabaseAdminClient();
+  await Promise.race([
+    supabase.from("tournament_players").update({ invite_email_sent_at: sentAt }).eq("id", playerId),
+    new Promise((resolve) => {
+      setTimeout(resolve, 3000);
+    })
+  ]).catch(() => {
+    return;
+  });
 }
 function getErrorMessage(data) {
   return typeof data.error_description === "string" && data.error_description || typeof data.msg === "string" && data.msg || typeof data.message === "string" && data.message || "Request failed";
@@ -133,18 +155,6 @@ async function adminFetch(path, options = {}) {
 }
 
 // src/middleware/auth.ts
-import { createClient } from "@supabase/supabase-js";
-var adminClient = null;
-function getSupabaseAdminClient() {
-  const url = readSupabaseUrl();
-  const key = readServiceRoleKey();
-  if (!adminClient) {
-    adminClient = createClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
-  }
-  return adminClient;
-}
 function parseSupabaseAccessToken(token) {
   const parts = token.split(".");
   if (parts.length !== 3)
@@ -826,26 +836,23 @@ function formatTournamentDates(startDate, endDate) {
 }
 async function generateInviteLink2(params) {
   const fullName = params.firstName && params.lastName ? buildFullName2(params.firstName, params.lastName) : undefined;
-  const { ok, data } = await adminFetch("/auth/v1/admin/generate_link", {
-    method: "POST",
-    body: {
-      type: "magiclink",
-      email: params.email.trim().toLowerCase(),
-      options: {
-        redirect_to: params.redirectTo,
-        data: fullName ? {
-          first_name: params.firstName,
-          last_name: params.lastName,
-          full_name: fullName
-        } : undefined
-      }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: "magiclink",
+    email: params.email.trim().toLowerCase(),
+    options: {
+      redirectTo: params.redirectTo,
+      data: fullName ? {
+        first_name: params.firstName,
+        last_name: params.lastName,
+        full_name: fullName
+      } : undefined
     }
   });
-  if (!ok) {
-    throw new Error(getErrorMessage(data));
+  if (error) {
+    throw new Error(error.message);
   }
-  const properties = data.properties;
-  return typeof data.action_link === "string" && data.action_link || typeof properties?.action_link === "string" && properties.action_link || null;
+  return data.properties?.action_link ?? null;
 }
 tournamentTeamsRouter.use("*", async (c, next) => {
   if (!isSupabaseAdminConfigured()) {
@@ -913,23 +920,19 @@ function splitDisplayName(displayName) {
 }
 async function inviteUserByEmail2(params) {
   const fullName = buildFullName2(params.firstName, params.lastName);
-  const { ok, data } = await adminFetch("/auth/v1/invite", {
-    method: "POST",
-    body: {
-      email: params.email.trim().toLowerCase(),
-      data: {
-        first_name: params.firstName.trim(),
-        last_name: params.lastName.trim(),
-        full_name: fullName
-      },
-      redirect_to: params.redirectTo
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.auth.admin.inviteUserByEmail(params.email.trim().toLowerCase(), {
+    redirectTo: params.redirectTo,
+    data: {
+      first_name: params.firstName.trim(),
+      last_name: params.lastName.trim(),
+      full_name: fullName
     }
   });
-  if (!ok) {
-    throw new Error(getErrorMessage(data));
+  if (error) {
+    throw new Error(error.message);
   }
-  const user = data.user;
-  const userId = user?.id ?? (typeof data.id === "string" ? data.id : null);
+  const userId = data.user?.id;
   if (!userId) {
     throw new Error("Invite succeeded but no user id returned");
   }
@@ -937,16 +940,20 @@ async function inviteUserByEmail2(params) {
 }
 async function findAuthUserIdByEmail(email) {
   const normalized = email.trim().toLowerCase();
-  const quotedEmail = `"${normalized.replace(/"/g, "")}"`;
-  const profileResult = await adminFetch(`/rest/v1/user_profiles?email=eq.${quotedEmail}&select=id&limit=1`);
-  if (profileResult.ok && profileResult.data?.[0]?.id) {
-    return profileResult.data[0].id;
+  const supabase = getSupabaseAdminClient();
+  const { data: profile } = await supabase.from("user_profiles").select("id").eq("email", normalized).limit(1).maybeSingle();
+  if (profile?.id) {
+    return profile.id;
   }
-  const authResult = await adminFetch(`/auth/v1/admin/users?filter=email:eq.${encodeURIComponent(normalized)}&page=1&per_page=1`);
-  if (authResult.ok && authResult.data?.users?.[0]?.id) {
-    return authResult.data.users[0].id;
+  const { data: authData, error } = await supabase.auth.admin.listUsers({
+    page: 1,
+    perPage: 200
+  });
+  if (error) {
+    return null;
   }
-  return null;
+  const match = authData.users.find((user) => user.email?.trim().toLowerCase() === normalized);
+  return match?.id ?? null;
 }
 async function ensureAuthUserIdForInvite(params) {
   try {
@@ -1017,29 +1024,30 @@ async function loadParticipantInviteContext(tournamentId) {
 async function loadSingleParticipantInviteContext(tournamentId, playerId) {
   const inviteRedirect = process.env.MEMBER_INVITE_REDIRECT_URL?.trim() ?? "http://localhost:8081/accept-invite";
   const tournamentUrl = buildTournamentDeepLink(tournamentId);
-  const [tournamentResult, playerResult, teamsResult] = await Promise.all([
-    adminFetch(`/rest/v1/tournaments?id=eq.${tournamentId}&select=id,name,start_date,end_date,participant_invites_sent_at`),
-    adminFetch(`/rest/v1/tournament_players?id=eq.${playerId}&tournament_id=eq.${tournamentId}&select=id,display_name,user_id,email,invite_email_sent_at`),
-    adminFetch(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,team_name,side,player_ids`)
+  const supabase = getSupabaseAdminClient();
+  const [tournamentRes, playerRes, teamsRes] = await Promise.all([
+    supabase.from("tournaments").select("id,name,start_date,end_date,participant_invites_sent_at").eq("id", tournamentId).maybeSingle(),
+    supabase.from("tournament_players").select("id,display_name,user_id,email,invite_email_sent_at").eq("id", playerId).eq("tournament_id", tournamentId).maybeSingle(),
+    supabase.from("tournament_teams").select("id,team_name,side,player_ids").eq("tournament_id", tournamentId)
   ]);
-  if (!tournamentResult.ok || !tournamentResult.data?.[0]) {
+  if (tournamentRes.error || !tournamentRes.data) {
     return { error: "Tournament not found", status: 404 };
   }
-  if (!playerResult.ok || !playerResult.data?.[0]) {
+  if (playerRes.error || !playerRes.data) {
     return { error: "Participant not found", status: 404 };
   }
-  const tournament = tournamentResult.data[0];
-  const player = playerResult.data[0];
-  const teams = teamsResult.ok && teamsResult.data ? teamsResult.data : [];
+  const tournament = tournamentRes.data;
+  const player = playerRes.data;
+  const teams = teamsRes.data ?? [];
   const team = teams.find((entry) => entry.player_ids?.includes(playerId));
   const profileById = new Map;
   const profilesByEmail = new Map;
-  const rosterPromise = team?.player_ids?.length && team.player_ids.length > 0 ? adminFetch(`/rest/v1/tournament_players?id=in.(${team.player_ids.join(",")})&select=id,display_name,user_id,email,invite_email_sent_at`) : Promise.resolve({ ok: true, status: 200, data: [player] });
-  const profilePromise = player.user_id ? adminFetch(`/rest/v1/user_profiles?id=eq.${player.user_id}&select=id,email,full_name,first_name,last_name,invite_status`) : player.email?.trim() ? adminFetch(`/rest/v1/user_profiles?email=eq."${player.email.trim().toLowerCase().replace(/"/g, "")}"&select=id,email,full_name,first_name,last_name,invite_status`) : Promise.resolve({ ok: true, status: 200, data: [] });
+  const rosterPromise = team?.player_ids?.length && team.player_ids.length > 0 ? supabase.from("tournament_players").select("id,display_name,user_id,email,invite_email_sent_at").in("id", team.player_ids) : Promise.resolve({ data: [player], error: null });
+  const profilePromise = player.user_id ? supabase.from("user_profiles").select("id,email,full_name,first_name,last_name,invite_status").eq("id", player.user_id).maybeSingle() : player.email?.trim() ? supabase.from("user_profiles").select("id,email,full_name,first_name,last_name,invite_status").eq("email", player.email.trim().toLowerCase()).maybeSingle() : Promise.resolve({ data: null, error: null });
   const [rosterResult, profileResult] = await Promise.all([rosterPromise, profilePromise]);
-  const rosterPlayers = rosterResult.ok && rosterResult.data?.length ? rosterResult.data : [player];
-  if (profileResult.ok && profileResult.data?.[0]) {
-    const profile = profileResult.data[0];
+  const rosterPlayers = rosterResult.data?.length ? rosterResult.data : [player];
+  if (profileResult.data) {
+    const profile = profileResult.data;
     if (player.user_id) {
       profileById.set(player.user_id, profile);
     } else if (profile.email) {
@@ -1119,10 +1127,7 @@ async function sendParticipantInviteForPlayer(player, context, options = {}) {
       }
     }
     if (!player.user_id && linkedUserId) {
-      await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
-        method: "PATCH",
-        body: { user_id: linkedUserId }
-      });
+      getSupabaseAdminClient().from("tournament_players").update({ user_id: linkedUserId }).eq("id", player.id);
     }
     const emailResult = await sendTournamentOnboardEmail({
       to: email,
@@ -1136,10 +1141,7 @@ async function sendParticipantInviteForPlayer(player, context, options = {}) {
       isPendingMember
     });
     if (emailResult.sent) {
-      await adminFetch(`/rest/v1/tournament_players?id=eq.${player.id}`, {
-        method: "PATCH",
-        body: { invite_email_sent_at: now }
-      });
+      markParticipantInviteSent(player.id, now);
       return { emailed: true, invitesSent, email };
     }
     return {

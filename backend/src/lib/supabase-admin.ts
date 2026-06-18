@@ -1,3 +1,5 @@
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+
 const ADMIN_FETCH_TIMEOUT_MS = 8_000;
 
 function readSupabaseUrl(): string {
@@ -29,6 +31,32 @@ export function getSupabaseAdminConfig() {
     throw new Error('Supabase admin is not configured');
   }
   return { supabaseUrl, serviceRoleKey };
+}
+
+let adminClient: SupabaseClient | null = null;
+
+export function getSupabaseAdminClient(): SupabaseClient {
+  const { supabaseUrl, serviceRoleKey } = getSupabaseAdminConfig();
+  if (!adminClient) {
+    adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return adminClient;
+}
+
+/** Best-effort DB update after Resend confirms delivery — must not block the HTTP response. */
+export async function markParticipantInviteSent(
+  playerId: string,
+  sentAt: string
+): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  await Promise.race([
+    supabase.from('tournament_players').update({ invite_email_sent_at: sentAt }).eq('id', playerId),
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, 3_000);
+    }),
+  ]).catch(() => undefined);
 }
 
 export function getErrorMessage(data: Record<string, unknown>): string {

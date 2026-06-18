@@ -1,25 +1,14 @@
 import type { Context, Next } from 'hono';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { isSupabaseAdminConfigured, readServiceRoleKey, readSupabaseUrl } from '../lib/supabase-admin';
+import {
+  getSupabaseAdminClient,
+  isSupabaseAdminConfigured,
+} from '../lib/supabase-admin';
 
 export type AuthUser = {
   id: string;
   email: string;
   role: 'member' | 'manager' | 'super_admin';
 };
-
-let adminClient: SupabaseClient | null = null;
-
-function getSupabaseAdminClient(): SupabaseClient {
-  const url = readSupabaseUrl();
-  const key = readServiceRoleKey();
-  if (!adminClient) {
-    adminClient = createClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
-  return adminClient;
-}
 
 function parseSupabaseAccessToken(token: string): { id: string; email?: string } | null {
   const parts = token.split('.');

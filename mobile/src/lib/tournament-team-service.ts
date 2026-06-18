@@ -263,9 +263,12 @@ export async function sendParticipantInvite(params: {
   );
 
   if ('error' in result) {
+    const isTimeout = result.error.includes('timed out');
     return {
       success: false,
-      error: result.error,
+      error: isTimeout
+        ? 'The request took too long, but the email may still have been sent. Refresh the list and check the inbox before trying again.'
+        : result.error,
       skippedAlreadySent: result.error.includes('already sent'),
     };
   }

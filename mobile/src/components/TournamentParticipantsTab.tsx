@@ -267,7 +267,10 @@ export function TournamentParticipantsTab({
         `Login email sent to ${result.email ?? 'participant'}.`
       );
     },
-    onError: (error: Error) => Alert.alert('Could not send invite', error.message),
+    onError: (error: Error) => {
+      refresh();
+      Alert.alert('Could not send invite', error.message);
+    },
   });
 
   const handleSendInvite = (player: TournamentPlayer) => {

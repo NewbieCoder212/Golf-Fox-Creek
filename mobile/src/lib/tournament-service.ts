@@ -19,6 +19,7 @@ import {
   unwrapSingle,
   type TournamentServiceResult,
 } from './tournament-supabase';
+import { useMemberAuthStore } from './member-auth-store';
 import { updateTournamentTeamViaBackend } from './tournament-team-service';
 
 export type { TournamentServiceError, TournamentServiceResult } from './tournament-supabase';
@@ -54,22 +55,53 @@ export async function getTournamentsResult(options?: {
 }
 
 /** Tournament IDs where the member is on a roster, has scores, or a tee time. */
-export async function getMyTournamentIds(userId: string): Promise<string[]> {
+export async function getMyTournamentIds(
+  userId: string,
+  options?: { email?: string | null }
+): Promise<string[]> {
   if (!isConfigured() || !userId) return [];
+
+  const memberToken = useMemberAuthStore.getState().accessToken;
+  const readAuth = memberToken ? { accessToken: memberToken } : {};
 
   const rosterResult = await tournamentSupabaseRequest<
     Array<{ tournament_id: string; id: string }>
   >('tournament_players', {
+    ...readAuth,
     query: {
       user_id: `eq.${userId}`,
       select: 'tournament_id,id',
     },
   });
-  const rosterRows = unwrapList(rosterResult);
+
+  if (rosterResult.error) {
+    console.log('[Tournament] getMyTournamentIds roster read failed:', rosterResult.error);
+  }
+
+  let rosterRows = unwrapList(rosterResult);
+
+  const memberEmail = options?.email?.trim().toLowerCase();
+  if (rosterRows.length === 0 && memberEmail) {
+    const byEmailResult = await tournamentSupabaseRequest<
+      Array<{ tournament_id: string; id: string }>
+    >('tournament_players', {
+      ...readAuth,
+      query: {
+        email: `eq.${memberEmail}`,
+        select: 'tournament_id,id',
+      },
+    });
+    if (byEmailResult.error) {
+      console.log('[Tournament] getMyTournamentIds email roster read failed:', byEmailResult.error);
+    }
+    rosterRows = unwrapList(byEmailResult);
+  }
+
   const rosterPlayerIds = rosterRows.map((row) => row.id);
 
   const scoreQueries: Promise<TournamentServiceResult<Array<{ tournament_id: string }>>>[] = [
     tournamentSupabaseRequest('tournament_scores', {
+      ...readAuth,
       query: { user_id: `eq.${userId}`, select: 'tournament_id' },
     }),
   ];
@@ -77,6 +109,7 @@ export async function getMyTournamentIds(userId: string): Promise<string[]> {
   if (rosterPlayerIds.length > 0) {
     scoreQueries.push(
       tournamentSupabaseRequest('tournament_scores', {
+        ...readAuth,
         query: {
           tournament_player_id: `in.(${rosterPlayerIds.join(',')})`,
           select: 'tournament_id',
@@ -89,12 +122,15 @@ export async function getMyTournamentIds(userId: string): Promise<string[]> {
     scoreQueries[0],
     scoreQueries[1] ?? Promise.resolve({ data: [] as Array<{ tournament_id: string }>, error: null }),
     tournamentSupabaseRequest<Array<{ tournament_id: string }>>('tournament_tee_assignments', {
+      ...readAuth,
       query: { user_id: `eq.${userId}`, select: 'tournament_id' },
     }),
     tournamentSupabaseRequest<Array<{ tournament_id: string }>>('tournament_teams', {
+      ...readAuth,
       query: { player_ids: `cs.{${userId}}`, select: 'tournament_id' },
     }),
     tournamentSupabaseRequest<Array<{ tournament_id: string }>>('tournament_teams', {
+      ...readAuth,
       query: { captain_user_id: `eq.${userId}`, select: 'tournament_id' },
     }),
   ]);
@@ -136,7 +172,9 @@ export async function getTournamentsForUser(
     return getTournamentsResult(options);
   }
 
-  const tournamentIds = await getMyTournamentIds(userId);
+  const tournamentIds = await getMyTournamentIds(userId, {
+    email: useMemberAuthStore.getState().user?.email,
+  });
   if (tournamentIds.length === 0) {
     return { data: [], error: null };
   }

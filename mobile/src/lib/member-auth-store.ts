@@ -38,6 +38,13 @@ export const useMemberAuthStore = create<MemberAuthState>((set, get) => ({
   profile: null,
 
   setAuth: async (data) => {
+    if (!isAdminRole(data.profile?.role)) {
+      const admin = useAdminAuthStore.getState();
+      if (admin.isAuthenticated) {
+        await useAdminAuthStore.getState().clearAuth();
+      }
+    }
+
     set({
       isAuthenticated: true,
       isLoading: false,

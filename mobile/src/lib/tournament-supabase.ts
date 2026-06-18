@@ -42,6 +42,18 @@ export function getManagerAccessToken(): string | null {
   return admin.accessToken ?? member.accessToken ?? null;
 }
 
+function resolveTournamentAccessToken(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  accessToken?: string | null
+): string {
+  if (accessToken) return accessToken;
+  // Reads must use the signed-in member JWT when available — not a stale admin session.
+  if (method === 'GET') {
+    return getAccessToken();
+  }
+  return getManagerAccessToken() ?? getAccessToken();
+}
+
 export interface TournamentServiceError {
   data: null;
   error: string;
@@ -122,7 +134,7 @@ export async function tournamentSupabaseRequest<T>(
   };
 
   try {
-    const primaryToken = accessToken ?? getManagerAccessToken() ?? getAccessToken();
+    const primaryToken = resolveTournamentAccessToken(method, accessToken);
     let response = await fetchWithToken(url.toString(), init, primaryToken);
 
     if (

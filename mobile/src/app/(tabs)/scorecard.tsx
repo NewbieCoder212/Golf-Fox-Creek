@@ -743,7 +743,8 @@ export default function ScorecardScreen() {
             </Text>
           ) : !isTournamentMode ? null : (
             <Text className="text-neutral-500 text-xs">
-              Hole {tournamentSession.currentHole}/18 · saved on exit
+              Hole {tournamentSession.currentHole}/18
+              {tournamentSession.hasMatchPlay ? ' · auto-saves' : ' · saved on exit'}
             </Text>
           )}
         </View>
@@ -752,6 +753,8 @@ export default function ScorecardScreen() {
             tournament={tournamentSession.tournament}
             roundNumber={tournamentSession.roundNumber}
             isDirty={tournamentSession.isDirty}
+            isSyncing={tournamentSession.isSyncing}
+            showAutoSaveHint={tournamentSession.hasMatchPlay}
             teeTimeLabel={tournamentSession.matchTeeTimeLabel}
             matchStatusLabel={
               tournamentSession.hasMatchPlay && tournamentSession.matchStatus.throughHole > 0
@@ -772,7 +775,13 @@ export default function ScorecardScreen() {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={
-          isTournamentMode ? { paddingBottom: insets.bottom + 100 } : undefined
+          isTournamentMode
+            ? {
+                paddingBottom:
+                  insets.bottom +
+                  (tournamentSession.hasMatchPlay ? 72 : 100),
+              }
+            : undefined
         }
       >
         <View className="mx-4 mt-4">
@@ -922,38 +931,46 @@ export default function ScorecardScreen() {
             </View>
           ) : null}
           {tournamentSession.hasMatchPlay ? (
+            <>
+              <Text className="text-neutral-500 text-xs text-center mb-3">
+                {tournamentSession.isSyncing
+                  ? 'Saving hole result…'
+                  : 'Hole results save automatically when you tap a side.'}
+              </Text>
+              <Pressable
+                onPress={handleClearTournamentScores}
+                disabled={tournamentSession.isClearing || tournamentSession.isSyncing}
+                className="flex-row items-center justify-center py-3 active:opacity-70"
+              >
+                {tournamentSession.isClearing ? (
+                  <ActivityIndicator color="#a3a3a3" />
+                ) : (
+                  <>
+                    <Trash2 size={16} color="#a3a3a3" />
+                    <Text className="text-neutral-400 font-medium text-sm ml-2">Clear match scores</Text>
+                  </>
+                )}
+              </Pressable>
+            </>
+          ) : (
             <Pressable
-              onPress={handleClearTournamentScores}
-              disabled={tournamentSession.isClearing || tournamentSession.isSyncing}
-              className="flex-row items-center justify-center py-3 mb-2 active:opacity-70"
+              onPress={handleTournamentSync}
+              disabled={tournamentSession.isSyncing || tournamentSession.isClearing}
+              className="flex-row items-center justify-center bg-lime-600 rounded-xl py-4 active:opacity-80"
             >
-              {tournamentSession.isClearing ? (
-                <ActivityIndicator color="#a3a3a3" />
+              {tournamentSession.isSyncing ? (
+                <>
+                  <ActivityIndicator color="#fff" />
+                  <Text className="text-white font-bold text-base ml-2">Saving…</Text>
+                </>
               ) : (
                 <>
-                  <Trash2 size={16} color="#a3a3a3" />
-                  <Text className="text-neutral-400 font-medium text-sm ml-2">Clear match scores</Text>
+                  <Save size={18} color="#fff" />
+                  <Text className="text-white font-bold text-base ml-2">Save scores</Text>
                 </>
               )}
             </Pressable>
-          ) : null}
-          <Pressable
-            onPress={handleTournamentSync}
-            disabled={tournamentSession.isSyncing || tournamentSession.isClearing}
-            className="flex-row items-center justify-center bg-lime-600 rounded-xl py-4 active:opacity-80"
-          >
-            {tournamentSession.isSyncing ? (
-              <>
-                <ActivityIndicator color="#fff" />
-                <Text className="text-white font-bold text-base ml-2">Saving…</Text>
-              </>
-            ) : (
-              <>
-                <Save size={18} color="#fff" />
-                <Text className="text-white font-bold text-base ml-2">Save scores</Text>
-              </>
-            )}
-          </Pressable>
+          )}
         </View>
       ) : null}
 

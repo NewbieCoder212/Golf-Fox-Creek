@@ -8,6 +8,8 @@ interface TournamentScorecardToolbarProps {
   tournament: Tournament;
   roundNumber: number;
   isDirty: boolean;
+  isSyncing?: boolean;
+  showAutoSaveHint?: boolean;
   teeTimeLabel?: string | null;
   matchStatusLabel?: string | null;
   onRoundChange: (round: number) => void;
@@ -17,6 +19,8 @@ export function TournamentScorecardToolbar({
   tournament,
   roundNumber,
   isDirty,
+  isSyncing = false,
+  showAutoSaveHint = false,
   teeTimeLabel,
   matchStatusLabel,
   onRoundChange,
@@ -38,12 +42,22 @@ export function TournamentScorecardToolbar({
             <Text className="text-lime-300 text-[10px] font-bold">{matchStatusLabel}</Text>
           </View>
         ) : null}
-        {isDirty ? (
+        {isSyncing ? (
           <View className="bg-amber-900/40 rounded-full px-2 py-1">
-            <Text className="text-amber-300 text-[10px] font-semibold">UNSYNCED</Text>
+            <Text className="text-amber-300 text-[10px] font-semibold">Saving…</Text>
+          </View>
+        ) : isDirty ? (
+          <View className="bg-amber-900/40 rounded-full px-2 py-1">
+            <Text className="text-amber-300 text-[10px] font-semibold">Pending</Text>
           </View>
         ) : null}
       </View>
+
+      {showAutoSaveHint ? (
+        <Text className="text-neutral-500 text-xs mb-2">
+          Tap a side to record the hole — results save automatically.
+        </Text>
+      ) : null}
 
       <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-2">Round</Text>
       <View className="flex-row gap-2 flex-wrap">

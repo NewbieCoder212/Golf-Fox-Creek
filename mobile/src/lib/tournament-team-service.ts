@@ -1,7 +1,20 @@
 import type { TournamentPlayer, TournamentTeam } from '@/types';
+import { getBackendUrl } from './backend-url';
 
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL ?? 'http://localhost:3000';
+const BACKEND_REQUEST_TIMEOUT_MS = 4_000;
+
+async function fetchBackend(path: string, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), BACKEND_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(`${getBackendUrl()}${path}`, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export interface MarkTeamRosterReadyResult {
   success: boolean;
@@ -23,8 +36,8 @@ export async function markTeamRosterReadyAndNotify(params: {
   accessToken: string;
 }): Promise<MarkTeamRosterReadyResult> {
   try {
-    const response = await fetch(
-      `${BACKEND_URL}/api/tournaments/${params.tournamentId}/teams/${params.teamId}/mark-ready-and-notify`,
+    const response = await fetchBackend(
+      `/api/tournaments/${params.tournamentId}/teams/${params.teamId}/mark-ready-and-notify`,
       {
         method: 'POST',
         headers: {
@@ -63,8 +76,8 @@ export async function updateTournamentTeamViaBackend(params: {
   };
 }): Promise<UpdateTournamentTeamResult> {
   try {
-    const response = await fetch(
-      `${BACKEND_URL}/api/tournaments/${params.tournamentId}/teams/${params.teamId}`,
+    const response = await fetchBackend(
+      `/api/tournaments/${params.tournamentId}/teams/${params.teamId}`,
       {
         method: 'PATCH',
         headers: {
@@ -106,8 +119,8 @@ export async function sendParticipantInvites(params: {
   accessToken: string;
 }): Promise<SendParticipantInvitesResult> {
   try {
-    const response = await fetch(
-      `${BACKEND_URL}/api/tournaments/${params.tournamentId}/send-participant-invites`,
+    const response = await fetchBackend(
+      `/api/tournaments/${params.tournamentId}/send-participant-invites`,
       {
         method: 'POST',
         headers: {
@@ -141,8 +154,8 @@ export async function deleteTournamentParticipantViaBackend(params: {
   accessToken: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(
-      `${BACKEND_URL}/api/tournaments/${params.tournamentId}/participants/${params.playerId}`,
+    const response = await fetchBackend(
+      `/api/tournaments/${params.tournamentId}/participants/${params.playerId}`,
       {
         method: 'DELETE',
         headers: {
@@ -175,8 +188,8 @@ export async function updateTournamentParticipantViaBackend(params: {
   };
 }): Promise<{ data: TournamentPlayer | null; error: string | null }> {
   try {
-    const response = await fetch(
-      `${BACKEND_URL}/api/tournaments/${params.tournamentId}/participants/${params.playerId}`,
+    const response = await fetchBackend(
+      `/api/tournaments/${params.tournamentId}/participants/${params.playerId}`,
       {
         method: 'PATCH',
         headers: {

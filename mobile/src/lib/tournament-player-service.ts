@@ -87,27 +87,31 @@ export async function deleteTournamentPlayer(
   playerId: string,
   context?: { tournamentId?: string; accessToken?: string | null }
 ): Promise<TournamentServiceResult<boolean>> {
-  if (context?.tournamentId && context.accessToken) {
-    const backendResult = await deleteTournamentParticipantViaBackend({
-      tournamentId: context.tournamentId,
-      playerId,
-      accessToken: context.accessToken,
-    });
-    if (backendResult.success) {
-      return { data: true, error: null };
-    }
-    if (backendResult.error && !backendResult.error.includes('Could not reach')) {
-      return { data: null, error: backendResult.error };
-    }
-  }
-
   const result = await tournamentSupabaseRequest<TournamentPlayer[]>('tournament_players', {
     method: 'DELETE',
     query: { id: `eq.${playerId}` },
+    accessToken: context?.accessToken,
   });
 
-  if (result.error) return { data: null, error: result.error };
-  return { data: true, error: null };
+  if (!result.error) {
+    return { data: true, error: null };
+  }
+
+  if (!context?.tournamentId || !context.accessToken) {
+    return { data: null, error: result.error };
+  }
+
+  const backendResult = await deleteTournamentParticipantViaBackend({
+    tournamentId: context.tournamentId,
+    playerId,
+    accessToken: context.accessToken,
+  });
+
+  if (backendResult.success) {
+    return { data: true, error: null };
+  }
+
+  return { data: null, error: backendResult.error ?? result.error };
 }
 
 export async function updateTournamentPlayer(
@@ -134,50 +138,47 @@ export async function updateTournamentPlayer(
     body.email = updates.email.trim().toLowerCase();
   }
 
-  const usesBackendProfileFields =
-    updates.display_name !== undefined ||
-    updates.email !== undefined ||
-    updates.handicap_index !== undefined;
-
-  if (context?.tournamentId && context.accessToken && usesBackendProfileFields) {
-    const backendResult = await updateTournamentParticipantViaBackend({
-      tournamentId: context.tournamentId,
-      playerId,
-      accessToken: context.accessToken,
-      updates: {
-        display_name: typeof body.display_name === 'string' ? body.display_name : undefined,
-        email:
-          updates.email === undefined
-            ? undefined
-            : typeof body.email === 'string'
-              ? body.email
-              : null,
-        handicap_index: updates.handicap_index,
-      },
-    });
-    if (backendResult.data && !('user_id' in updates) &&
-        updates.handicap_use_index === undefined &&
-        updates.handicap_allowance_pct === undefined &&
-        updates.manual_handicap === undefined) {
-      return { data: backendResult.data, error: null };
-    }
-    if (backendResult.error && !backendResult.error.includes('Could not reach')) {
-      return { data: null, error: backendResult.error };
-    }
-  }
-
   const result = await tournamentSupabaseRequest<TournamentPlayer[]>('tournament_players', {
     method: 'PATCH',
     query: { id: `eq.${playerId}` },
     body,
+    accessToken: context?.accessToken,
   });
 
-  if (result.error) return result;
-  const updated = result.data?.[0] ?? null;
-  if (!updated) {
-    return { data: null, error: 'Participant was not updated' };
+  if (!result.error) {
+    const updated = result.data?.[0] ?? null;
+    if (!updated) {
+      return { data: null, error: 'Participant was not updated' };
+    }
+    return { data: updated, error: null };
   }
-  return { data: updated, error: null };
+
+  if (!context?.tournamentId || !context.accessToken) {
+    return result;
+  }
+
+  const backendResult = await updateTournamentParticipantViaBackend({
+    tournamentId: context.tournamentId,
+    playerId,
+    accessToken: context.accessToken,
+    updates: {
+      display_name: typeof body.display_name === 'string' ? body.display_name : undefined,
+      email:
+        updates.email === undefined
+          ? undefined
+          : typeof body.email === 'string'
+            ? body.email
+            : null,
+      handicap_index: updates.handicap_index,
+      user_id: updates.user_id,
+    },
+  });
+
+  if (backendResult.data) {
+    return { data: backendResult.data, error: null };
+  }
+
+  return { data: null, error: backendResult.error ?? result.error };
 }
 
 export async function assignPlayersToTeam(

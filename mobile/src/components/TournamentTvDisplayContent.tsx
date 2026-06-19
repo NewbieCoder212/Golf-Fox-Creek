@@ -21,7 +21,7 @@ import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBo
 import { TournamentTvTeeSheet } from '@/components/TournamentTvTeeSheet';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
-import { buildMatchPointsLeaderboard, buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-service';
+import { buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-service';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 import {
   buildTournamentTeeSheetRows,
@@ -124,32 +124,13 @@ export function TournamentTvDisplayContent({
       matchGroups,
       holeResults
     );
-    const hasMatchPoints = pointsStats.some(
-      (row) => row.matchPoints > 0 || row.matchesPlayed > 0
-    );
-
-    if (hasMatchPoints) {
-      return pointsStats.map((row) => ({
-        teamId: row.teamId,
-        matchPoints: row.matchPoints,
-        matchesWon: row.matchesWon,
-      }));
-    }
-
-    const matchPlay = data?.matchPlay;
-    if (matchPlay && sideATeam && sideBTeam) {
-      return [
-        { teamId: sideATeam.id, holesWon: matchPlay.sideAHoles },
-        { teamId: sideBTeam.id, holesWon: matchPlay.sideBHoles },
-      ];
-    }
 
     return pointsStats.map((row) => ({
       teamId: row.teamId,
       matchPoints: row.matchPoints,
       matchesWon: row.matchesWon,
     }));
-  }, [teams, matchGroups, holeResults, data?.matchPlay, sideATeam, sideBTeam]);
+  }, [teams, matchGroups, holeResults]);
 
   const handleRealtimeUpdate = useCallback(() => {
     onRefetch();
@@ -209,7 +190,7 @@ export function TournamentTvDisplayContent({
       <TournamentTeamMatchupBoard
         teams={teams}
         teamStats={teamStats}
-        subtitle="Live Standings"
+        subtitle="Live Standings · Match pts"
         tvDisplay={isWideLayout}
         tvStrip={!isWideLayout}
       />

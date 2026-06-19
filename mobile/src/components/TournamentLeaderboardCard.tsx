@@ -161,12 +161,6 @@ export function TournamentLeaderboardCard({
             Teams will appear here once match play begins.
           </Text>
         ) : null}
-        {hubEmbedded ? (
-          <View className="flex-row items-center justify-center mt-2 pt-2 border-t border-neutral-800/60">
-            <Text className="text-lime-400 text-xs font-semibold">View full standings</Text>
-            <ChevronRight size={14} color="#a3e635" style={{ marginLeft: 2 }} />
-          </View>
-        ) : null}
       </View>
     </Pressable>
   );

@@ -18,10 +18,9 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 import { getPasswordResetRedirectUrl, requestPasswordReset } from '@/lib/supabase';
+import { getBackendUrl } from '@/lib/backend-url';
 
 const DEV_AUTH_SECRET = process.env.EXPO_PUBLIC_DEV_AUTH_SECRET ?? 'foxcreek-dev-local';
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL ?? 'http://localhost:3000';
 
 function isRateLimitError(message: string | undefined): boolean {
   if (!message) return false;
@@ -90,7 +89,7 @@ export default function ForgotPasswordScreen() {
 
     try {
       const redirectTo = getPasswordResetRedirectUrl();
-      const response = await fetch(`${BACKEND_URL}/api/dev/generate-reset-link`, {
+      const response = await fetch(`${getBackendUrl()}/api/dev/generate-reset-link`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -132,7 +131,7 @@ export default function ForgotPasswordScreen() {
     setDevMessage(null);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/dev/set-password`, {
+      const response = await fetch(`${getBackendUrl()}/api/dev/set-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

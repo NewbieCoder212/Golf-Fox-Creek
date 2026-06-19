@@ -1,5 +1,4 @@
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL ?? 'http://localhost:3000';
+import { getBackendUrl } from './backend-url';
 
 export interface InviteMemberParams {
   firstName: string;
@@ -17,7 +16,7 @@ export interface InviteMemberResult {
 
 export async function inviteMember(params: InviteMemberParams): Promise<InviteMemberResult> {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/members/invite`, {
+    const response = await fetch(`${getBackendUrl()}/api/members/invite`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -49,7 +48,7 @@ export async function resendMemberInvite(
   accessToken: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/members/resend-invite`, {
+    const response = await fetch(`${getBackendUrl()}/api/members/resend-invite`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

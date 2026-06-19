@@ -83,17 +83,30 @@ async function requireManager(token) {
   return { user: { ...user, role } };
 }
 
+// Keep in sync with backend/src/app.ts allowed origins.
+const ALLOWED_ORIGIN_PATTERNS = [
+  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+  /^https:\/\/[a-z0-9-]+\.dev\.vibecode\.run$/,
+  /^https:\/\/[a-z0-9-]+\.vibecode\.run$/,
+  /^https:\/\/(www\.)?foxcreek\.golf$/,
+  /^https:\/\/[a-z0-9-]+\.foxcreek\.golf$/,
+  /^https:\/\/[a-z0-9-]+\.vercel\.app$/,
+  /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/,
+  /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,
+];
+
+function isAllowedOrigin(origin) {
+  return typeof origin === 'string' && ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin));
+}
+
 function setCors(req, res) {
   const origin = req.headers.origin;
-  const allowed =
-    origin === 'https://www.foxcreek.golf' ||
-    origin === 'https://foxcreek.golf' ||
-    (typeof origin === 'string' && origin.endsWith('.foxcreek.golf'));
-  if (allowed) {
+  if (isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 

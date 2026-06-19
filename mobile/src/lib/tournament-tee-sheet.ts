@@ -98,6 +98,66 @@ export function summarizeTvLiveEmptyState(rows: TournamentTeeSheetRow[]): TvLive
   };
 }
 
+/** When the on-air round tee sheet is all final, show the next round with pairings. */
+export function resolveTvTeeSheetRound(params: {
+  activeRound: number;
+  tournament: Tournament;
+  teams: TournamentTeam[];
+  matchGroups: TournamentMatchGroup[];
+  holeResults: TournamentMatchHoleResult[];
+  playerNameById: Record<string, string>;
+  now?: Date;
+}): { teeSheetRound: number; isPreviewingNextRound: boolean } {
+  const {
+    activeRound,
+    tournament,
+    teams,
+    matchGroups,
+    holeResults,
+    playerNameById,
+    now,
+  } = params;
+
+  const activeRows = buildTournamentTeeSheetRows({
+    tournament,
+    teams,
+    matchGroups,
+    holeResults,
+    playerNameById,
+    roundNumber: activeRound,
+    now,
+  });
+
+  if (activeRows.length === 0 || !summarizeTvLiveEmptyState(activeRows).allFinal) {
+    return { teeSheetRound: activeRound, isPreviewingNextRound: false };
+  }
+
+  const roundsWithPairings = [
+    ...new Set(matchGroups.map((group) => group.round_number)),
+  ].sort((a, b) => a - b);
+
+  const nextRound = roundsWithPairings.find((round) => round > activeRound);
+  if (nextRound == null) {
+    return { teeSheetRound: activeRound, isPreviewingNextRound: false };
+  }
+
+  const nextRows = buildTournamentTeeSheetRows({
+    tournament,
+    teams,
+    matchGroups,
+    holeResults,
+    playerNameById,
+    roundNumber: nextRound,
+    now,
+  });
+
+  if (nextRows.length === 0) {
+    return { teeSheetRound: activeRound, isPreviewingNextRound: false };
+  }
+
+  return { teeSheetRound: nextRound, isPreviewingNextRound: true };
+}
+
 function formatPlayersLabel(
   group: TournamentMatchGroup,
   tournament: Tournament,

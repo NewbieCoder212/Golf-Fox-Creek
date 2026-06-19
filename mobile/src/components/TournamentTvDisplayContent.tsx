@@ -25,6 +25,7 @@ import { buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-ser
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 import {
   buildTournamentTeeSheetRows,
+  resolveTvTeeSheetRound,
   summarizeTvLiveEmptyState,
 } from '@/lib/tournament-tee-sheet';
 import type { Tournament, TournamentDisplayPayload, TournamentPlayer, TournamentTeam } from '@/types';
@@ -80,6 +81,20 @@ export function TournamentTvDisplayContent({
     if (!tournament) return 1;
     return getTvDisplayRoundNumber(tournament, matchGroups);
   }, [tournament, matchGroups]);
+
+  const { teeSheetRound, isPreviewingNextRound } = useMemo(() => {
+    if (!tournament) {
+      return { teeSheetRound: 1, isPreviewingNextRound: false };
+    }
+    return resolveTvTeeSheetRound({
+      activeRound: displayRound,
+      tournament,
+      teams,
+      matchGroups,
+      holeResults,
+      playerNameById,
+    });
+  }, [tournament, displayRound, teams, matchGroups, holeResults, playerNameById]);
 
   const roundLabel = useMemo(() => {
     if (!tournament) return `Round ${displayRound}`;
@@ -180,7 +195,8 @@ export function TournamentTvDisplayContent({
         matchGroups={matchGroups}
         holeResults={holeResults}
         playerNameById={playerNameById}
-        roundNumber={displayRound}
+        roundNumber={teeSheetRound}
+        isPreviewingNextRound={isPreviewingNextRound}
         compact={false}
       />
     ) : null;

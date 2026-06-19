@@ -6,7 +6,7 @@ import {
   type TeeSheetDisplayStatus,
   type TournamentTeeSheetRow,
 } from '@/lib/tournament-tee-sheet';
-import { formatLabel } from '@/lib/tournament-labels';
+import { formatLabel, formatRoundPickerLabel } from '@/lib/tournament-labels';
 import { formatClubTime } from '@/lib/club-timezone';
 import { cn } from '@/lib/cn';
 import type {
@@ -27,6 +27,7 @@ interface TournamentTvTeeSheetProps {
   holeResults: TournamentMatchHoleResult[];
   playerNameById: Record<string, string>;
   roundNumber: number;
+  isPreviewingNextRound?: boolean;
   compact?: boolean;
   className?: string;
 }
@@ -107,6 +108,7 @@ export function TournamentTvTeeSheet({
   holeResults,
   playerNameById,
   roundNumber,
+  isPreviewingNextRound = false,
   compact = false,
   className,
 }: TournamentTvTeeSheetProps) {
@@ -158,14 +160,27 @@ export function TournamentTvTeeSheet({
   const visibleRows = pages[pageIndex] ?? rows;
   const roundFormat = tournament.round_schedule[roundNumber - 1]?.formats[0];
   const formatName = roundFormat ? formatLabel(roundFormat) : null;
+  const roundLabel = formatRoundPickerLabel(tournament, roundNumber);
   const clubClockLabel = formatClubTime(now.toISOString(), true);
 
   return (
     <View className={cn('rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden relative z-30', className)}>
       <View className="px-3 py-2 border-b border-neutral-800 flex-row items-center justify-between">
-        <View>
-          <Text className="text-neutral-400 text-[10px] font-semibold uppercase tracking-widest">
-            Tee sheet
+        <View className="flex-1 min-w-0 mr-2">
+          <View className="flex-row items-center gap-2">
+            <Text className="text-neutral-400 text-[10px] font-semibold uppercase tracking-widest">
+              {isPreviewingNextRound ? 'Up next' : 'Tee sheet'}
+            </Text>
+            {isPreviewingNextRound ? (
+              <View className="rounded-full px-2 py-0.5 border bg-lime-950/40 border-lime-700/40">
+                <Text className="text-lime-400 text-[8px] font-bold uppercase tracking-wider">
+                  Preview
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <Text className="text-lime-400/90 text-[10px] font-semibold mt-0.5" numberOfLines={1}>
+            {roundLabel}
           </Text>
           <Text className="text-neutral-600 text-[10px] mt-0.5">Now {clubClockLabel}</Text>
         </View>
@@ -175,7 +190,7 @@ export function TournamentTvTeeSheet({
           </Text>
         ) : null}
       </View>
-      {formatName ? (
+      {formatName && !isPreviewingNextRound ? (
         <Text className="text-neutral-600 text-[10px] px-3 pt-2">{formatName}</Text>
       ) : null}
       <View className="gap-1.5 p-2">

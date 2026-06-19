@@ -124,7 +124,7 @@ export function useMyMatchTabStatus(params: {
     holeResults,
   ]);
 
-  const isComplete = isMatchPlayComplete(matchStatus, params.group);
+  const isComplete = isMatchPlayComplete(matchStatus, params.group, holeResults.length);
 
   return { matchStatus, isComplete, isLoading: isPending };
 }

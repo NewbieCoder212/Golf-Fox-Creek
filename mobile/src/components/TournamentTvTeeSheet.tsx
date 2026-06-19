@@ -37,7 +37,7 @@ function StatusPill({ status }: { status: TeeSheetDisplayStatus }) {
       className={cn(
         'rounded-full px-2 py-0.5 border shrink-0',
         status === 'live' && 'bg-lime-950/50 border-lime-600/50',
-        status === 'on_tee' && 'bg-amber-950/40 border-amber-600/50',
+        status === 'on_course' && 'bg-amber-950/40 border-amber-600/50',
         status === 'upcoming' && 'bg-neutral-900 border-neutral-700',
         status === 'complete' && 'bg-neutral-900/80 border-neutral-800'
       )}
@@ -46,19 +46,19 @@ function StatusPill({ status }: { status: TeeSheetDisplayStatus }) {
         className={cn(
           'text-[9px] font-bold uppercase tracking-wider',
           status === 'live' && 'text-lime-400',
-          status === 'on_tee' && 'text-amber-300',
+          status === 'on_course' && 'text-amber-300',
           status === 'upcoming' && 'text-neutral-500',
           status === 'complete' && 'text-neutral-600'
         )}
       >
-        {status === 'live' ? 'Live' : status === 'on_tee' ? 'On tee' : status === 'complete' ? 'Final' : 'Up next'}
+        {status === 'live' ? 'Live' : status === 'on_course' ? 'On course' : status === 'complete' ? 'Final' : 'Up next'}
       </Text>
     </View>
   );
 }
 
 function TeeSheetRow({ row, compact }: { row: TournamentTeeSheetRow; compact?: boolean }) {
-  const isHighlighted = row.displayStatus === 'live' || row.displayStatus === 'on_tee';
+  const isHighlighted = row.displayStatus === 'live' || row.displayStatus === 'on_course';
 
   return (
     <View

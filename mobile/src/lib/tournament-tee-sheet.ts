@@ -5,6 +5,7 @@
 import {
   buildMatchStatusFromHoleResults,
   formatMatchResultSummary,
+  isMatchActuallyComplete,
   type MatchPlayStatus,
 } from './tournament-match-play-status';
 import { getMatchGroupFormat, getTeamSideDisplayName, isSinglesFormat } from './tournament-labels';
@@ -15,8 +16,9 @@ import type {
   TournamentMatchHoleResult,
   TournamentTeam,
 } from '@/types';
+import type { MatchStatus } from './tournament-match-status';
 
-export type TeeSheetDisplayStatus = 'upcoming' | 'on_tee' | 'live' | 'complete';
+export type TeeSheetDisplayStatus = 'upcoming' | 'on_course' | 'live' | 'complete';
 
 export interface TournamentTeeSheetRow {
   groupId: string;
@@ -36,25 +38,26 @@ const ON_TEE_GRACE_MS = 2 * 60 * 1000;
 export function resolveTeeSheetDisplayStatus(
   group: TournamentMatchGroup,
   playStatus: MatchPlayStatus,
+  matchStatus: MatchStatus,
+  holeResultCount: number,
   now: Date = new Date()
 ): TeeSheetDisplayStatus {
-  if (playStatus === 'complete') return 'complete';
-  if (playStatus === 'in_progress') return 'live';
+  if (isMatchActuallyComplete(group, matchStatus, holeResultCount)) return 'complete';
+  if (playStatus === 'in_progress' || holeResultCount > 0) return 'live';
 
   const teeMs = new Date(group.tee_time).getTime();
   const nowMs = now.getTime();
 
-  // Align with actual tee time in Moncton — not 15 min early.
   if (nowMs + ON_TEE_GRACE_MS < teeMs) return 'upcoming';
-  return 'on_tee';
+  return 'on_course';
 }
 
 export function teeSheetStatusLabel(status: TeeSheetDisplayStatus): string {
   switch (status) {
     case 'live':
       return 'Live';
-    case 'on_tee':
-      return 'On tee';
+    case 'on_course':
+      return 'On course';
     case 'complete':
       return 'Final';
     default:
@@ -110,13 +113,20 @@ export function buildTournamentTeeSheetRows(params: {
         a.group_number - b.group_number
     )
     .map((group) => {
+      const groupHoles = holeResults.filter((row) => row.match_group_id === group.id);
       const { matchStatus, playStatus } = buildMatchStatusFromHoleResults(
         group,
         holeResults,
         sideAName,
         sideBName
       );
-      const displayStatus = resolveTeeSheetDisplayStatus(group, playStatus, now);
+      const displayStatus = resolveTeeSheetDisplayStatus(
+        group,
+        playStatus,
+        matchStatus,
+        groupHoles.length,
+        now
+      );
 
       return {
         groupId: group.id,

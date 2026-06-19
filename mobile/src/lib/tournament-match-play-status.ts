@@ -17,22 +17,32 @@ export function hasRecordedMatchResult(
   );
 }
 
-export function isMatchPlayComplete(
-  status: MatchStatus,
-  group?: Pick<TournamentMatchGroup, 'match_winner' | 'match_points_a' | 'match_points_b'> | null
+export function isMatchActuallyComplete(
+  group: Pick<TournamentMatchGroup, 'match_winner' | 'match_points_a' | 'match_points_b'>,
+  matchStatus: MatchStatus,
+  holeResultCount: number
 ): boolean {
-  if (
-    status.throughHole > 0 &&
-    (status.clinched || (status.throughHole >= 18 && status.lead !== 0))
-  ) {
+  if (matchStatus.clinched) return true;
+
+  if (matchStatus.throughHole >= 18) {
+    if (matchStatus.lead !== 0) return true;
+    if (group.match_winner === 'tie') return true;
+  }
+
+  if (group.match_winner != null && holeResultCount > 0) {
     return true;
   }
 
-  if (!group?.match_winner) return false;
+  return false;
+}
 
-  if (status.throughHole > 0) return true;
-
-  return group.match_points_a > 0 || group.match_points_b > 0 || group.match_winner === 'tie';
+export function isMatchPlayComplete(
+  status: MatchStatus,
+  group?: Pick<TournamentMatchGroup, 'match_winner' | 'match_points_a' | 'match_points_b'> | null,
+  holeResultCount = 0
+): boolean {
+  if (!group) return false;
+  return isMatchActuallyComplete(group, status, holeResultCount);
 }
 
 export function resolveMatchGroupPlayStatus(
@@ -40,7 +50,7 @@ export function resolveMatchGroupPlayStatus(
   matchStatus: MatchStatus,
   holeResultCount: number
 ): MatchPlayStatus {
-  if (isMatchPlayComplete(matchStatus, group)) {
+  if (isMatchPlayComplete(matchStatus, group, holeResultCount)) {
     return 'complete';
   }
 

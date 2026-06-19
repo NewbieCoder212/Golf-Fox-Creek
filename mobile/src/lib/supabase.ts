@@ -901,7 +901,7 @@ export function getAuthCallbackRouteFromUrl(url: string): '/reset-password' | '/
 export async function requestPasswordReset(
   email: string,
   redirectTo?: string
-): Promise<{ success: boolean; error?: string; redirectTo?: string }> {
+): Promise<{ success: boolean; error?: string; redirectTo?: string; pendingSetup?: boolean }> {
   if (!isConfigured()) {
     return { success: false, error: 'Supabase not configured' };
   }
@@ -912,20 +912,31 @@ export async function requestPasswordReset(
     console.log('[Supabase] Password reset redirect:', resetRedirectUrl);
   }
 
-  const { getBackendUrl, isLocalhostBackendUrl } = await import('./backend-url');
-  const backendUrl = getBackendUrl();
+  const { getInviteBackendUrl, isLocalhostBackendUrl } = await import('./backend-url');
+  const backendUrl = getInviteBackendUrl();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
 
   try {
     const response = await fetch(`${backendUrl}/api/auth/request-password-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim(), redirectTo: resetRedirectUrl }),
+      signal: controller.signal,
     });
 
-    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    const data = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      pendingSetup?: boolean;
+    };
 
     if (response.ok) {
-      return { success: true, redirectTo: resetRedirectUrl };
+      return {
+        success: true,
+        redirectTo: resetRedirectUrl,
+        pendingSetup: data.pendingSetup === true,
+      };
     }
 
     return {
@@ -933,13 +944,21 @@ export async function requestPasswordReset(
       error: data.error ?? 'Failed to send reset email',
     };
   } catch (err) {
+    const aborted = err instanceof Error && err.name === 'AbortError';
     console.log('[Supabase] Backend password reset request error:', err);
 
     if (__DEV__ && isLocalhostBackendUrl(backendUrl)) {
       return requestPasswordResetViaSupabase(email, resetRedirectUrl);
     }
 
-    return { success: false, error: 'Could not reach password reset service. Try again shortly.' };
+    return {
+      success: false,
+      error: aborted
+        ? 'Request timed out. Please try again in a moment.'
+        : 'Could not reach password reset service. Try again shortly.',
+    };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

@@ -41,6 +41,7 @@ export default function ForgotPasswordScreen() {
   const [devMessage, setDevMessage] = useState<string | null>(null);
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [sentPendingSetup, setSentPendingSetup] = useState(false);
   const [resetRedirectUrl, setResetRedirectUrl] = useState<string | null>(null);
   const [showDevTools, setShowDevTools] = useState(false);
 
@@ -68,6 +69,7 @@ export default function ForgotPasswordScreen() {
     }
 
     setResetRedirectUrl(result.redirectTo ?? getPasswordResetRedirectUrl());
+    setSentPendingSetup(result.pendingSetup === true);
     setSent(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
@@ -192,7 +194,9 @@ export default function ForgotPasswordScreen() {
                 </View>
                 <Text className="text-white text-2xl font-bold mb-2 text-center">Check Your Email</Text>
                 <Text className="text-neutral-400 text-center leading-relaxed mb-4 px-2">
-                  If an account exists for {email.trim()}, we sent a password reset link. Open it to set a new password.
+                  {sentPendingSetup
+                    ? `We sent a setup link to ${email.trim()}. Open it to choose your password, then use Member Sign In at foxcreek.golf.`
+                    : `If an account exists for ${email.trim()}, we sent a password reset link. Open it to set a new password.`}
                 </Text>
                 {resetRedirectUrl ? (
                   <Text className="text-neutral-500 text-xs text-center leading-relaxed mb-8 px-4">

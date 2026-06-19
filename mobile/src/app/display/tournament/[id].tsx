@@ -14,7 +14,11 @@ import { fetchTournamentDisplay } from '@/lib/display-service';
 import { useTournamentDisplayRealtime } from '@/hooks/useTournamentDisplayRealtime';
 import { formatTournamentDates, formatRoundPickerLabel } from '@/lib/tournament-labels';
 import { formatClubTime } from '@/lib/club-timezone';
-import { TvSponsorCarousel, TvSponsorSlot } from '@/components/TvSponsorSlot';
+import {
+  TvFooterSponsorStrip,
+  TvSidebarSponsorStack,
+  TvSponsorSlot,
+} from '@/components/TvSponsorSlot';
 import { TournamentLiveMatchGrids } from '@/components/TournamentLiveMatchGrids';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
@@ -23,10 +27,13 @@ import { buildMatchPointsLeaderboard } from '@/lib/tournament-service';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 import type { Tournament, TournamentPlayer, TournamentTeam } from '@/types';
 
+const TV_WIDE_MIN_WIDTH = 860;
+
 export default function TournamentTvDisplayScreen() {
   const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const isWideLayout = width >= TV_WIDE_MIN_WIDTH;
   const isLandscape = width > height;
 
   const displayEnabled = Boolean(id && token);
@@ -150,6 +157,25 @@ export default function TournamentTvDisplayScreen() {
   }
 
   const lastUpdated = formatClubTime(new Date(dataUpdatedAt).toISOString(), true);
+  const footerSponsors = data.sponsors.footer;
+  const sidebarSponsors = data.sponsors.sidebar;
+  const hasFooterAd = footerSponsors.length > 0;
+
+  const standingsBoard =
+    sideATeam && sideBTeam ? (
+      <TournamentTeamMatchupBoard
+        teams={teams}
+        teamStats={teamStats}
+        subtitle="Live Standings"
+        tvDisplay={isWideLayout}
+        tvStrip={!isWideLayout}
+      />
+    ) : !sideATeam && !sideBTeam && currentRoundMatchGroups.length === 0 ? (
+      <View className="py-8 items-center bg-[#141414] rounded-xl border border-neutral-800">
+        <Trophy size={28} color="#525252" />
+        <Text className="text-neutral-500 text-sm mt-3">No scores yet</Text>
+      </View>
+    ) : null;
 
   return (
     <View
@@ -196,63 +222,62 @@ export default function TournamentTvDisplayScreen() {
         </View>
       </View>
 
-      {/* Main — standings hero on top, live matches below */}
-      <View className="flex-1 min-h-0 px-4 py-3 gap-3">
-        {/* Hero standings */}
-        <View className="shrink-0">
-          {sideATeam && sideBTeam ? (
-            <TournamentTeamMatchupBoard
-              teams={teams}
-              teamStats={teamStats}
-              subtitle="Live Standings"
-              tvHero
-            />
-          ) : !sideATeam && !sideBTeam && currentRoundMatchGroups.length === 0 ? (
-            <View className="py-10 items-center bg-[#141414] rounded-xl border border-neutral-800">
-              <Trophy size={28} color="#525252" />
-              <Text className="text-neutral-500 text-sm mt-3">No scores yet</Text>
+      {/* Main content — split on wide screens, stacked on portrait */}
+      <View className="flex-1 min-h-0 px-4 py-3">
+        {isWideLayout ? (
+          <View className="flex-1 min-h-0 flex-row gap-4">
+            <View className="w-[320px] shrink-0 gap-3">
+              {standingsBoard}
+              {sidebarSponsors.length > 0 ? (
+                <TvSidebarSponsorStack sponsors={sidebarSponsors} />
+              ) : null}
             </View>
-          ) : null}
 
-          {currentRoundMatchGroups.length > 0 && !sideATeam && !sideBTeam ? (
-            <Text className="text-neutral-600 text-[10px] mt-2 px-1 leading-4 text-center">
-              Team points update automatically as matches are completed.
-            </Text>
-          ) : null}
-        </View>
-
-        {/* Live matches in progress */}
-        <View className="flex-1 min-h-0">
-          <TournamentLiveMatchGrids
-            matchGroups={matchGroups}
-            scores={scores}
-            holeResults={holeResults}
-            teamNameById={teamNameById}
-            playerNameById={playerNameById}
-            useNetScoring={matchUseNetScoring}
-            variant="tv-compact"
-            roundNumber={displayRound}
-            hideTitle
-            layout="tv-carousel"
-            liveOnly
-          />
-        </View>
-
-        {/* Sponsors — horizontal strip under matches on wide screens */}
-        {isLandscape && data.sponsors.sidebar.length > 0 ? (
-          <View className="shrink-0 border-t border-neutral-800 pt-2">
-            <Text className="text-neutral-600 text-[9px] uppercase tracking-widest mb-2">
-              Presented by
-            </Text>
-            <TvSponsorCarousel sponsors={data.sponsors.sidebar} />
+            <View className="flex-1 min-w-0 min-h-0">
+              <TournamentLiveMatchGrids
+                matchGroups={matchGroups}
+                scores={scores}
+                holeResults={holeResults}
+                teamNameById={teamNameById}
+                playerNameById={playerNameById}
+                useNetScoring={matchUseNetScoring}
+                variant="tv-compact"
+                roundNumber={displayRound}
+                hideTitle
+                layout="tv-carousel"
+                liveOnly
+              />
+            </View>
           </View>
-        ) : null}
+        ) : (
+          <View className="flex-1 min-h-0 gap-3">
+            {standingsBoard}
+
+            <View className="flex-1 min-h-0">
+              <TournamentLiveMatchGrids
+                matchGroups={matchGroups}
+                scores={scores}
+                holeResults={holeResults}
+                teamNameById={teamNameById}
+                playerNameById={playerNameById}
+                useNetScoring={matchUseNetScoring}
+                variant="tv-compact"
+                roundNumber={displayRound}
+                hideTitle
+                layout="tv-carousel"
+                liveOnly
+              />
+            </View>
+          </View>
+        )}
       </View>
 
-      {/* Footer */}
-      <View className="border-t border-neutral-800 bg-[#111111] px-5 py-2">
-        {data.sponsors.footer.length > 0 ? (
-          <TvSponsorCarousel sponsors={data.sponsors.footer} variant="footer" />
+      {/* Footer sponsor strip — fixed height, logo contained */}
+      <View className="border-t border-neutral-800 bg-[#111111] px-5 py-2.5 shrink-0">
+        {hasFooterAd ? (
+          <TvFooterSponsorStrip sponsors={footerSponsors} />
+        ) : sidebarSponsors.length > 0 && !isWideLayout ? (
+          <TvFooterSponsorStrip sponsors={sidebarSponsors} />
         ) : (
           <Text className="text-neutral-600 text-xs">Fox Creek Golf Club · Dieppe, NB</Text>
         )}

@@ -172,7 +172,7 @@ function TvMatchCarousel({
 
   if (liveOnly && !hasLive) {
     return (
-      <View className="flex-1 min-h-0 justify-center">
+      <View className="flex-1 min-h-0">
         <View className="flex-row items-center justify-between mb-2 px-0.5">
           <View className="flex-1 mr-2">
             <Text className="text-neutral-500 text-[10px] uppercase tracking-widest">
@@ -181,8 +181,10 @@ function TvMatchCarousel({
             <Text className="text-neutral-600 text-xs mt-1">{statusLine}</Text>
           </View>
         </View>
-        <View className="flex-1 items-center justify-center bg-[#141414] rounded-xl border border-neutral-800 border-dashed">
-          <Text className="text-neutral-500 text-sm">Check back when tee times are on the course</Text>
+        <View className="flex-1 min-h-[100px] max-h-[160px] items-center justify-center bg-[#141414] rounded-xl border border-neutral-800 border-dashed">
+          <Text className="text-neutral-500 text-sm text-center px-4">
+            Check back when tee times are on the course
+          </Text>
         </View>
       </View>
     );

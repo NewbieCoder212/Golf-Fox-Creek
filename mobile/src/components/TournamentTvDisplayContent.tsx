@@ -253,16 +253,16 @@ export function TournamentTvDisplayContent({
 
       <View className="flex-1 min-h-0 px-4 py-3">
         {isWideLayout ? (
-          <View className="flex-1 min-h-0 flex-row gap-4">
-            <View className="w-[320px] shrink-0 gap-3">
+          <View className="flex-1 min-h-0 flex-row gap-4 overflow-hidden">
+            <View className="w-[320px] shrink-0 gap-3 z-20">
               {standingsBoard}
               {sidebarSponsors.length > 0 ? (
                 <TvSidebarSponsorStack sponsors={sidebarSponsors} />
               ) : null}
             </View>
 
-            <View className="flex-1 min-w-0 min-h-0 gap-3">
-              <View className="flex-1 min-h-0">
+            <View className="flex-1 min-w-0 min-h-0 gap-3 overflow-hidden">
+              <View className="flex-1 min-h-0 overflow-hidden">
                 <TournamentLiveMatchGrids
                   matchGroups={matchGroups}
                   scores={scores}
@@ -278,14 +278,14 @@ export function TournamentTvDisplayContent({
                   liveEmptySummary={liveEmptySummary}
                 />
               </View>
-              {teeSheet ? <View className="shrink-0">{teeSheet}</View> : null}
+              {teeSheet ? <View className="shrink-0 z-10">{teeSheet}</View> : null}
             </View>
           </View>
         ) : (
-          <View className="flex-1 min-h-0 gap-3">
+          <View className="flex-1 min-h-0 gap-3 overflow-hidden">
             {standingsBoard}
 
-            <View className="flex-1 min-h-0">
+            <View className="flex-1 min-h-0 overflow-hidden">
               <TournamentLiveMatchGrids
                 matchGroups={matchGroups}
                 scores={scores}
@@ -301,7 +301,7 @@ export function TournamentTvDisplayContent({
                 liveEmptySummary={liveEmptySummary}
               />
             </View>
-            {teeSheet ? <View className="shrink-0">{teeSheet}</View> : null}
+            {teeSheet ? <View className="shrink-0 z-10">{teeSheet}</View> : null}
           </View>
         )}
       </View>

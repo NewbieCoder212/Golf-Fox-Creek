@@ -245,7 +245,7 @@ function TvMatchCarousel({
 
   if (liveOnly && !hasLive) {
     return (
-      <View className="flex-1 min-h-0">
+      <View className="shrink-0">
         <View className="flex-row items-center justify-between mb-2 px-0.5">
           <View className="flex-1 mr-2">
             <Text className="text-neutral-500 text-[10px] uppercase tracking-widest">
@@ -268,8 +268,8 @@ function TvMatchCarousel({
   }
 
   return (
-    <View className="flex-1 min-h-0">
-      <View className="flex-row items-center justify-between mb-2 px-0.5">
+    <View className="flex-1 min-h-0 overflow-hidden">
+      <View className="flex-row items-center justify-between mb-2 px-0.5 shrink-0">
         <View className="flex-1 mr-2">
           <View className="flex-row items-center gap-2">
             <Text className="text-neutral-500 text-[10px] uppercase tracking-widest">
@@ -295,14 +295,14 @@ function TvMatchCarousel({
         </Text>
       </View>
 
-      <View className="flex-1 flex-row gap-3 min-h-0">
+      <View className="flex-1 flex-row gap-3 min-h-0 overflow-hidden">
         {currentPage.map((model) => (
-          <View key={model.matchGroupId} className="flex-1 min-w-0">
+          <View key={model.matchGroupId} className="flex-1 min-w-0 min-h-0">
             <TournamentMatchGridCard
               model={model}
               variant={cardVariant}
               highlight={model.inProgress}
-              fillHeight
+              fillHeight={!liveOnly}
             />
           </View>
         ))}

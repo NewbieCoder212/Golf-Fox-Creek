@@ -106,7 +106,6 @@ export const useMemberAuthStore = create<MemberAuthState>((set, get) => ({
           profile: data.profile,
           isLoading: false,
         });
-        void recordMemberSignIn(data.user.id, data.accessToken);
         return true;
       }
     } catch (err) {

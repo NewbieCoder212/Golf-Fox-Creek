@@ -3,7 +3,7 @@
  * One login covers both member app and admin dashboard.
  */
 
-import { refreshAuthSession, getAuthenticatedUserProfile } from './supabase';
+import { refreshAuthSession, getAuthenticatedUserProfile, recordMemberSignIn } from './supabase';
 import { useAdminAuthStore } from './admin-auth-store';
 import { useMemberAuthStore } from './member-auth-store';
 
@@ -120,6 +120,15 @@ function hasStoredSessionCredentials(): boolean {
   );
 }
 
+/** Stamp member portal activity when a valid session is active (not email-link auth alone). */
+function recordActiveMemberPortalSignIn(): void {
+  const member = useMemberAuthStore.getState();
+  if (!member.accessToken || !member.user?.id || isAccessTokenExpired(member.accessToken)) {
+    return;
+  }
+  void recordMemberSignIn(member.user.id, member.accessToken);
+}
+
 /**
  * Load persisted auth, sync member/admin stores, and refresh expired access tokens.
  * Clears stale sessions when refresh fails.
@@ -137,6 +146,7 @@ export async function restoreStoredAuthSession(): Promise<boolean> {
 
   if (!context.refreshToken) {
     if (accessToken && !isAccessTokenExpired(accessToken)) {
+      recordActiveMemberPortalSignIn();
       return true;
     }
     if (accessToken || context.user) {
@@ -146,11 +156,13 @@ export async function restoreStoredAuthSession(): Promise<boolean> {
   }
 
   if (accessToken && !isAccessTokenExpired(accessToken)) {
+    recordActiveMemberPortalSignIn();
     return true;
   }
 
   const refreshed = await refreshStoredAuthSession();
   if (refreshed) {
+    recordActiveMemberPortalSignIn();
     return true;
   }
 

@@ -595,7 +595,7 @@ export function TournamentParticipantsTab({
                   ) : null}
                   {onboardingStatus === 'awaiting_app_login' && authActivityLabel ? (
                     <Text className="text-orange-400/70 text-[10px]">
-                      Link used {authActivityLabel}
+                      Email link only · {authActivityLabel}
                     </Text>
                   ) : null}
                 </View>

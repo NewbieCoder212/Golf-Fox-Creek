@@ -1040,8 +1040,11 @@ export async function signOut(accessToken: string): Promise<boolean> {
 /**
  * Record that the member opened the portal via Sign In (not reset/invite links alone).
  */
-export async function recordMemberSignIn(userId: string, accessToken: string): Promise<void> {
-  if (!isConfigured()) return;
+export async function recordMemberSignIn(
+  userId: string,
+  accessToken: string
+): Promise<boolean> {
+  if (!isConfigured()) return false;
 
   const now = new Date().toISOString();
 
@@ -1049,7 +1052,7 @@ export async function recordMemberSignIn(userId: string, accessToken: string): P
     const url = new URL(`${supabaseUrl}/rest/v1/user_profiles`);
     url.searchParams.append('id', `eq.${userId}`);
 
-    await fetch(url.toString(), {
+    const response = await fetch(url.toString(), {
       method: 'PATCH',
       headers: {
         apikey: supabaseAnonKey,
@@ -1062,8 +1065,17 @@ export async function recordMemberSignIn(userId: string, accessToken: string): P
         updated_at: now,
       }),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('[Supabase] Failed to record member sign-in:', response.status, errorText);
+      return false;
+    }
+
+    return true;
   } catch (err) {
     console.log('[Supabase] Failed to record member sign-in:', err);
+    return false;
   }
 }
 

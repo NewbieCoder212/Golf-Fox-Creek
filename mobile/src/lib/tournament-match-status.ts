@@ -38,10 +38,31 @@ export function formatMatchLead(lead: number, perspectiveSide?: TournamentTeamSi
   return `${abs} DN`;
 }
 
+/** Leader-relative label for TV / public boards — always names the team that is up. */
+export function formatMatchLeadWithTeams(
+  lead: number,
+  sideAName?: string,
+  sideBName?: string,
+  options?: { compact?: boolean }
+): string {
+  if (lead === 0) return options?.compact ? 'AS' : 'ALL SQUARE';
+
+  const abs = Math.abs(lead);
+  const leaderName = (lead > 0 ? sideAName : sideBName)?.trim();
+  if (!leaderName) return formatMatchLead(lead);
+
+  if (options?.compact) {
+    const short = leaderName.split(/\s+/)[0]?.slice(0, 4) ?? leaderName.slice(0, 4);
+    return `${short} ${abs}UP`;
+  }
+
+  return `${leaderName} ${abs} UP`;
+}
+
 export function formatMatchStatusLabel(
   lead: number,
   holesRemaining: number,
-  perspectiveSide: TournamentTeamSide = 'side_a',
+  _perspectiveSide: TournamentTeamSide = 'side_a',
   sideAName?: string,
   sideBName?: string
 ): string {
@@ -51,30 +72,19 @@ export function formatMatchStatusLabel(
   if (clinched) {
     const abs = Math.abs(lead);
     const margin = holesRemaining;
-    const winner =
-      lead > 0
-        ? sideAName ?? 'TBD'
-        : sideBName ?? 'TBD';
+    const winner = lead > 0 ? sideAName ?? 'TBD' : sideBName ?? 'TBD';
     return `${winner} ${abs} & ${margin}`;
   }
 
   const dormie = Math.abs(lead) === holesRemaining && holesRemaining > 0;
-  const leaderName =
-    lead > 0 ? sideAName ?? 'TBD' : sideBName ?? 'TBD';
+  const leaderName = lead > 0 ? sideAName ?? 'TBD' : sideBName ?? 'TBD';
   const abs = Math.abs(lead);
 
   if (dormie) {
     return `${leaderName} ${abs} UP · DORMIE`;
   }
 
-  if (perspectiveSide === 'side_a' && lead > 0) {
-    return `${leaderName} ${abs} UP`;
-  }
-  if (perspectiveSide === 'side_b' && lead < 0) {
-    return `${leaderName} ${abs} UP`;
-  }
-
-  return formatMatchLead(lead, perspectiveSide);
+  return formatMatchLeadWithTeams(lead, sideAName, sideBName);
 }
 
 export function computeMatchLeadFromResults(

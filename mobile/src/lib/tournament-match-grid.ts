@@ -28,7 +28,7 @@ import {
 import {
   computeLiveMatchStatus,
   computeMatchLeadFromResults,
-  formatMatchLead,
+  formatMatchLeadWithTeams,
 } from './tournament-match-status';
 import { formatTeeTimeLabel } from './tournament-scorecard-routing';
 
@@ -106,7 +106,12 @@ function buildRunningStatusRow(
   id: string,
   label: string,
   holeResults: Array<Pick<TournamentMatchHoleResult, 'hole' | 'hole_winner'>>,
-  pairingIndex?: number
+  options?: {
+    pairingIndex?: number;
+    sideAName?: string;
+    sideBName?: string;
+    compact?: boolean;
+  }
 ): MatchGridRow {
   const sorted = [...holeResults].sort((a, b) => a.hole - b.hole);
   const byHole = new Map(sorted.map((row) => [row.hole, row]));
@@ -122,7 +127,9 @@ function buildRunningStatusRow(
     return {
       hole,
       value: lead,
-      display: formatMatchLead(lead),
+      display: formatMatchLeadWithTeams(lead, options?.sideAName, options?.sideBName, {
+        compact: options?.compact,
+      }),
       isPlayed: true,
     };
   });
@@ -131,7 +138,7 @@ function buildRunningStatusRow(
     id,
     label,
     kind: 'status',
-    pairingIndex,
+    pairingIndex: options?.pairingIndex,
     cells,
   };
 }
@@ -320,13 +327,17 @@ export function buildMatchGridModel(params: {
           `${matchGroup.id}-pair-status-${i}`,
           'Match',
           pairHoleResults,
-          i
+          { pairingIndex: i, sideAName, sideBName, compact: true }
         )
       );
     }
 
     rows.push(
-      buildRunningStatusRow(`${matchGroup.id}-overall-status`, 'Overall', overallHoleResults)
+      buildRunningStatusRow(`${matchGroup.id}-overall-status`, 'Overall', overallHoleResults, {
+        sideAName,
+        sideBName,
+        compact: true,
+      })
     );
   } else if (format === 'best_ball') {
     rows.push(
@@ -356,7 +367,11 @@ export function buildMatchGridModel(params: {
             useNetScoring
           ),
       }),
-      buildRunningStatusRow(`${matchGroup.id}-status`, 'Match', overallHoleResults)
+      buildRunningStatusRow(`${matchGroup.id}-status`, 'Match', overallHoleResults, {
+        sideAName,
+        sideBName,
+        compact: true,
+      })
     );
   } else {
     rows.push(
@@ -376,7 +391,11 @@ export function buildMatchGridModel(params: {
         holeValues: (hole) =>
           getTeamSideHoleScore(matchGroup.side_b_team_id, scores, hole, useNetScoring),
       }),
-      buildRunningStatusRow(`${matchGroup.id}-status`, 'Match', overallHoleResults)
+      buildRunningStatusRow(`${matchGroup.id}-status`, 'Match', overallHoleResults, {
+        sideAName,
+        sideBName,
+        compact: true,
+      })
     );
   }
 

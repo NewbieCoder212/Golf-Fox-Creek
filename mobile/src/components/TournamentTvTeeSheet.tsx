@@ -7,6 +7,7 @@ import {
   type TournamentTeeSheetRow,
 } from '@/lib/tournament-tee-sheet';
 import { formatLabel } from '@/lib/tournament-labels';
+import { formatClubTime } from '@/lib/club-timezone';
 import { cn } from '@/lib/cn';
 import type {
   Tournament,
@@ -157,13 +158,17 @@ export function TournamentTvTeeSheet({
   const visibleRows = pages[pageIndex] ?? rows;
   const roundFormat = tournament.round_schedule[roundNumber - 1]?.formats[0];
   const formatName = roundFormat ? formatLabel(roundFormat) : null;
+  const clubClockLabel = formatClubTime(now.toISOString(), true);
 
   return (
     <View className={cn('rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden', className)}>
       <View className="px-3 py-2 border-b border-neutral-800 flex-row items-center justify-between">
-        <Text className="text-neutral-400 text-[10px] font-semibold uppercase tracking-widest">
-          Tee sheet
-        </Text>
+        <View>
+          <Text className="text-neutral-400 text-[10px] font-semibold uppercase tracking-widest">
+            Tee sheet
+          </Text>
+          <Text className="text-neutral-600 text-[10px] mt-0.5">Now {clubClockLabel}</Text>
+        </View>
         {pages.length > 1 ? (
           <Text className="text-neutral-600 text-[10px]">
             {pageIndex + 1}/{pages.length}

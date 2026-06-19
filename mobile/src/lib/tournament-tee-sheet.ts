@@ -31,7 +31,7 @@ export interface TournamentTeeSheetRow {
   resultSummary: string | null;
 }
 
-const ON_TEE_LEAD_MS = 15 * 60 * 1000;
+const ON_TEE_GRACE_MS = 2 * 60 * 1000;
 
 export function resolveTeeSheetDisplayStatus(
   group: TournamentMatchGroup,
@@ -42,8 +42,11 @@ export function resolveTeeSheetDisplayStatus(
   if (playStatus === 'in_progress') return 'live';
 
   const teeMs = new Date(group.tee_time).getTime();
-  if (now.getTime() >= teeMs - ON_TEE_LEAD_MS) return 'on_tee';
-  return 'upcoming';
+  const nowMs = now.getTime();
+
+  // Align with actual tee time in Moncton — not 15 min early.
+  if (nowMs + ON_TEE_GRACE_MS < teeMs) return 'upcoming';
+  return 'on_tee';
 }
 
 export function teeSheetStatusLabel(status: TeeSheetDisplayStatus): string {

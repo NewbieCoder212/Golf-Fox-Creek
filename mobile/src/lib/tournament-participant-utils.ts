@@ -247,6 +247,8 @@ export function getParticipantOnboardingLabel(status: ParticipantOnboardingStatu
       return 'Pending setup';
     case 'ready':
       return 'Account ready';
+    case 'awaiting_app_login':
+      return 'Awaiting app login';
     case 'logged_in':
       return 'Logged in';
   }

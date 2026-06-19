@@ -38,6 +38,7 @@ interface TournamentDirectResultPanelProps {
   onSetCurrentHole: (hole: number) => void;
   onSetActivePairingIndex: (index: number) => void;
   onSetHoleOutcome: (hole: number, winner: TournamentMatchHoleWinner, pairingIndex?: number) => void;
+  scoreEntryDisabled?: boolean;
 }
 
 function HoleNavigator({
@@ -84,6 +85,7 @@ function TeamMatchSection({
   outcomes,
   onSetCurrentHole,
   onSetHoleOutcome,
+  scoreEntryDisabled = false,
 }: {
   sideAName: string;
   sideBName: string;
@@ -93,6 +95,7 @@ function TeamMatchSection({
   outcomes: HoleOutcomesMap;
   onSetCurrentHole: (hole: number) => void;
   onSetHoleOutcome: (hole: number, winner: TournamentMatchHoleWinner) => void;
+  scoreEntryDisabled?: boolean;
 }) {
   const holeRows = outcomesMapToHoleResultRows(outcomes);
   const matchStatus = computeLiveMatchStatus({
@@ -122,7 +125,7 @@ function TeamMatchSection({
         sideAPlayers={sideAPlayers}
         sideBPlayers={sideBPlayers}
         currentOutcome={currentOutcome}
-        disabled={locked}
+        disabled={locked || scoreEntryDisabled}
         onSelect={(winner) => onSetHoleOutcome(currentHole, winner)}
       />
       <MatchPlayHoleGrid
@@ -143,6 +146,7 @@ function SinglesPairingSection({
   outcomes,
   onSetCurrentHole,
   onSetHoleOutcome,
+  scoreEntryDisabled = false,
 }: {
   pairing: SinglesPairing;
   sideAName: string;
@@ -151,6 +155,7 @@ function SinglesPairingSection({
   outcomes: HoleOutcomesMap;
   onSetCurrentHole: (hole: number) => void;
   onSetHoleOutcome: (hole: number, winner: TournamentMatchHoleWinner, pairingIndex: number) => void;
+  scoreEntryDisabled?: boolean;
 }) {
   const holeRows = outcomesMapToHoleResultRows(outcomes);
   const matchStatus = computeLiveMatchStatus({
@@ -179,7 +184,7 @@ function SinglesPairingSection({
         sideAPlayers={[pairing.sideAPlayer]}
         sideBPlayers={[pairing.sideBPlayer]}
         currentOutcome={currentOutcome}
-        disabled={locked}
+        disabled={locked || scoreEntryDisabled}
         onSelect={(winner) =>
           onSetHoleOutcome(currentHole, winner, pairing.pairingIndex)
         }
@@ -209,6 +214,7 @@ export function TournamentDirectResultPanel({
   onSetCurrentHole,
   onSetActivePairingIndex,
   onSetHoleOutcome,
+  scoreEntryDisabled = false,
 }: TournamentDirectResultPanelProps) {
   const isSingles = format === 'singles' || format === 'match_play';
 
@@ -223,6 +229,7 @@ export function TournamentDirectResultPanel({
         outcomes={holeOutcomes}
         onSetCurrentHole={onSetCurrentHole}
         onSetHoleOutcome={onSetHoleOutcome}
+        scoreEntryDisabled={scoreEntryDisabled}
       />
     );
   }
@@ -282,6 +289,7 @@ export function TournamentDirectResultPanel({
           outcomes={pairingOutcomes[activePairing.pairingIndex] ?? {}}
           onSetCurrentHole={onSetCurrentHole}
           onSetHoleOutcome={onSetHoleOutcome}
+          scoreEntryDisabled={scoreEntryDisabled}
         />
       ) : null}
     </View>

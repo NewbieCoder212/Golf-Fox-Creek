@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { UserProfile } from '@/types';
 import { useAdminAuthStore } from './admin-auth-store';
+import { recordMemberSignIn } from './supabase';
 
 function isAdminRole(role: string | undefined | null): boolean {
   return role === 'manager' || role === 'super_admin';
@@ -68,6 +69,8 @@ export const useMemberAuthStore = create<MemberAuthState>((set, get) => ({
     } catch (err) {
       console.log('[MemberAuth] Failed to persist auth:', err);
     }
+
+    void recordMemberSignIn(data.user.id, data.accessToken);
   },
 
   clearAuth: async () => {
@@ -103,6 +106,7 @@ export const useMemberAuthStore = create<MemberAuthState>((set, get) => ({
           profile: data.profile,
           isLoading: false,
         });
+        void recordMemberSignIn(data.user.id, data.accessToken);
         return true;
       }
     } catch (err) {

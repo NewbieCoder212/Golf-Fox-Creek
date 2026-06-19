@@ -181,12 +181,14 @@ export type ParticipantOnboardingStatus =
   | 'not_invited'
   | 'pending_setup'
   | 'ready'
+  | 'awaiting_app_login'
   | 'logged_in';
 
 export interface ParticipantOnboardingEntry {
   playerId: string;
   status: ParticipantOnboardingStatus;
   lastSignInAt: string | null;
+  authActivityAt?: string | null;
 }
 
 export interface ParticipantOnboardingSummary {
@@ -195,6 +197,7 @@ export interface ParticipantOnboardingSummary {
   notInvited: number;
   pendingSetup: number;
   ready: number;
+  awaitingAppLogin: number;
   loggedIn: number;
 }
 

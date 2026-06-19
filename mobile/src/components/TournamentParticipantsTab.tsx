@@ -62,6 +62,8 @@ function onboardingBadgeStyles(status: ParticipantOnboardingStatus): {
       return { container: 'bg-lime-900/30', text: 'text-lime-400' };
     case 'ready':
       return { container: 'bg-emerald-900/20', text: 'text-emerald-400' };
+    case 'awaiting_app_login':
+      return { container: 'bg-orange-900/30', text: 'text-orange-300' };
     case 'pending_setup':
       return { container: 'bg-amber-900/30', text: 'text-amber-400' };
     case 'not_invited':
@@ -356,7 +358,10 @@ export function TournamentParticipantsTab({
         ) : onboarding ? (
           <>
             <Text className="text-white text-sm leading-6">
-              {onboarding.summary.loggedIn} logged in
+              {onboarding.summary.loggedIn} logged in to app
+              {onboarding.summary.awaitingAppLogin > 0
+                ? ` · ${onboarding.summary.awaitingAppLogin} awaiting app login`
+                : ''}
               {onboarding.summary.pendingSetup > 0
                 ? ` · ${onboarding.summary.pendingSetup} pending setup`
                 : ''}
@@ -366,9 +371,9 @@ export function TournamentParticipantsTab({
                 : ''}
               {onboarding.summary.noEmail > 0 ? ` · ${onboarding.summary.noEmail} no email` : ''}
             </Text>
-            <Text className="text-neutral-600 text-xs mt-1">
-              Pending setup means the invite was sent but they have not finished creating their
-              account yet.
+            <Text className="text-neutral-600 text-xs mt-1 leading-relaxed">
+              Logged in means they opened the member portal (Sign In). Awaiting app login means a
+              reset or invite link was used but they have not signed in on foxcreek.golf yet.
             </Text>
           </>
         ) : (
@@ -471,6 +476,9 @@ export function TournamentParticipantsTab({
                 : 'no_email');
           const onboardingBadge = onboardingBadgeStyles(onboardingStatus);
           const lastSignInLabel = formatParticipantLastSignIn(onboardingEntry?.lastSignInAt ?? null);
+          const authActivityLabel = formatParticipantLastSignIn(
+            onboardingEntry?.authActivityAt ?? null
+          );
 
           if (isEditing) {
             return (
@@ -583,7 +591,12 @@ export function TournamentParticipantsTab({
                     </Text>
                   </View>
                   {lastSignInLabel ? (
-                    <Text className="text-neutral-600 text-[10px]">Last login {lastSignInLabel}</Text>
+                    <Text className="text-neutral-600 text-[10px]">App login {lastSignInLabel}</Text>
+                  ) : null}
+                  {onboardingStatus === 'awaiting_app_login' && authActivityLabel ? (
+                    <Text className="text-orange-400/70 text-[10px]">
+                      Link used {authActivityLabel}
+                    </Text>
                   ) : null}
                 </View>
               </View>

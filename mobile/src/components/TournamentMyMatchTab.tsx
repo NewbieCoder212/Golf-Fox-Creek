@@ -190,12 +190,11 @@ function MyMatchCard({
   onViewStandings,
 }: MyMatchCardProps) {
   const router = useRouter();
-  const { open: scorecardTimeOpen, hint: scorecardClosedHint } = useScorecardTimeGate({
+  const { open: scoreEntryOpen, hint: scorecardClosedHint } = useScorecardTimeGate({
     tournament,
     matchGroup: group,
     bypassTimeGate: bypassScorecardTimeGate,
   });
-  const canOpenScorecard = scorecardTimeOpen;
   const groupFormat = getMatchGroupFormat(group, tournament);
   const mySideName = viewerSide === 'side_a' ? sideAName : sideBName;
   const oppSideName = viewerSide === 'side_a' ? sideBName : sideAName;
@@ -383,11 +382,8 @@ function MyMatchCard({
           </Text>
           <Pressable
             onPress={onEnterScores}
-            disabled={!canOpenScorecard || isOpeningScorecard}
-            className={cn(
-              'mt-4 flex-row items-center justify-center rounded-xl py-3.5 active:opacity-80',
-              canOpenScorecard ? 'bg-lime-600' : 'bg-neutral-800 opacity-50'
-            )}
+            disabled={isOpeningScorecard}
+            className="mt-4 flex-row items-center justify-center rounded-xl py-3.5 active:opacity-80 bg-lime-600"
           >
             {isOpeningScorecard ? (
               <ActivityIndicator color="#fff" />
@@ -412,18 +408,17 @@ function MyMatchCard({
           ) : null}
           <Pressable
             onPress={onEnterScores}
-            disabled={!canOpenScorecard || isOpeningScorecard}
-            className={cn(
-              'flex-row items-center justify-center rounded-xl py-3.5 active:opacity-80',
-              canOpenScorecard ? 'bg-lime-600' : 'bg-neutral-800 opacity-50'
-            )}
+            disabled={isOpeningScorecard}
+            className="flex-row items-center justify-center rounded-xl py-3.5 active:opacity-80 bg-lime-600"
           >
             {isOpeningScorecard ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <>
                 <ClipboardList size={18} color="#fff" />
-                <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+                <Text className="text-white font-bold text-base ml-2">
+                  {scoreEntryOpen ? 'Enter scores' : 'Open scorecard'}
+                </Text>
               </>
             )}
           </Pressable>

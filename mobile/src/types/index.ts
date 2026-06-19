@@ -21,6 +21,7 @@ export interface UserProfile {
   email: string | null;
   role: UserRole;
   invite_status: InviteStatus;
+  last_member_sign_in_at?: string | null;
   club_id: string | null;
   location_tracking_enabled: boolean;
   handicap_index: number | null;

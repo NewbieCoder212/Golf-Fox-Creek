@@ -788,6 +788,16 @@ export default function ScorecardScreen() {
           <ScorecardHeaderAdBanner />
         </View>
 
+        {isTournamentMode && tournamentSession.hasMatchPlay && !tournamentSession.scoreEntryOpen && tournamentSession.scoreEntryHint ? (
+          <View className="mx-4 mt-4 bg-amber-950/40 border border-amber-700/50 rounded-xl px-4 py-3">
+            <Text className="text-amber-200 text-sm font-semibold">Score entry not open yet</Text>
+            <Text className="text-neutral-400 text-xs mt-1">{tournamentSession.scoreEntryHint}</Text>
+            <Text className="text-neutral-500 text-xs mt-2">
+              You can preview pairings and the scorecard layout now. Hole buttons unlock when your tee window opens.
+            </Text>
+          </View>
+        ) : null}
+
         {isTournamentMode && tournamentSession.hasMatchPlay && tournamentSession.format ? (
           <TournamentDirectResultPanel
             format={tournamentSession.format}
@@ -803,6 +813,7 @@ export default function ScorecardScreen() {
             onSetCurrentHole={tournamentSession.setCurrentHole}
             onSetActivePairingIndex={tournamentSession.setActivePairingIndex}
             onSetHoleOutcome={tournamentSession.setHoleOutcome}
+            scoreEntryDisabled={!tournamentSession.scoreEntryOpen}
           />
         ) : null}
 
@@ -935,7 +946,9 @@ export default function ScorecardScreen() {
               <Text className="text-neutral-500 text-xs text-center mb-3">
                 {tournamentSession.isSyncing
                   ? 'Saving hole result…'
-                  : 'Hole results save automatically when you tap a side.'}
+                  : tournamentSession.scoreEntryOpen
+                    ? 'Hole results save automatically when you tap a side.'
+                    : tournamentSession.scoreEntryHint ?? 'Score entry opens before your tee time.'}
               </Text>
               <Pressable
                 onPress={handleClearTournamentScores}

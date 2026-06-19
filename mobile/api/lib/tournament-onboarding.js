@@ -2,23 +2,57 @@ const { adminFetch } = require('./supabase-fetch');
 
 function resolveOnboardingStatus(params) {
   if (!params.email) {
-    return { status: 'no_email', lastSignInAt: null };
+    return { status: 'no_email', lastSignInAt: null, authActivityAt: null };
   }
   if (!params.inviteEmailSentAt) {
-    return { status: 'not_invited', lastSignInAt: null };
+    return { status: 'not_invited', lastSignInAt: null, authActivityAt: null };
   }
 
   const authUser = params.authUser;
   const confirmed = Boolean(authUser?.email_confirmed_at);
-  const pendingProfile = params.inviteStatus === 'pending';
+  const pendingProfile = params.profile?.invite_status === 'pending';
 
   if (!authUser || pendingProfile || !confirmed) {
-    return { status: 'pending_setup', lastSignInAt: null };
+    return { status: 'pending_setup', lastSignInAt: null, authActivityAt: null };
   }
+
+  const memberSignInAt = params.profile?.last_member_sign_in_at ?? null;
+  if (memberSignInAt) {
+    return {
+      status: 'logged_in',
+      lastSignInAt: memberSignInAt,
+      authActivityAt: authUser.last_sign_in_at,
+    };
+  }
+
   if (authUser.last_sign_in_at) {
-    return { status: 'logged_in', lastSignInAt: authUser.last_sign_in_at };
+    return {
+      status: 'awaiting_app_login',
+      lastSignInAt: null,
+      authActivityAt: authUser.last_sign_in_at,
+    };
   }
-  return { status: 'ready', lastSignInAt: null };
+
+  return { status: 'ready', lastSignInAt: null, authActivityAt: null };
+}
+
+function summaryKeyForStatus(status) {
+  switch (status) {
+    case 'no_email':
+      return 'noEmail';
+    case 'not_invited':
+      return 'notInvited';
+    case 'pending_setup':
+      return 'pendingSetup';
+    case 'ready':
+      return 'ready';
+    case 'awaiting_app_login':
+      return 'awaitingAppLogin';
+    case 'logged_in':
+      return 'loggedIn';
+    default:
+      return 'ready';
+  }
 }
 
 async function listAuthUsersByEmail() {
@@ -67,37 +101,40 @@ async function loadParticipantOnboarding(tournamentId) {
     .filter(Boolean);
 
   const profileById = new Map();
-  const profileStatusByEmail = new Map();
+  const profileByEmail = new Map();
 
   if (userIds.length > 0) {
     const profilesById = await adminFetch(
-      `/rest/v1/user_profiles?id=in.(${userIds.join(',')})&select=id,email,invite_status`
+      `/rest/v1/user_profiles?id=in.(${userIds.join(',')})&select=id,email,invite_status,last_member_sign_in_at`
     );
     if (profilesById.ok && profilesById.data) {
       for (const profile of profilesById.data) {
-        if (profile.id && profile.invite_status) {
-          profileById.set(profile.id, profile.invite_status);
-        }
+        if (!profile.id || !profile.invite_status) continue;
+        const snapshot = {
+          invite_status: profile.invite_status,
+          last_member_sign_in_at: profile.last_member_sign_in_at ?? null,
+        };
+        profileById.set(profile.id, snapshot);
         const email = profile.email?.trim().toLowerCase();
-        if (email && profile.invite_status) {
-          profileStatusByEmail.set(email, profile.invite_status);
-        }
+        if (email) profileByEmail.set(email, snapshot);
       }
     }
   }
 
-  const missingEmails = emails.filter((email) => !profileStatusByEmail.has(email));
+  const missingEmails = emails.filter((email) => !profileByEmail.has(email));
   if (missingEmails.length > 0) {
     const inList = missingEmails.map((email) => `"${email.replace(/"/g, '')}"`).join(',');
     const profilesByEmail = await adminFetch(
-      `/rest/v1/user_profiles?email=in.(${inList})&select=id,email,invite_status`
+      `/rest/v1/user_profiles?email=in.(${inList})&select=id,email,invite_status,last_member_sign_in_at`
     );
     if (profilesByEmail.ok && profilesByEmail.data) {
       for (const profile of profilesByEmail.data) {
         const email = profile.email?.trim().toLowerCase();
-        if (email && profile.invite_status) {
-          profileStatusByEmail.set(email, profile.invite_status);
-        }
+        if (!email || !profile.invite_status) continue;
+        profileByEmail.set(email, {
+          invite_status: profile.invite_status,
+          last_member_sign_in_at: profile.last_member_sign_in_at ?? null,
+        });
       }
     }
   }
@@ -108,39 +145,31 @@ async function loadParticipantOnboarding(tournamentId) {
     notInvited: 0,
     pendingSetup: 0,
     ready: 0,
+    awaitingAppLogin: 0,
     loggedIn: 0,
   };
 
   const entries = players.map((player) => {
     const email = player.email?.trim().toLowerCase() ?? null;
-    const inviteStatus =
+    const profile =
       (player.user_id ? profileById.get(player.user_id) : null) ??
-      (email ? profileStatusByEmail.get(email) : null) ??
+      (email ? profileByEmail.get(email) : null) ??
       null;
 
     const resolved = resolveOnboardingStatus({
       email,
       inviteEmailSentAt: player.invite_email_sent_at,
-      inviteStatus,
+      profile,
       authUser: email ? (authByEmail.get(email) ?? null) : null,
     });
 
-    const summaryKey =
-      resolved.status === 'no_email'
-        ? 'noEmail'
-        : resolved.status === 'not_invited'
-          ? 'notInvited'
-          : resolved.status === 'pending_setup'
-            ? 'pendingSetup'
-            : resolved.status === 'ready'
-              ? 'ready'
-              : 'loggedIn';
-    summary[summaryKey] += 1;
+    summary[summaryKeyForStatus(resolved.status)] += 1;
 
     return {
       playerId: player.id,
       status: resolved.status,
       lastSignInAt: resolved.lastSignInAt,
+      authActivityAt: resolved.authActivityAt,
     };
   });
 

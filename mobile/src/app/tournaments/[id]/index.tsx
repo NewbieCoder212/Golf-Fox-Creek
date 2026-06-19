@@ -158,15 +158,14 @@ export default function TournamentDetailScreen() {
     myTeams.length > 0 ||
     (tournament ? tournamentHasSinglesRound(tournament) : false);
 
-  const { open: scorecardTimeOpen, hint: scorecardClosedHint } = useScorecardTimeGate({
+  const { open: scoreEntryOpen, hint: scorecardClosedHint } = useScorecardTimeGate({
     tournament: tournament ?? { start_date: '', end_date: '' },
     matchGroup: myMatchAssignment?.group ?? null,
     bypassTimeGate: isManager,
   });
 
-  const canEnterScores = hasRosterAccess && scorecardTimeOpen;
   const scorecardTimeHint =
-    hasRosterAccess && !scorecardTimeOpen ? scorecardClosedHint : null;
+    hasRosterAccess && !scoreEntryOpen ? scorecardClosedHint : null;
 
   const handleEnterScores = async () => {
     if (!id) return;
@@ -281,7 +280,7 @@ export default function TournamentDetailScreen() {
                 rosterPlayerIds={myRosterPlayerIds}
                 teams={teams}
                 playerNameById={playerNameById}
-                canEnterScores={canEnterScores}
+                scoreEntryOpen={scoreEntryOpen}
                 scorecardClosedHint={scorecardTimeHint}
                 isOpeningScorecard={isOpeningScorecard}
                 onEnterScores={() => void handleEnterScores()}
@@ -296,10 +295,10 @@ export default function TournamentDetailScreen() {
                 ) : null}
                 <Pressable
                   onPress={() => void handleEnterScores()}
-                  disabled={!canEnterScores || isOpeningScorecard}
+                  disabled={!hasRosterAccess || isOpeningScorecard}
                   className={cn(
                     'flex-row items-center justify-center rounded-xl py-4',
-                    canEnterScores ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
+                    hasRosterAccess ? 'bg-lime-600 active:opacity-80' : 'bg-neutral-800 opacity-50'
                   )}
                 >
                   {isOpeningScorecard ? (
@@ -307,7 +306,9 @@ export default function TournamentDetailScreen() {
                   ) : (
                     <>
                       <ClipboardList size={20} color="#fff" />
-                      <Text className="text-white font-bold text-base ml-2">Enter Scores</Text>
+                      <Text className="text-white font-bold text-base ml-2">
+                        {scoreEntryOpen ? 'Enter scores' : 'Open scorecard'}
+                      </Text>
                     </>
                   )}
                 </Pressable>

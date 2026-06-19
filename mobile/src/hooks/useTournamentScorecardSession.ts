@@ -35,6 +35,8 @@ import {
   resolveTournamentPlayerHandicap,
 } from '@/lib/tournament-player-service';
 import { findMatchGroupForRosterPlayer } from '@/lib/tournament-scorecard-routing';
+import { useScorecardTimeGate } from '@/hooks/useScorecardTimeGate';
+import { canAccessAdminRole } from '@/lib/admin-auth-bridge';
 import {
   getMatchGroupFormat,
   getRoundFormat,
@@ -94,7 +96,7 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
   const clearMatchRoundScores = useTournamentStore((s) => s.clearMatchRoundScores);
   const persistSession = useTournamentStore((s) => s.persistSession);
   const setActiveMatchGroup = useTournamentStore((s) => s.setActiveMatchGroup);
-  const setHoleOutcome = useTournamentStore((s) => s.setHoleOutcome);
+  const setHoleOutcomeRaw = useTournamentStore((s) => s.setHoleOutcome);
   const setActivePairingIndex = useTournamentStore((s) => s.setActivePairingIndex);
   const holeOutcomes = useTournamentStore((s) => s.holeOutcomes);
   const pairingOutcomes = useTournamentStore((s) => s.pairingOutcomes);
@@ -168,6 +170,13 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
 
   const activeMatchGroup = resolvedMatch?.group ?? null;
   const effectiveSide = side ?? resolvedMatch?.side;
+
+  const isManager = canAccessAdminRole(profile?.role);
+  const { open: scoreEntryOpen, hint: scoreEntryHint } = useScorecardTimeGate({
+    tournament: tournament ?? { start_date: '', end_date: '' },
+    matchGroup: activeMatchGroup,
+    bypassTimeGate: isManager,
+  });
 
   useEffect(() => {
     setActiveMatchGroup(activeMatchGroup);
@@ -1046,7 +1055,18 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     await queryClient.invalidateQueries({ queryKey: ['hubTodayMatch'] });
   }, [queryClient, id, activeMatchGroup?.id]);
 
+  const setHoleOutcome = useCallback(
+    (hole: number, winner: Parameters<typeof setHoleOutcomeRaw>[1], pairingIndex?: number) => {
+      if (!scoreEntryOpen) return;
+      setHoleOutcomeRaw(hole, winner, pairingIndex);
+    },
+    [scoreEntryOpen, setHoleOutcomeRaw]
+  );
+
   const handleSync = async () => {
+    if (!scoreEntryOpen) {
+      return { success: false, error: scoreEntryHint ?? 'Score entry is not open yet' };
+    }
     const result = await syncScoresToSupabase({
       matchUseNetScoring: tournament?.match_use_net_scoring ?? false,
     });
@@ -1079,22 +1099,22 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
       return;
     }
 
-    if (prevHoleRef.current === currentHole || !id || !isDirty) {
+    if (prevHoleRef.current === currentHole || !id || !isDirty || !scoreEntryOpen) {
       prevHoleRef.current = currentHole;
       return;
     }
 
     prevHoleRef.current = currentHole;
     void handleSync();
-  }, [currentHole, id, isDirty]);
+  }, [currentHole, id, isDirty, scoreEntryOpen]);
 
   useEffect(() => {
-    if (!id || !isDirty) return;
+    if (!id || !isDirty || !scoreEntryOpen) return;
     const timer = setTimeout(() => {
       void handleSync();
     }, 600);
     return () => clearTimeout(timer);
-  }, [holeOutcomes, pairingOutcomes]);
+  }, [holeOutcomes, pairingOutcomes, scoreEntryOpen]);
 
   const isMatchComplete = useMemo(
     () =>
@@ -1170,5 +1190,7 @@ export function useTournamentScorecardSession(params: TournamentScorecardParams 
     handleMatchPlayerAdjust,
     handleMatchTeamAdjust,
     hasMatchPlay: Boolean(activeMatchGroup),
+    scoreEntryOpen,
+    scoreEntryHint,
   };
 }

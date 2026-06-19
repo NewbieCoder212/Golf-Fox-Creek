@@ -18,6 +18,7 @@ import {
 } from '@/components/TvSponsorSlot';
 import { TournamentLiveMatchGrids } from '@/components/TournamentLiveMatchGrids';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import { TournamentTvTeeSheet } from '@/components/TournamentTvTeeSheet';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
 import { buildMatchPointsLeaderboard } from '@/lib/tournament-service';
@@ -160,6 +161,19 @@ export function TournamentTvDisplayContent({
   const sidebarSponsors = data.sponsors.sidebar;
   const hasFooterAd = footerSponsors.length > 0;
 
+  const teeSheet =
+    tournament && matchGroups.length > 0 ? (
+      <TournamentTvTeeSheet
+        tournament={tournament}
+        teams={teams}
+        matchGroups={matchGroups}
+        holeResults={holeResults}
+        playerNameById={playerNameById}
+        roundNumber={displayRound}
+        compact={!isWideLayout}
+      />
+    ) : null;
+
   const standingsBoard =
     sideATeam && sideBTeam ? (
       <TournamentTeamMatchupBoard
@@ -223,8 +237,9 @@ export function TournamentTvDisplayContent({
       <View className="flex-1 min-h-0 px-4 py-3">
         {isWideLayout ? (
           <View className="flex-1 min-h-0 flex-row gap-4">
-            <View className="w-[320px] shrink-0 gap-3">
+            <View className="w-[320px] shrink-0 gap-3 min-h-0">
               {standingsBoard}
+              {teeSheet ? <View className="flex-1 min-h-0">{teeSheet}</View> : null}
               {sidebarSponsors.length > 0 ? (
                 <TvSidebarSponsorStack sponsors={sidebarSponsors} />
               ) : null}
@@ -249,6 +264,7 @@ export function TournamentTvDisplayContent({
         ) : (
           <View className="flex-1 min-h-0 gap-3">
             {standingsBoard}
+            {teeSheet}
 
             <View className="flex-1 min-h-0">
               <TournamentLiveMatchGrids

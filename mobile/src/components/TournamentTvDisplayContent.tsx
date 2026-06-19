@@ -170,7 +170,7 @@ export function TournamentTvDisplayContent({
         holeResults={holeResults}
         playerNameById={playerNameById}
         roundNumber={displayRound}
-        compact={!isWideLayout}
+        compact={false}
       />
     ) : null;
 
@@ -237,34 +237,35 @@ export function TournamentTvDisplayContent({
       <View className="flex-1 min-h-0 px-4 py-3">
         {isWideLayout ? (
           <View className="flex-1 min-h-0 flex-row gap-4">
-            <View className="w-[320px] shrink-0 gap-3 min-h-0">
+            <View className="w-[320px] shrink-0 gap-3">
               {standingsBoard}
-              {teeSheet ? <View className="flex-1 min-h-0">{teeSheet}</View> : null}
               {sidebarSponsors.length > 0 ? (
                 <TvSidebarSponsorStack sponsors={sidebarSponsors} />
               ) : null}
             </View>
 
-            <View className="flex-1 min-w-0 min-h-0">
-              <TournamentLiveMatchGrids
-                matchGroups={matchGroups}
-                scores={scores}
-                holeResults={holeResults}
-                teamNameById={teamNameById}
-                playerNameById={playerNameById}
-                useNetScoring={matchUseNetScoring}
-                variant="tv-compact"
-                roundNumber={displayRound}
-                hideTitle
-                layout="tv-carousel"
-                liveOnly
-              />
+            <View className="flex-1 min-w-0 min-h-0 gap-3">
+              <View className="flex-1 min-h-0">
+                <TournamentLiveMatchGrids
+                  matchGroups={matchGroups}
+                  scores={scores}
+                  holeResults={holeResults}
+                  teamNameById={teamNameById}
+                  playerNameById={playerNameById}
+                  useNetScoring={matchUseNetScoring}
+                  variant="tv-compact"
+                  roundNumber={displayRound}
+                  hideTitle
+                  layout="tv-carousel"
+                  liveOnly
+                />
+              </View>
+              {teeSheet ? <View className="shrink-0">{teeSheet}</View> : null}
             </View>
           </View>
         ) : (
           <View className="flex-1 min-h-0 gap-3">
             {standingsBoard}
-            {teeSheet}
 
             <View className="flex-1 min-h-0">
               <TournamentLiveMatchGrids
@@ -281,6 +282,7 @@ export function TournamentTvDisplayContent({
                 liveOnly
               />
             </View>
+            {teeSheet ? <View className="shrink-0">{teeSheet}</View> : null}
           </View>
         )}
       </View>

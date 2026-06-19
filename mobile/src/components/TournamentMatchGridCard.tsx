@@ -3,6 +3,10 @@ import { View, Text, ScrollView } from 'react-native';
 import type { MatchGridCell, MatchGridModel, MatchGridRow } from '@/lib/tournament-match-grid';
 import { TOURNAMENT_MATCH_HOLES } from '@/lib/tournament-match-scoring';
 import { getHoleWinnerBgClass, SIDE_A_COLOR, SIDE_B_COLOR } from '@/lib/match-play-theme';
+import {
+  ColoredMatchResultText,
+  ColoredMatchStatusText,
+} from '@/components/match-play/ColoredMatchStatusText';
 import { cn } from '@/lib/cn';
 
 const GRID_SIZES = {
@@ -191,25 +195,39 @@ export function TournamentMatchGridCard({
               </Text>
             ) : null}
             {model.resultSummary ? (
-              <Text
-                className={cn(
-                  'font-semibold mt-0.5',
-                  isComplete ? 'text-neutral-200' : 'text-neutral-400',
-                  variant === 'tv' ? 'text-sm' : isCompact ? 'text-[10px]' : 'text-xs'
-                )}
-                numberOfLines={1}
-              >
-                {model.resultSummary}
-              </Text>
-            ) : model.inProgress && model.throughHole > 0 && !isCompact ? (
-              <Text
-                className={cn(
-                  'text-neutral-500 mt-0.5',
-                  variant === 'tv' ? 'text-xs' : 'text-[10px]'
-                )}
-              >
-                Through hole {model.throughHole}
-              </Text>
+              isComplete ? (
+                <ColoredMatchResultText
+                  summary={model.resultSummary}
+                  sideAName={model.sideAName}
+                  sideBName={model.sideBName}
+                  compact={isCompact}
+                />
+              ) : model.inProgress && model.matchStatus.throughHole > 0 ? (
+                <ColoredMatchStatusText
+                  matchStatus={model.matchStatus}
+                  sideAName={model.sideAName}
+                  sideBName={model.sideBName}
+                  compact={isCompact}
+                />
+              ) : (
+                <Text
+                  className={cn(
+                    'font-semibold mt-0.5',
+                    isComplete ? 'text-neutral-200' : 'text-neutral-400',
+                    variant === 'tv' ? 'text-sm' : isCompact ? 'text-[10px]' : 'text-xs'
+                  )}
+                  numberOfLines={2}
+                >
+                  {model.resultSummary}
+                </Text>
+              )
+            ) : model.inProgress && model.matchStatus.throughHole > 0 ? (
+              <ColoredMatchStatusText
+                matchStatus={model.matchStatus}
+                sideAName={model.sideAName}
+                sideBName={model.sideBName}
+                compact={isCompact}
+              />
             ) : null}
           </View>
           {showLive ? (

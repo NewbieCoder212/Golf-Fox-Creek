@@ -29,6 +29,7 @@ import {
   computeLiveMatchStatus,
   computeMatchLeadFromResults,
   formatMatchLeadWithTeams,
+  type MatchStatus,
 } from './tournament-match-status';
 import { formatTeeTimeLabel } from './tournament-scorecard-routing';
 
@@ -69,6 +70,7 @@ export interface MatchGridModel {
   playStatus: MatchPlayStatus;
   statusLabel: string;
   resultSummary: string | null;
+  matchStatus: MatchStatus;
   rows: MatchGridRow[];
 }
 
@@ -426,6 +428,7 @@ export function buildMatchGridModel(params: {
     playStatus,
     statusLabel: formatMatchPlayStatusLabel(playStatus),
     resultSummary: formatMatchResultSummary(matchGroup, liveStatus, sideAName, sideBName),
+    matchStatus: liveStatus,
     rows,
   };
 }

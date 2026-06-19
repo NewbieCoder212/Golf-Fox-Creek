@@ -19,7 +19,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { getPostLoginRoute, restoreStoredAuthSession } from '@/lib/admin-auth-bridge';
 import { AddToHomeScreenPrompt } from '@/components/AddToHomeScreenPrompt';
-import { ensureAuthEmailLinkRoute } from '@/lib/supabase';
+import { ensureAuthEmailLinkRoute, isWebPublicAuthLocation } from '@/lib/supabase';
 import { foxColors } from '@/theme/tokens';
 
 if (typeof window !== 'undefined') {
@@ -72,7 +72,13 @@ function useProtectedRoute() {
     const inAcceptInvite = segments[0] === 'accept-invite';
     const inDisplay = segments[0] === 'display';
     const isPublicAuthRoute =
-      inAuthGroup || inAdminGroup || inResetPassword || inForgotPassword || inAcceptInvite || inDisplay;
+      inAuthGroup ||
+      inAdminGroup ||
+      inResetPassword ||
+      inForgotPassword ||
+      inAcceptInvite ||
+      inDisplay ||
+      (Platform.OS === 'web' && isWebPublicAuthLocation());
 
     // If not authenticated and not on a public auth route, redirect to login
     // (Admin has its own auth system via Supabase)

@@ -828,19 +828,32 @@ export function getPasswordResetRedirectUrl(): string {
 export type AuthLinkTokens = {
   accessToken: string;
   refreshToken: string | null;
+  linkType?: string | null;
 };
 
 const AUTH_LINK_TOKENS_STORAGE_KEY = 'foxcreek.pending_auth_link_tokens';
 
 /** Persist email-link tokens when in-app browsers drop the URL hash during client routing. */
 export function captureAuthLinkTokensFromUrl(url: string): AuthLinkTokens | null {
-  const tokens = parseAuthTokensFromUrl(url);
-  if (!tokens || typeof sessionStorage === 'undefined') return tokens;
+  const params = parseAuthLinkParams(url);
+  if (!params) return null;
 
-  try {
-    sessionStorage.setItem(AUTH_LINK_TOKENS_STORAGE_KEY, JSON.stringify(tokens));
-  } catch {
-    // Ignore quota / private mode errors.
+  const accessToken = params.get('access_token');
+  const type = params.get('type');
+  if (!accessToken || !isAuthLinkType(type)) return null;
+
+  const tokens: AuthLinkTokens = {
+    accessToken,
+    refreshToken: params.get('refresh_token'),
+    linkType: type,
+  };
+
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.setItem(AUTH_LINK_TOKENS_STORAGE_KEY, JSON.stringify(tokens));
+    } catch {
+      // Ignore quota / private mode errors.
+    }
   }
 
   return tokens;
@@ -871,6 +884,41 @@ function peekCapturedAuthLinkTokens(): AuthLinkTokens | null {
   }
 }
 
+export function getAuthCallbackRouteFromStoredTokens(): '/reset-password' | '/accept-invite' | null {
+  const stored = peekCapturedAuthLinkTokens();
+  if (!stored?.accessToken) return null;
+  if (stored.linkType === 'recovery') return '/reset-password';
+  if (
+    stored.linkType === 'invite' ||
+    stored.linkType === 'signup' ||
+    stored.linkType === 'magiclink'
+  ) {
+    return '/accept-invite';
+  }
+  return '/reset-password';
+}
+
+const WEB_PUBLIC_AUTH_PATHS = new Set([
+  '/login',
+  '/forgot-password',
+  '/reset-password',
+  '/accept-invite',
+  '/display',
+]);
+
+/** True when the browser URL is an auth screen or still carries email-link tokens. */
+export function isWebPublicAuthLocation(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  if (WEB_PUBLIC_AUTH_PATHS.has(path)) return true;
+  if (path.startsWith('/admin')) return true;
+  if (getAuthCallbackRouteFromUrl(window.location.href)) return true;
+  if (getAuthCallbackRouteFromStoredTokens()) return true;
+
+  return false;
+}
+
 /** Resolve tokens from the current URL, with sessionStorage fallback after client navigations. */
 export function resolveAuthLinkTokensFromUrl(url: string): AuthLinkTokens | null {
   return captureAuthLinkTokensFromUrl(url) ?? peekCapturedAuthLinkTokens();
@@ -886,7 +934,8 @@ export function ensureAuthEmailLinkRoute(): void {
   const href = window.location.href;
   captureAuthLinkTokensFromUrl(href);
 
-  const callbackRoute = getAuthCallbackRouteFromUrl(href);
+  const callbackRoute =
+    getAuthCallbackRouteFromUrl(href) ?? getAuthCallbackRouteFromStoredTokens();
   if (!callbackRoute) return;
 
   const pathname = window.location.pathname.replace(/\/$/, '') || '/';
@@ -934,6 +983,7 @@ export function parseAuthTokensFromUrl(url: string): AuthLinkTokens | null {
   return {
     accessToken,
     refreshToken: params.get('refresh_token'),
+    linkType: type,
   };
 }
 

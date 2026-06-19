@@ -4,42 +4,29 @@ import { buildTournamentDisplayPayload } from '../lib/tournament-display';
 
 const displayRouter = new Hono();
 
+type DisplayTournamentRow = {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  display_token: string;
+  display_slug: string | null;
+  round_schedule: Array<{ formats: string[] }>;
+  rounds_count: number;
+  match_use_net_scoring: boolean;
+};
+
 async function fetchRows<T>(path: string): Promise<T[]> {
   const { ok, data } = await adminFetch<T[] | T>(path);
   if (!ok) return [];
   return Array.isArray(data) ? data : data ? [data] : [];
 }
 
-displayRouter.get('/tournament/:id', async (c) => {
-  if (!isSupabaseAdminConfigured()) {
-    return c.json({ error: 'Display service is not configured' }, 503);
-  }
+const TOURNAMENT_SELECT =
+  'id,name,start_date,end_date,display_token,display_slug,round_schedule,rounds_count,match_use_net_scoring';
 
-  const tournamentId = c.req.param('id');
-  const token = c.req.query('token')?.trim();
-
-  if (!token) {
-    return c.json({ error: 'Missing display token' }, 401);
-  }
-
-  const tournaments = await fetchRows<{
-    id: string;
-    name: string;
-    start_date: string;
-    end_date: string;
-    display_token: string;
-    round_schedule: Array<{ formats: string[] }>;
-    rounds_count: number;
-    match_use_net_scoring: boolean;
-  }>(
-    `/rest/v1/tournaments?id=eq.${tournamentId}&display_token=eq.${token}&select=id,name,start_date,end_date,display_token,round_schedule,rounds_count,match_use_net_scoring`
-  );
-
-  const tournament = tournaments[0];
-  if (!tournament) {
-    return c.json({ error: 'Tournament not found or invalid token' }, 404);
-  }
-
+async function buildDisplayPayloadForTournament(tournament: DisplayTournamentRow) {
+  const tournamentId = tournament.id;
   const matchGroupSelect =
     'id,tournament_id,round_number,format,side_a_team_id,side_b_team_id,side_a_player_ids,side_b_player_ids,tee_time,starting_hole,group_number,notes,match_winner,match_points_a,match_points_b,created_at';
 
@@ -85,7 +72,7 @@ displayRouter.get('/tournament/:id', async (c) => {
     );
   }
 
-  const payload = buildTournamentDisplayPayload({
+  return buildTournamentDisplayPayload({
     tournament,
     teams: teams as never,
     players: players as never,
@@ -97,7 +84,53 @@ displayRouter.get('/tournament/:id', async (c) => {
     fullScores: scores as never,
     fullHoleResults: fullHoleResults as never,
   });
+}
 
+displayRouter.get('/tournament/by-slug/:slug', async (c) => {
+  if (!isSupabaseAdminConfigured()) {
+    return c.json({ error: 'Display service is not configured' }, 503);
+  }
+
+  const slug = c.req.param('slug').trim().toLowerCase();
+  if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    return c.json({ error: 'Invalid display slug' }, 400);
+  }
+
+  const tournaments = await fetchRows<DisplayTournamentRow>(
+    `/rest/v1/tournaments?display_slug=eq.${encodeURIComponent(slug)}&select=${TOURNAMENT_SELECT}`
+  );
+
+  const tournament = tournaments[0];
+  if (!tournament) {
+    return c.json({ error: 'Tournament display not found' }, 404);
+  }
+
+  const payload = await buildDisplayPayloadForTournament(tournament);
+  return c.json(payload);
+});
+
+displayRouter.get('/tournament/:id', async (c) => {
+  if (!isSupabaseAdminConfigured()) {
+    return c.json({ error: 'Display service is not configured' }, 503);
+  }
+
+  const tournamentId = c.req.param('id');
+  const token = c.req.query('token')?.trim();
+
+  if (!token) {
+    return c.json({ error: 'Missing display token' }, 401);
+  }
+
+  const tournaments = await fetchRows<DisplayTournamentRow>(
+    `/rest/v1/tournaments?id=eq.${tournamentId}&display_token=eq.${token}&select=${TOURNAMENT_SELECT}`
+  );
+
+  const tournament = tournaments[0];
+  if (!tournament) {
+    return c.json({ error: 'Tournament not found or invalid token' }, 404);
+  }
+
+  const payload = await buildDisplayPayloadForTournament(tournament);
   return c.json(payload);
 });
 

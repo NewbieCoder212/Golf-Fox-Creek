@@ -522,6 +522,7 @@ export default function AdminDashboardScreen() {
                 <TournamentCopyTvLinkButton
                   tournamentId={adminLeaderboardTournamentId}
                   displayToken={adminTournaments[0].display_token}
+                  displaySlug={adminTournaments[0].display_slug}
                   compact
                 />
               </View>

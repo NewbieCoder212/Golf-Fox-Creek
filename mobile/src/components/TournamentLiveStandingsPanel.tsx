@@ -127,6 +127,7 @@ export function TournamentLiveStandingsPanel({
           <TournamentCopyTvLinkButton
             tournamentId={tournament.id}
             displayToken={displayToken}
+            displaySlug={tournament.display_slug}
             compact
           />
           <Text className="text-neutral-600 text-[10px] text-center mt-2 px-2">

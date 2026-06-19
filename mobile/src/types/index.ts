@@ -575,6 +575,8 @@ export interface Tournament {
   /** When true, match holes use net best-ball; default gross. */
   match_use_net_scoring?: boolean;
   display_token?: string;
+  /** Short TV URL slug, e.g. generation-cup → foxcreek.golf/tv/generation-cup */
+  display_slug?: string | null;
   participant_invites_sent_at?: string | null;
   created_at: string;
 }

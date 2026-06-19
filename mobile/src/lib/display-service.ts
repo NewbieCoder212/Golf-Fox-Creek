@@ -10,6 +10,39 @@ export function buildTournamentTvDisplayUrl(tournamentId: string, displayToken: 
   return `${WEB_APP_URL}/display/tournament/${tournamentId}?${params.toString()}`;
 }
 
+/** Short clubhouse TV URL, e.g. foxcreek.golf/tv/generation-cup */
+export function buildTournamentTvShortUrl(displaySlug: string): string {
+  const slug = displaySlug.trim().toLowerCase();
+  return `${WEB_APP_URL}/tv/${slug}`;
+}
+
+export function getPreferredTournamentTvDisplayUrl(
+  tournamentId: string,
+  displayToken: string,
+  displaySlug?: string | null
+): string {
+  if (displaySlug?.trim()) {
+    return buildTournamentTvShortUrl(displaySlug);
+  }
+  return buildTournamentTvDisplayUrl(tournamentId, displayToken);
+}
+
+export function formatTvShortUrlForTyping(displaySlug: string): string {
+  const host =
+    typeof window !== 'undefined'
+      ? window.location.host.replace(/^www\./, '')
+      : 'foxcreek.golf';
+  return `${host}/tv/${displaySlug.trim().toLowerCase()}`;
+}
+
+async function parseDisplayResponse(response: Response): Promise<TournamentDisplayPayload> {
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Display request failed (${response.status})`);
+  }
+  return response.json() as Promise<TournamentDisplayPayload>;
+}
+
 export async function fetchTournamentDisplay(
   tournamentId: string,
   token: string
@@ -18,11 +51,15 @@ export async function fetchTournamentDisplay(
   const response = await fetch(
     `${getBackendUrl()}/api/display/tournament/${tournamentId}?${params.toString()}`
   );
+  return parseDisplayResponse(response);
+}
 
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `Display request failed (${response.status})`);
-  }
-
-  return response.json() as Promise<TournamentDisplayPayload>;
+export async function fetchTournamentDisplayBySlug(
+  slug: string
+): Promise<TournamentDisplayPayload> {
+  const normalized = slug.trim().toLowerCase();
+  const response = await fetch(
+    `${getBackendUrl()}/api/display/tournament/by-slug/${encodeURIComponent(normalized)}`
+  );
+  return parseDisplayResponse(response);
 }

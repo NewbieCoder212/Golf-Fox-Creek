@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -34,10 +34,13 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { email: emailParam } = useLocalSearchParams<{ email?: string }>();
   const insets = useSafeAreaInsets();
   const setAuth = useMemberAuthStore((s) => s.setAuth);
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() =>
+    typeof emailParam === 'string' ? emailParam.trim() : ''
+  );
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

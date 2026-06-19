@@ -825,28 +825,52 @@ export function getPasswordResetRedirectUrl(): string {
   return PRODUCTION_RESET_URL;
 }
 
+export type AuthLinkTokens = {
+  accessToken: string;
+  refreshToken: string | null;
+};
+
+function parseAuthLinkParams(url: string): URLSearchParams | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hash) {
+      return new URLSearchParams(parsed.hash.substring(1));
+    }
+    if (parsed.search) {
+      return parsed.searchParams;
+    }
+  } catch {
+    // Invalid URL
+  }
+  return null;
+}
+
+function isAuthLinkType(type: string | null): boolean {
+  return type === 'recovery' || type === 'invite' || type === 'signup';
+}
+
+/**
+ * Parse access + refresh tokens from a Supabase recovery or invite link.
+ */
+export function parseAuthTokensFromUrl(url: string): AuthLinkTokens | null {
+  const params = parseAuthLinkParams(url);
+  if (!params) return null;
+
+  const accessToken = params.get('access_token');
+  const type = params.get('type');
+  if (!accessToken || !isAuthLinkType(type)) return null;
+
+  return {
+    accessToken,
+    refreshToken: params.get('refresh_token'),
+  };
+}
+
 /**
  * Parse a Supabase recovery or invite link for the access token (hash or query params).
  */
 export function parseRecoveryTokenFromUrl(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-
-    if (parsed.hash) {
-      const hashParams = new URLSearchParams(parsed.hash.substring(1));
-      const token = hashParams.get('access_token');
-      const type = hashParams.get('type');
-      if (token && (type === 'recovery' || type === 'invite' || type === 'signup')) return token;
-    }
-
-    const token = parsed.searchParams.get('access_token');
-    const type = parsed.searchParams.get('type');
-    if (token && (type === 'recovery' || type === 'invite' || type === 'signup')) return token;
-  } catch {
-    // Invalid URL
-  }
-
-  return null;
+  return parseAuthTokensFromUrl(url)?.accessToken ?? null;
 }
 
 export function parseInviteTokenFromUrl(url: string): string | null {

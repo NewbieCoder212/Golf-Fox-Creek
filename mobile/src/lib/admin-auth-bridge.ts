@@ -103,6 +103,61 @@ export async function refreshStoredAuthSession(): Promise<string | null> {
   return result.session.access_token;
 }
 
+function getStoredAccessToken(): string | null {
+  return (
+    useMemberAuthStore.getState().accessToken ?? useAdminAuthStore.getState().accessToken
+  );
+}
+
+function hasStoredSessionCredentials(): boolean {
+  const member = useMemberAuthStore.getState();
+  const admin = useAdminAuthStore.getState();
+  return Boolean(
+    member.accessToken ||
+      member.refreshToken ||
+      admin.accessToken ||
+      admin.refreshToken
+  );
+}
+
+/**
+ * Load persisted auth, sync member/admin stores, and refresh expired access tokens.
+ * Clears stale sessions when refresh fails.
+ */
+export async function restoreStoredAuthSession(): Promise<boolean> {
+  if (!hasStoredSessionCredentials()) {
+    await useMemberAuthStore.getState().loadStoredAuth();
+    await useAdminAuthStore.getState().loadStoredAuth();
+  }
+
+  await syncStoredAuthStores();
+
+  const context = readRefreshContext();
+  const accessToken = getStoredAccessToken();
+
+  if (!context.refreshToken) {
+    if (accessToken && !isAccessTokenExpired(accessToken)) {
+      return true;
+    }
+    if (accessToken || context.user) {
+      await useMemberAuthStore.getState().clearAuth();
+    }
+    return false;
+  }
+
+  if (accessToken && !isAccessTokenExpired(accessToken)) {
+    return true;
+  }
+
+  const refreshed = await refreshStoredAuthSession();
+  if (refreshed) {
+    return true;
+  }
+
+  await useMemberAuthStore.getState().clearAuth();
+  return false;
+}
+
 /** Reload admin auth from storage or refresh when memory was cleared (e.g. dev hot reload). */
 export async function restoreAdminSession(): Promise<boolean> {
   const admin = useAdminAuthStore.getState();

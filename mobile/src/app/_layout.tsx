@@ -17,8 +17,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
-import { useAdminAuthStore } from '@/lib/admin-auth-store';
-import { getPostLoginRoute, syncStoredAuthStores } from '@/lib/admin-auth-bridge';
+import { getPostLoginRoute, restoreStoredAuthSession } from '@/lib/admin-auth-bridge';
+import { AddToHomeScreenPrompt } from '@/components/AddToHomeScreenPrompt';
 import { getAuthCallbackRouteFromUrl } from '@/lib/supabase';
 import { foxColors } from '@/theme/tokens';
 
@@ -60,16 +60,10 @@ function useProtectedRoute() {
   const isLoading = useMemberAuthStore((s) => s.isLoading);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
-  // Load stored auth on mount
+  // Load stored auth on mount and refresh expired sessions before routing.
   useEffect(() => {
     const checkAuth = async () => {
-      const member = useMemberAuthStore.getState();
-      const admin = useAdminAuthStore.getState();
-      if (!member.accessToken && !admin.accessToken) {
-        await useMemberAuthStore.getState().loadStoredAuth();
-        await useAdminAuthStore.getState().loadStoredAuth();
-      }
-      await syncStoredAuthStores();
+      await restoreStoredAuthSession();
       setHasCheckedAuth(true);
       SplashScreen.hideAsync();
     };
@@ -107,6 +101,15 @@ function useProtectedRoute() {
 function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null | undefined }) {
   useAuthEmailLinkRedirect();
   const { isLoading } = useProtectedRoute();
+  const isAuthenticated = useMemberAuthStore((s) => s.isAuthenticated);
+  const segments = useSegments();
+  const inPublicRoute =
+    segments[0] === 'login' ||
+    segments[0] === 'admin' ||
+    segments[0] === 'display' ||
+    segments[0] === 'forgot-password' ||
+    segments[0] === 'reset-password' ||
+    segments[0] === 'accept-invite';
 
   // Show loading screen while checking auth
   if (isLoading) {
@@ -119,7 +122,8 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+      <View style={{ flex: 1 }}>
+        <Stack>
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
@@ -137,7 +141,9 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="tournament" options={{ headerShown: false }} />
         <Stack.Screen name="wagering/[sessionId]" options={{ headerShown: false }} />
         <Stack.Screen name="display" options={{ headerShown: false }} />
-      </Stack>
+        </Stack>
+        <AddToHomeScreenPrompt visible={isAuthenticated && !inPublicRoute} />
+      </View>
     </ThemeProvider>
   );
 }

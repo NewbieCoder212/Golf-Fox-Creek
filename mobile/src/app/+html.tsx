@@ -28,11 +28,12 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta property="og:type" content="website" />
         <meta property="og:title" content="Generation Cup Weekend" />
         <meta property="og:description" content="Sign in for Generation Cup Weekend — June 19–20, 2026 at Fox Creek Golf Club" />
-        <meta property="og:image" content="/fc-logo.png" />
+        <meta property="og:image" content="/generation-cup-icon-512.png" />
 
-        {/* Favicon - FC Logo */}
-        <link rel="icon" type="image/png" href="/fc-logo.png" />
-        <link rel="apple-touch-icon" href="/fc-logo.png" />
+        {/* Favicon + home screen icon — Generation Cup logo */}
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/generation-cup-icon-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
         {/* Web App Manifest */}
         <link rel="manifest" href="/manifest.json" />

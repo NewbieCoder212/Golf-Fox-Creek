@@ -896,7 +896,7 @@ export function getAuthCallbackRouteFromUrl(url: string): '/reset-password' | '/
 }
 
 /**
- * Send a password reset email via Supabase Auth.
+ * Send a password reset email via the backend (Resend), avoiding Supabase SMTP rate limits.
  */
 export async function requestPasswordReset(
   email: string,
@@ -912,6 +912,41 @@ export async function requestPasswordReset(
     console.log('[Supabase] Password reset redirect:', resetRedirectUrl);
   }
 
+  const { getBackendUrl, isLocalhostBackendUrl } = await import('./backend-url');
+  const backendUrl = getBackendUrl();
+
+  try {
+    const response = await fetch(`${backendUrl}/api/auth/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), redirectTo: resetRedirectUrl }),
+    });
+
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+
+    if (response.ok) {
+      return { success: true, redirectTo: resetRedirectUrl };
+    }
+
+    return {
+      success: false,
+      error: data.error ?? 'Failed to send reset email',
+    };
+  } catch (err) {
+    console.log('[Supabase] Backend password reset request error:', err);
+
+    if (__DEV__ && isLocalhostBackendUrl(backendUrl)) {
+      return requestPasswordResetViaSupabase(email, resetRedirectUrl);
+    }
+
+    return { success: false, error: 'Could not reach password reset service. Try again shortly.' };
+  }
+}
+
+async function requestPasswordResetViaSupabase(
+  email: string,
+  resetRedirectUrl: string
+): Promise<{ success: boolean; error?: string; redirectTo?: string }> {
   try {
     const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
       method: 'POST',

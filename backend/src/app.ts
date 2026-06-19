@@ -10,6 +10,7 @@ import { membersRouter } from './routes/members';
 import { displayRouter } from './routes/display';
 import { tournamentTeamsRouter } from './routes/tournament-teams';
 import { tournamentScoresRouter } from './routes/tournament-scores';
+import { authRouter } from './routes/auth';
 
 const allowed = [
   /^http:\/\/localhost(:\d+)?$/,
@@ -59,6 +60,7 @@ export function createApp() {
   });
 
   app.route('/api/sample', sampleRouter);
+  app.route('/api/auth', authRouter);
   app.route('/api/dev', devAuthRouter);
   app.route('/api/members', membersRouter);
   app.route('/api/display', displayRouter);

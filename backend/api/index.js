@@ -50,7 +50,7 @@ Please check your .env file and ensure all required variables are set.`);
 var env = validateEnv();
 
 // src/app.ts
-import { Hono as Hono7 } from "hono";
+import { Hono as Hono8 } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
@@ -884,6 +884,22 @@ function resolveOnboardingStatus(params) {
   }
   return { status: "ready", lastSignInAt: null, authActivityAt: null };
 }
+function summaryKeyForStatus(status) {
+  switch (status) {
+    case "no_email":
+      return "noEmail";
+    case "not_invited":
+      return "notInvited";
+    case "pending_setup":
+      return "pendingSetup";
+    case "ready":
+      return "ready";
+    case "awaiting_app_login":
+      return "awaitingAppLogin";
+    case "logged_in":
+      return "loggedIn";
+  }
+}
 async function loadParticipantOnboarding(tournamentId) {
   const supabase = getSupabaseAdminClient();
   const [playersResult, authByEmail] = await Promise.all([
@@ -901,14 +917,16 @@ async function loadParticipantOnboarding(tournamentId) {
   if (userIds.length > 0) {
     const { data: profilesById } = await supabase.from("user_profiles").select("id,email,invite_status,last_member_sign_in_at").in("id", userIds);
     for (const profile of profilesById ?? []) {
-      if (!profile.id || !profile.invite_status) continue;
+      if (!profile.id || !profile.invite_status)
+        continue;
       const snapshot = {
         invite_status: profile.invite_status,
         last_member_sign_in_at: profile.last_member_sign_in_at ?? null
       };
       profileById.set(profile.id, snapshot);
       const email = profile.email?.trim().toLowerCase();
-      if (email) profileByEmail.set(email, snapshot);
+      if (email)
+        profileByEmail.set(email, snapshot);
     }
   }
   const missingEmails = emails.filter((email) => !profileByEmail.has(email));
@@ -916,7 +934,8 @@ async function loadParticipantOnboarding(tournamentId) {
     const { data: profilesByEmail } = await supabase.from("user_profiles").select("id,email,invite_status,last_member_sign_in_at").in("email", missingEmails);
     for (const profile of profilesByEmail ?? []) {
       const email = profile.email?.trim().toLowerCase();
-      if (!email || !profile.invite_status) continue;
+      if (!email || !profile.invite_status)
+        continue;
       profileByEmail.set(email, {
         invite_status: profile.invite_status,
         last_member_sign_in_at: profile.last_member_sign_in_at ?? null
@@ -941,7 +960,7 @@ async function loadParticipantOnboarding(tournamentId) {
       profile,
       authUser: email ? authByEmail.get(email) ?? null : null
     });
-    summary[resolved.status === "no_email" ? "noEmail" : resolved.status === "not_invited" ? "notInvited" : resolved.status === "pending_setup" ? "pendingSetup" : resolved.status === "ready" ? "ready" : resolved.status === "awaiting_app_login" ? "awaitingAppLogin" : "loggedIn"] += 1;
+    summary[summaryKeyForStatus(resolved.status)] += 1;
     return {
       playerId: player.id,
       status: resolved.status,
@@ -1912,6 +1931,128 @@ tournamentScoresRouter.post("/:tournamentId/match-groups/:matchGroupId/clear", r
   return c.json({ success: true });
 });
 
+// src/routes/auth.ts
+import { Hono as Hono7 } from "hono";
+
+// src/lib/password-reset-email.ts
+function escapeHtml2(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function buildPasswordResetEmailHtml(params) {
+  return `<!DOCTYPE html>
+<html>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#0c0c0c; color:#f5f5f5; padding:24px;">
+    <div style="max-width:560px; margin:0 auto; background:#141414; border:1px solid #262626; border-radius:16px; padding:24px;">
+      <p style="color:#a3e635; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; margin:0 0 8px;">Fox Creek Golf</p>
+      <h1 style="margin:0 0 12px; font-size:24px;">Reset your password</h1>
+      <p style="color:#d4d4d4; line-height:1.5;">
+        Tap the button below to choose a new password for your Generation Cup account.
+      </p>
+      <a href="${escapeHtml2(params.resetUrl)}" style="display:inline-block; background:#65a30d; color:#ffffff; text-decoration:none; font-weight:700; padding:12px 18px; border-radius:12px; margin:16px 0;">
+        Reset password
+      </a>
+      <p style="color:#737373; font-size:12px; margin-top:20px; line-height:1.5;">
+        If you did not request this, you can ignore this email. After resetting, sign in from the Member Sign In screen.
+      </p>
+    </div>
+  </body>
+</html>`;
+}
+function buildPasswordResetEmailText(params) {
+  return [
+    "Reset your Fox Creek Golf password:",
+    "",
+    params.resetUrl,
+    "",
+    "If you did not request this, you can ignore this email.",
+    "After resetting, sign in from the Member Sign In screen."
+  ].join(`
+`);
+}
+async function sendPasswordResetEmail(params) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.TOURNAMENT_EMAIL_FROM?.trim() ?? "Fox Creek Golf <onboarding@foxcreek.golf>";
+  if (!apiKey) {
+    return { sent: false, error: "RESEND_API_KEY is not configured" };
+  }
+  const controller = new AbortController;
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  let response;
+  try {
+    response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from,
+        to: [params.to],
+        subject: "Reset your Fox Creek Golf password",
+        html: buildPasswordResetEmailHtml({ resetUrl: params.resetUrl }),
+        text: buildPasswordResetEmailText({ resetUrl: params.resetUrl })
+      }),
+      signal: controller.signal,
+      cache: "no-store"
+    });
+  } catch (error) {
+    const message = error instanceof Error && error.name === "AbortError" ? "Email service timed out" : "Email service unreachable";
+    return { sent: false, error: message };
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    return { sent: false, error: body.message ?? `Resend request failed (${response.status})` };
+  }
+  return { sent: true };
+}
+
+// src/routes/auth.ts
+var authRouter = new Hono7;
+var EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function defaultResetRedirect() {
+  return process.env.PASSWORD_RESET_REDIRECT_URL?.trim() ?? process.env.MEMBER_INVITE_REDIRECT_URL?.replace(/\/accept-invite$/, "/reset-password") ?? "https://www.foxcreek.golf/reset-password";
+}
+authRouter.use("*", async (c, next) => {
+  if (!isSupabaseAdminConfigured()) {
+    return c.json({ error: "Auth service is not configured" }, 503);
+  }
+  await next();
+});
+authRouter.post("/request-password-reset", async (c) => {
+  const body = await c.req.json();
+  const email = body.email?.trim().toLowerCase() ?? "";
+  const redirectTo = body.redirectTo?.trim() || defaultResetRedirect();
+  if (!email || !EMAIL_PATTERN.test(email)) {
+    return c.json({ error: "A valid email is required" }, 400);
+  }
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo }
+    });
+    if (error || !data.properties?.action_link) {
+      console.log("[Auth] Password reset link not generated:", error?.message ?? "no link");
+      return c.json({ success: true });
+    }
+    const emailResult = await sendPasswordResetEmail({
+      to: email,
+      resetUrl: data.properties.action_link
+    });
+    if (!emailResult.sent) {
+      console.error("[Auth] Password reset email failed:", emailResult.error);
+      return c.json({ error: emailResult.error ?? "Could not send reset email" }, 500);
+    }
+    return c.json({ success: true });
+  } catch (err) {
+    console.error("[Auth] Password reset error:", err);
+    return c.json({ error: "Could not send reset email" }, 500);
+  }
+});
+
 // src/app.ts
 var allowed = [
   /^http:\/\/localhost(:\d+)?$/,
@@ -1925,7 +2066,7 @@ var allowed = [
   /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/
 ];
 function createApp() {
-  const app = new Hono7;
+  const app = new Hono8;
   app.use("*", cors({
     origin: (origin) => origin && allowed.some((re) => re.test(origin)) ? origin : null,
     credentials: true
@@ -1949,6 +2090,7 @@ function createApp() {
     return c.json({ ok: true, user });
   });
   app.route("/api/sample", sampleRouter);
+  app.route("/api/auth", authRouter);
   app.route("/api/dev", devAuthRouter);
   app.route("/api/members", membersRouter);
   app.route("/api/display", displayRouter);

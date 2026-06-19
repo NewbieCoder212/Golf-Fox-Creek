@@ -242,9 +242,8 @@ export default function ForgotPasswordScreen() {
                       <Text className="text-red-300 text-sm text-center">{error}</Text>
                       {isRateLimitError(error) ? (
                         <Text className="text-neutral-400 text-xs text-center mt-2">
-                          Supabase limits how many reset emails can be sent per hour. Use the dev
-                          tools below, wait about an hour, or set the password in the Supabase
-                          dashboard.
+                          Too many reset requests. Please wait a few minutes and try again, or
+                          contact your tournament admin for help.
                         </Text>
                       ) : null}
                     </View>

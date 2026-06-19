@@ -13,6 +13,7 @@ const GRID_SIZES = {
   default: { labelWidth: 108, holeWidth: 34, rowHeight: 28 },
   tv: { labelWidth: 140, holeWidth: 44, rowHeight: 36 },
   'tv-compact': { labelWidth: 72, holeWidth: 26, rowHeight: 22 },
+  'tv-lounge': { labelWidth: 0, holeWidth: 0, rowHeight: 0 },
 } as const;
 
 export type MatchGridCardVariant = keyof typeof GRID_SIZES;
@@ -144,6 +145,7 @@ export function TournamentMatchGridCard({
 }) {
   const sizes = GRID_SIZES[variant];
   const isCompact = variant === 'tv-compact';
+  const isLounge = variant === 'tv-lounge';
   const hasPoints = model.matchPointsA > 0 || model.matchPointsB > 0;
   const gridWidth = TOURNAMENT_MATCH_HOLES.length * sizes.holeWidth;
   const showLive = highlight || model.inProgress;
@@ -154,15 +156,32 @@ export function TournamentMatchGridCard({
     <View
       className={cn(
         'bg-[#141414] rounded-xl border overflow-hidden',
-        fillHeight && 'flex-1',
-        !fillHeight && 'mb-4',
+        fillHeight && !isLounge && 'flex-1',
+        !fillHeight && !isLounge && 'mb-4',
         showLive ? 'border-lime-500/60 border-2' : 'border-neutral-800'
       )}
     >
-      <View className={cn('border-b border-neutral-800', isCompact ? 'px-2 py-1.5' : 'px-4 py-3')}>
+      <View
+        className={cn(
+          'border-b border-neutral-800',
+          isLounge ? 'px-5 py-4' : isCompact ? 'px-2 py-1.5' : 'px-4 py-3',
+          isLounge && !showLive && 'border-b-0'
+        )}
+      >
         <View className="flex-row items-start justify-between">
           <View className="flex-1 mr-2">
-            {isCompact ? (
+            {isLounge ? (
+              <View>
+                <Text className="text-neutral-400 text-lg font-semibold">
+                  Tee {model.teeTimeLabel}
+                </Text>
+                <Text className="text-3xl font-bold mt-1 leading-9" numberOfLines={2}>
+                  <Text style={{ color: SIDE_A_COLOR }}>{model.sideAName}</Text>
+                  <Text className="text-neutral-500"> vs </Text>
+                  <Text style={{ color: SIDE_B_COLOR }}>{model.sideBName}</Text>
+                </Text>
+              </View>
+            ) : isCompact ? (
               <View>
                 <Text className="text-neutral-500 text-[10px] font-medium">
                   Tee {model.teeTimeLabel}
@@ -201,6 +220,7 @@ export function TournamentMatchGridCard({
                   sideAName={model.sideAName}
                   sideBName={model.sideBName}
                   compact={isCompact}
+                  lounge={isLounge}
                 />
               ) : model.inProgress && model.matchStatus.throughHole > 0 ? (
                 <ColoredMatchStatusText
@@ -208,13 +228,14 @@ export function TournamentMatchGridCard({
                   sideAName={model.sideAName}
                   sideBName={model.sideBName}
                   compact={isCompact}
+                  lounge={isLounge}
                 />
               ) : (
                 <Text
                   className={cn(
                     'font-semibold mt-0.5',
                     isComplete ? 'text-neutral-200' : 'text-neutral-400',
-                    variant === 'tv' ? 'text-sm' : isCompact ? 'text-[10px]' : 'text-xs'
+                    isLounge ? 'text-xl' : variant === 'tv' ? 'text-sm' : isCompact ? 'text-[10px]' : 'text-xs'
                   )}
                   numberOfLines={2}
                 >
@@ -227,13 +248,24 @@ export function TournamentMatchGridCard({
                 sideAName={model.sideAName}
                 sideBName={model.sideBName}
                 compact={isCompact}
+                lounge={isLounge}
               />
             ) : null}
           </View>
           {showLive ? (
-            <View className="flex-row items-center bg-lime-950/50 border border-lime-600/40 rounded-full px-2 py-0.5">
-              <View className="w-1.5 h-1.5 rounded-full bg-lime-400 mr-1" />
-              <Text className="text-lime-400 text-[9px] font-bold uppercase tracking-wider">
+            <View
+              className={cn(
+                'flex-row items-center bg-lime-950/50 border border-lime-600/40 rounded-full',
+                isLounge ? 'px-3 py-1' : 'px-2 py-0.5'
+              )}
+            >
+              <View className={cn('rounded-full bg-lime-400 mr-1', isLounge ? 'w-2 h-2' : 'w-1.5 h-1.5')} />
+              <Text
+                className={cn(
+                  'text-lime-400 font-bold uppercase tracking-wider',
+                  isLounge ? 'text-sm' : 'text-[9px]'
+                )}
+              >
                 Live
               </Text>
             </View>
@@ -253,6 +285,7 @@ export function TournamentMatchGridCard({
         </View>
       </View>
 
+      {!isLounge ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={{ minWidth: sizes.labelWidth + gridWidth }}>
           <View className="flex-row border-b border-neutral-800 bg-[#101010]">
@@ -292,6 +325,7 @@ export function TournamentMatchGridCard({
           ))}
         </View>
       </ScrollView>
+      ) : null}
     </View>
   );
 }

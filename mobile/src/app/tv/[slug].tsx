@@ -5,10 +5,16 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchTournamentDisplayBySlug } from '@/lib/display-service';
 import { TournamentTvDisplayContent } from '@/components/TournamentTvDisplayContent';
 
+function isLoungeModeParam(mode: string | string[] | undefined): boolean {
+  const value = Array.isArray(mode) ? mode[0] : mode;
+  return value?.trim().toLowerCase() === 'lounge';
+}
+
 export default function TournamentTvDisplayBySlugScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { slug, mode } = useLocalSearchParams<{ slug: string; mode?: string }>();
   const normalizedSlug = typeof slug === 'string' ? slug.trim().toLowerCase() : '';
   const displayEnabled = Boolean(normalizedSlug);
+  const loungeMode = isLoungeModeParam(mode);
 
   const {
     data,
@@ -40,6 +46,7 @@ export default function TournamentTvDisplayBySlugScreen() {
       onRefetch={handleRefetch}
       showInvalidLink={!displayEnabled}
       invalidLinkMessage="Use a short TV link like foxcreek.golf/tv/generation-cup"
+      loungeMode={loungeMode}
     />
   );
 }

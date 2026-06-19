@@ -28,6 +28,8 @@ interface TournamentTeamMatchupBoardProps {
   tvHero?: boolean;
   /** Clubhouse TV score bar — compact horizontal strip for split layouts */
   tvStrip?: boolean;
+  /** Wall-mounted lounge TV — largest type and logos */
+  tvLounge?: boolean;
 }
 
 function TeamLogo({
@@ -113,6 +115,7 @@ export function TournamentTeamMatchupBoard({
   tvDisplay = false,
   tvHero = false,
   tvStrip = false,
+  tvLounge = false,
 }: TournamentTeamMatchupBoardProps) {
   const sideA = getTeamBySide(teams, 'side_a');
   const sideB = getTeamBySide(teams, 'side_b');
@@ -129,22 +132,24 @@ export function TournamentTeamMatchupBoard({
     );
   }
 
-  const isTvFeatured = tvHero || tvDisplay || tvStrip;
+  const isTvFeatured = tvHero || tvDisplay || tvStrip || tvLounge;
   const logoSize = hubEmbedded
     ? 88
-    : tvHero
-      ? 80
-      : tvStrip
-        ? 44
-        : tvDisplay
-          ? 52
-          : minimal
-            ? 40
-            : compact
-              ? 56
-              : 72;
+    : tvLounge
+      ? 96
+      : tvHero
+        ? 80
+        : tvStrip
+          ? 44
+          : tvDisplay
+            ? 52
+            : minimal
+              ? 40
+              : compact
+                ? 56
+                : 72;
   const showMinimalChrome = minimal && !isTvFeatured;
-  const logoProminent = hubEmbedded || tvHero;
+  const logoProminent = hubEmbedded || tvHero || tvLounge;
   const statA = sideA ? findStat(teamStats, sideA.id) : undefined;
   const statB = sideB ? findStat(teamStats, sideB.id) : undefined;
 
@@ -166,7 +171,7 @@ export function TournamentTeamMatchupBoard({
       <View
         className={cn(
           'flex-1 items-center justify-center',
-          tvHero ? 'px-4 py-4' : tvStrip ? 'px-2 py-2.5' : tvDisplay ? 'px-1.5 py-3' : 'px-2'
+          tvHero || tvLounge ? 'px-4 py-4' : tvStrip ? 'px-2 py-2.5' : tvDisplay ? 'px-1.5 py-3' : 'px-2'
         )}
         style={{
           backgroundColor: theme.panelBg,
@@ -184,9 +189,11 @@ export function TournamentTeamMatchupBoard({
                 !isTvFeatured && 'text-white',
                 hubEmbedded
                   ? 'text-xl mt-3 leading-7'
-                  : tvHero
-                    ? 'text-xl mt-3 leading-7 px-1'
-                    : tvStrip
+                  : tvLounge
+                    ? 'text-2xl mt-3 leading-8 px-1'
+                    : tvHero
+                      ? 'text-xl mt-3 leading-7 px-1'
+                      : tvStrip
                       ? 'text-sm mt-1.5 leading-5 px-0.5'
                       : tvDisplay
                         ? 'text-sm mt-2 leading-5 px-0.5'
@@ -196,7 +203,7 @@ export function TournamentTeamMatchupBoard({
                           ? 'text-base mt-2.5'
                           : 'text-lg mt-3 leading-6'
               )}
-              numberOfLines={tvHero ? 2 : tvStrip ? 1 : tvDisplay ? 3 : 2}
+              numberOfLines={tvHero || tvLounge ? 2 : tvStrip ? 1 : tvDisplay ? 3 : 2}
             >
               {displayName}
             </Text>
@@ -207,9 +214,11 @@ export function TournamentTeamMatchupBoard({
                   'font-display font-bold mt-1.5',
                   hubEmbedded
                     ? 'text-4xl'
-                    : tvHero
-                      ? 'text-5xl'
-                      : tvStrip
+                    : tvLounge
+                      ? 'text-6xl'
+                      : tvHero
+                        ? 'text-5xl'
+                        : tvStrip
                         ? 'text-3xl'
                         : tvDisplay
                           ? 'text-2xl'
@@ -227,9 +236,11 @@ export function TournamentTeamMatchupBoard({
                   'font-display font-bold mt-1.5',
                   hubEmbedded
                     ? 'text-4xl'
-                    : tvHero
-                      ? 'text-5xl'
-                      : tvStrip
+                    : tvLounge
+                      ? 'text-6xl'
+                      : tvHero
+                        ? 'text-5xl'
+                        : tvStrip
                         ? 'text-3xl'
                         : tvDisplay
                           ? 'text-2xl'
@@ -242,7 +253,10 @@ export function TournamentTeamMatchupBoard({
               </Text>
             ) : null}
             {stat?.matchesWon != null && stat.matchesWon > 0 && !showMinimalChrome && !tvStrip ? (
-              <Text style={{ color: theme.colorLight }} className="text-[10px] font-body mt-1 opacity-80">
+              <Text
+                style={{ color: theme.colorLight }}
+                className={cn('font-body mt-1 opacity-80', tvLounge ? 'text-sm' : 'text-[10px]')}
+              >
                 {stat.matchesWon} match win{stat.matchesWon !== 1 ? 's' : ''}
               </Text>
             ) : null}
@@ -277,8 +291,13 @@ export function TournamentTeamMatchupBoard({
       )}
     >
       {subtitle && !showMinimalChrome ? (
-        <View className="px-4 py-2 border-b border-neutral-800 bg-[#111]">
-          <Text className="text-neutral-500 text-[10px] uppercase tracking-widest font-body-semibold text-center">
+        <View className={cn('px-4 py-2 border-b border-neutral-800 bg-[#111]', tvLounge && 'py-3')}>
+          <Text
+            className={cn(
+              'text-neutral-500 uppercase tracking-widest font-body-semibold text-center',
+              tvLounge ? 'text-sm' : 'text-[10px]'
+            )}
+          >
             {subtitle}
           </Text>
         </View>
@@ -287,7 +306,7 @@ export function TournamentTeamMatchupBoard({
       <View
         className={cn(
           'flex-row items-stretch',
-          hubEmbedded || tvHero
+          hubEmbedded || tvHero || tvLounge
             ? 'min-h-[220px]'
             : tvStrip
               ? 'min-h-[108px]'
@@ -305,7 +324,7 @@ export function TournamentTeamMatchupBoard({
             'items-center justify-center bg-[#141414] border-x border-neutral-800',
             showMinimalChrome
               ? 'px-1.5 py-3'
-              : tvHero
+              : tvHero || tvLounge
                 ? 'px-2 py-5'
                 : tvStrip
                   ? 'px-1 py-2'
@@ -319,8 +338,8 @@ export function TournamentTeamMatchupBoard({
               'rounded-full bg-neutral-900 border border-neutral-700 items-center justify-center',
               showMinimalChrome
                 ? 'w-7 h-7'
-                : tvHero
-                  ? 'w-10 h-10'
+                : tvHero || tvLounge
+                  ? 'w-12 h-12'
                   : tvStrip
                     ? 'w-7 h-7'
                     : tvDisplay
@@ -329,7 +348,7 @@ export function TournamentTeamMatchupBoard({
             )}
           >
             <Swords
-              size={showMinimalChrome ? 12 : tvHero ? 18 : tvStrip ? 12 : tvDisplay ? 14 : 16}
+              size={showMinimalChrome ? 12 : tvHero || tvLounge ? 20 : tvStrip ? 12 : tvDisplay ? 14 : 16}
               color="#a3a3a3"
               strokeWidth={1.5}
             />

@@ -31,6 +31,7 @@ interface ColoredMatchStatusTextProps {
   sideAName: string;
   sideBName: string;
   compact?: boolean;
+  lounge?: boolean;
 }
 
 /** TV / leaderboard live match standing with team colors and hole progress. */
@@ -39,6 +40,7 @@ export function ColoredMatchStatusText({
   sideAName,
   sideBName,
   compact = false,
+  lounge = false,
 }: ColoredMatchStatusTextProps) {
   const { lead, dormie, clinched, throughHole } = matchStatus;
   const leaderSide: TournamentTeamSide | null =
@@ -46,7 +48,8 @@ export function ColoredMatchStatusText({
   const leaderName = leaderSide === 'side_a' ? sideAName : leaderSide === 'side_b' ? sideBName : null;
   const color = leaderColor(leaderSide);
   const progress = formatHoleProgress(matchStatus);
-  const standingSize = compact ? 'text-[10px]' : 'text-sm';
+  const standingSize = lounge ? 'text-2xl' : compact ? 'text-[10px]' : 'text-sm';
+  const progressSize = lounge ? 'text-lg' : compact ? 'text-[9px]' : 'text-[10px]';
 
   if (throughHole === 0) {
     return null;
@@ -57,7 +60,7 @@ export function ColoredMatchStatusText({
       <View>
         <Text className={cn('text-neutral-200 font-semibold', standingSize)}>ALL SQUARE</Text>
         {progress ? (
-          <Text className={cn('text-neutral-500 mt-0.5', compact ? 'text-[9px]' : 'text-[10px]')}>
+          <Text className={cn('text-neutral-500 mt-0.5', progressSize)}>
             {progress}
           </Text>
         ) : null}
@@ -72,7 +75,7 @@ export function ColoredMatchStatusText({
           {matchStatus.label}
         </Text>
         {progress ? (
-          <Text className={cn('text-neutral-500 mt-0.5', compact ? 'text-[9px]' : 'text-[10px]')}>
+          <Text className={cn('text-neutral-500 mt-0.5', progressSize)}>
             {progress}
           </Text>
         ) : null}
@@ -90,7 +93,7 @@ export function ColoredMatchStatusText({
         {dormie ? <Text style={{ color }}> · DORMIE</Text> : null}
       </Text>
       {progress ? (
-        <Text className={cn('text-neutral-500 mt-0.5', compact ? 'text-[9px]' : 'text-[10px]')}>
+        <Text className={cn('text-neutral-500 mt-1', progressSize)}>
           {progress}
           {matchStatus.holesRemaining > 0 && !dormie
             ? ` · ${matchStatus.holesRemaining} to play`
@@ -107,13 +110,15 @@ export function ColoredMatchResultText({
   sideAName,
   sideBName,
   compact = false,
+  lounge = false,
 }: {
   summary: string;
   sideAName: string;
   sideBName: string;
   compact?: boolean;
+  lounge?: boolean;
 }) {
-  const standingSize = compact ? 'text-[10px]' : 'text-sm';
+  const standingSize = lounge ? 'text-xl' : compact ? 'text-[10px]' : 'text-sm';
 
   if (summary === 'Halved') {
     return (

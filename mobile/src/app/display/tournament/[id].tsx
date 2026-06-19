@@ -6,8 +6,10 @@ import { fetchTournamentDisplay } from '@/lib/display-service';
 import { TournamentTvDisplayContent } from '@/components/TournamentTvDisplayContent';
 
 export default function TournamentTvDisplayByIdScreen() {
-  const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
+  const { id, token, mode } = useLocalSearchParams<{ id: string; token?: string; mode?: string }>();
   const displayEnabled = Boolean(id && token);
+  const loungeMode =
+    (Array.isArray(mode) ? mode[0] : mode)?.trim().toLowerCase() === 'lounge';
 
   const {
     data,
@@ -39,6 +41,7 @@ export default function TournamentTvDisplayByIdScreen() {
       onRefetch={handleRefetch}
       showInvalidLink={!token}
       invalidLinkMessage="Ask the pro shop for the full TV display URL including the access token."
+      loungeMode={loungeMode}
     />
   );
 }

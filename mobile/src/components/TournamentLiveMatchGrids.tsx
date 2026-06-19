@@ -29,6 +29,8 @@ interface TournamentLiveMatchGridsProps {
   liveEmptySummary?: TvLiveEmptySummary | null;
   /** Cap height when stacked above tee sheet on TV display */
   maxHeight?: number;
+  /** Wall-mounted lounge — larger live cards, no hole grid */
+  loungeMode?: boolean;
 }
 
 const TV_CAROUSEL_INTERVAL_MS = 12_000;
@@ -51,12 +53,23 @@ function chunkMatches<T>(items: T[], size: number): T[][] {
   return pages.length > 0 ? pages : [[]];
 }
 
-function TvLiveEmptyStrip({ summary }: { summary: TvLiveEmptySummary | null | undefined }) {
+function TvLiveEmptyStrip({
+  summary,
+  loungeMode = false,
+}: {
+  summary: TvLiveEmptySummary | null | undefined;
+  loungeMode?: boolean;
+}) {
+  const titleClass = loungeMode ? 'text-xl' : 'text-sm';
+  const subClass = loungeMode ? 'text-base' : 'text-xs';
+
   if (summary?.allFinal) {
     return (
-      <View className="bg-[#141414] rounded-xl border border-neutral-800 px-4 py-3">
-        <Text className="text-neutral-400 text-sm">All matches complete for this round</Text>
-        <Text className="text-neutral-600 text-xs mt-1">Final results are in the tee sheet below</Text>
+      <View className={cn('bg-[#141414] rounded-xl border border-neutral-800', loungeMode ? 'px-6 py-5' : 'px-4 py-3')}>
+        <Text className={cn('text-neutral-300 font-semibold', titleClass)}>Round complete</Text>
+        <Text className={cn('text-neutral-500 mt-1', subClass)}>
+          Final results are in the tee sheet below
+        </Text>
       </View>
     );
   }
@@ -121,6 +134,7 @@ function TvMatchCarousel({
   liveOnly = false,
   liveEmptySummary,
   maxHeight,
+  loungeMode = false,
 }: {
   matches: MatchGridModel[];
   variant: MatchGridCardVariant;
@@ -129,6 +143,7 @@ function TvMatchCarousel({
   liveOnly?: boolean;
   liveEmptySummary?: TvLiveEmptySummary | null;
   maxHeight?: number;
+  loungeMode?: boolean;
 }) {
   const liveMatches = useMemo(() => matches.filter((model) => model.inProgress), [matches]);
   const finishedMatches = useMemo(() => matches.filter(isFinishedMatch), [matches]);
@@ -218,8 +233,11 @@ function TvMatchCarousel({
   const currentPage = pages[pageIndex] ?? [];
   const rangeStart = pageIndex * effectiveCardsPerPage + 1;
   const rangeEnd = Math.min((pageIndex + 1) * effectiveCardsPerPage, carouselMatches.length);
-  const cardVariant: MatchGridCardVariant =
-    effectiveCardsPerPage <= 2 && variant === 'tv-compact' ? 'tv' : variant;
+  const cardVariant: MatchGridCardVariant = loungeMode
+    ? 'tv-lounge'
+    : effectiveCardsPerPage <= 2 && variant === 'tv-compact'
+      ? 'tv'
+      : variant;
 
   const sectionTitle = liveOnly
     ? 'Live on the course'
@@ -258,7 +276,7 @@ function TvMatchCarousel({
             <Text className="text-neutral-600 text-xs mt-1">{statusLine}</Text>
           </View>
         </View>
-        <TvLiveEmptyStrip summary={liveEmptySummary} />
+        <TvLiveEmptyStrip summary={liveEmptySummary} loungeMode={loungeMode} />
       </View>
     );
   }
@@ -350,6 +368,7 @@ export function TournamentLiveMatchGrids({
   liveOnly = false,
   liveEmptySummary,
   maxHeight,
+  loungeMode = false,
 }: TournamentLiveMatchGridsProps) {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
@@ -389,13 +408,14 @@ export function TournamentLiveMatchGrids({
 
   const tvCardsPerPage = useMemo(() => {
     if (!isTvCarousel) return 1;
+    if (loungeMode && liveOnly) return 1;
     const padding = 32;
     const sidebarWidth = liveOnly ? 0 : 260 + (isLandscape ? 172 : 0);
     const minCardWidth = liveOnly ? 280 : TV_MIN_CARD_WIDTH;
     const mainWidth = Math.max(480, width - sidebarWidth - padding);
     const maxCards = liveOnly ? 5 : 4;
     return Math.max(2, Math.min(maxCards, Math.floor(mainWidth / minCardWidth)));
-  }, [isTvCarousel, width, isLandscape, liveOnly]);
+  }, [isTvCarousel, width, isLandscape, liveOnly, loungeMode]);
 
   if (filteredGroups.length === 0) {
     return (
@@ -424,6 +444,7 @@ export function TournamentLiveMatchGrids({
         liveOnly={liveOnly}
         liveEmptySummary={liveEmptySummary}
         maxHeight={maxHeight}
+        loungeMode={loungeMode}
       />
     );
   }

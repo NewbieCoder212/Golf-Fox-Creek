@@ -2,9 +2,10 @@ import { SponsorBanner, useAdPlacement } from '@/components/SponsorBanner';
 import { pickTournamentEventHeaderAds } from '@/lib/ad-placement-service';
 import type { AdPlacementType } from '@/types';
 
-export type TournamentEventTab = 'schedule' | 'match' | 'teams';
+export type TournamentEventTab = 'standings' | 'schedule' | 'match' | 'teams';
 
 const TAB_PLACEMENT: Record<TournamentEventTab, AdPlacementType> = {
+  standings: 'tournament_tab_standings',
   schedule: 'tournament_tab_schedule',
   match: 'tournament_tab_match',
   teams: 'tournament_tab_teams',

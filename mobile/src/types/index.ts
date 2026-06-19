@@ -104,6 +104,7 @@ export type AdPlacementType =
   | 'leaderboard'
   | 'member_hub'
   | 'tournament_detail'
+  | 'tournament_tab_standings'
   | 'tournament_tab_schedule'
   | 'tournament_tab_match'
   | 'tournament_tab_teams';

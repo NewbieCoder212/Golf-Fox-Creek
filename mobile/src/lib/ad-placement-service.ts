@@ -300,6 +300,7 @@ export const PLACEMENT_TYPE_LABELS: Record<AdPlacementType, string> = {
   leaderboard: 'Leaderboard / TV Display',
   member_hub: 'Member Hub (home screen)',
   tournament_detail: 'Event Header (all tabs)',
+  tournament_tab_standings: 'Event · Standings tab',
   tournament_tab_schedule: 'Event · Schedule tab',
   tournament_tab_match: 'Event · Match tab',
   tournament_tab_teams: 'Event · Teams tab',
@@ -386,12 +387,42 @@ export function isHoleSponsorPlacement(placementType: AdPlacementType | string):
   return placementType === 'hole_sponsor' || placementType === 'hole_sponsor_secondary';
 }
 
-export function isTournamentTabPlacement(placementType: AdPlacementType | string): boolean {
+export type TournamentEventTabKey = 'standings' | 'schedule' | 'match' | 'teams';
+
+export const EVENT_TAB_PLACEMENTS: Record<TournamentEventTabKey, AdPlacementType> = {
+  standings: 'tournament_tab_standings',
+  schedule: 'tournament_tab_schedule',
+  match: 'tournament_tab_match',
+  teams: 'tournament_tab_teams',
+};
+
+export const EVENT_TAB_LABELS: Record<TournamentEventTabKey, string> = {
+  standings: 'Standings',
+  schedule: 'Schedule',
+  match: 'Match',
+  teams: 'Teams',
+};
+
+export const EVENT_TAB_KEYS: TournamentEventTabKey[] = ['standings', 'schedule', 'match', 'teams'];
+
+export function eventTabKeyFromPlacement(
+  placementType: AdPlacementType
+): TournamentEventTabKey | null {
+  const entry = Object.entries(EVENT_TAB_PLACEMENTS).find(([, type]) => type === placementType);
+  return entry ? (entry[0] as TournamentEventTabKey) : null;
+}
+
+export function isEventTabPlacement(placementType: AdPlacementType | string): boolean {
   return (
+    placementType === 'tournament_tab_standings' ||
     placementType === 'tournament_tab_schedule' ||
     placementType === 'tournament_tab_match' ||
     placementType === 'tournament_tab_teams'
   );
+}
+
+export function isTournamentTabPlacement(placementType: AdPlacementType | string): boolean {
+  return isEventTabPlacement(placementType);
 }
 
 function tournamentEventPreviewConfig(
@@ -443,6 +474,10 @@ export function getAdPreviewConfig(
 
   if (placementType === 'tournament_detail') {
     return tournamentEventPreviewConfig(placementType, imageLayout, 'all tabs (header)');
+  }
+
+  if (placementType === 'tournament_tab_standings') {
+    return tournamentEventPreviewConfig(placementType, imageLayout, 'Standings');
   }
 
   if (placementType === 'tournament_tab_schedule') {
@@ -545,6 +580,16 @@ export const AD_PLACEMENT_GUIDES: Record<AdPlacementType, AdPlacementGuide> = {
     tips: [
       'Shows under the tournament name, before tab buttons.',
       'Use tab-specific placements instead if you want a different ad on Schedule vs Match vs Teams.',
+      'Banner = strip; Portrait/Square = mini-card.',
+    ],
+    recommendedLayout: 'banner',
+    imageSizeHint: 'Banner: ~800×200px. Portrait mini-card: ~800×1100px.',
+  },
+  tournament_tab_standings: {
+    summary: 'Sponsor at the top of the Standings tab only.',
+    tips: [
+      'Members see this when viewing live team standings.',
+      'Use a different ad than Schedule, Match, or Teams for tab-specific sponsors.',
       'Banner = strip; Portrait/Square = mini-card.',
     ],
     recommendedLayout: 'banner',
@@ -684,6 +729,7 @@ export type MemberPreviewScreen =
   | 'selected'
   | 'member_hub'
   | 'tournament_detail'
+  | 'tournament_tab_standings'
   | 'tournament_tab_schedule'
   | 'tournament_tab_match'
   | 'tournament_tab_teams'
@@ -695,6 +741,7 @@ export const MEMBER_PREVIEW_SCREENS: { id: MemberPreviewScreen; label: string }[
   { id: 'selected', label: 'Your pick' },
   { id: 'member_hub', label: 'Home' },
   { id: 'tournament_detail', label: 'Event header' },
+  { id: 'tournament_tab_standings', label: 'Standings' },
   { id: 'tournament_tab_schedule', label: 'Schedule' },
   { id: 'tournament_tab_match', label: 'Match' },
   { id: 'tournament_tab_teams', label: 'Teams' },

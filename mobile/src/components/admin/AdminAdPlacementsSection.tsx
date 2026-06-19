@@ -12,7 +12,7 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import { Plus, Pencil, Trash2, ImageIcon, Check } from 'lucide-react-native';
+import { Plus, Pencil, Trash2, ImageIcon, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 
 import { cn } from '@/lib/cn';
 import {
@@ -26,28 +26,32 @@ import {
   deleteAdPlacementAuth,
   getAllAdPlacements,
   isHoleSponsorPlacement,
+  isEventTabPlacement,
   PLACEMENT_TYPE_LABELS,
   DISPLAY_POSITION_LABELS,
   IMAGE_LAYOUT_LABELS,
   updateAdPlacementAuth,
+  EVENT_TAB_KEYS,
+  EVENT_TAB_LABELS,
+  EVENT_TAB_PLACEMENTS,
+  eventTabKeyFromPlacement,
   type AdPlacementInsert,
+  type TournamentEventTabKey,
 } from '@/lib/ad-placement-service';
 import { AdPlacementLivePreview } from '@/components/admin/AdPlacementLivePreview';
 import { AdPlacementHelpGuide } from '@/components/admin/AdPlacementHelpGuide';
+import { AdminEventTabAdsPanel } from '@/components/admin/AdminEventTabAdsPanel';
 import { useAdDraftPreviewStore } from '@/lib/ad-draft-preview-store';
 import type { AdPlacement, AdDisplayPosition, AdImageLayout, AdPlacementType, AdRotationSettings } from '@/types';
 
-const PLACEMENT_TYPES: AdPlacementType[] = [
+const OTHER_PLACEMENT_TYPES: AdPlacementType[] = [
+  'member_hub',
+  'tournament_detail',
   'scorecard_header',
   'hole_sponsor',
   'hole_sponsor_secondary',
   'the_turn',
   'leaderboard',
-  'member_hub',
-  'tournament_detail',
-  'tournament_tab_schedule',
-  'tournament_tab_match',
-  'tournament_tab_teams',
 ];
 
 const DISPLAY_POSITIONS: AdDisplayPosition[] = ['header_left', 'sidebar', 'footer'];
@@ -56,7 +60,7 @@ const IMAGE_LAYOUTS: AdImageLayout[] = ['banner', 'portrait', 'square'];
 
 const EMPTY_FORM: AdPlacementInsert = {
   sponsor_name: '',
-  placement_type: 'scorecard_header',
+  placement_type: 'tournament_tab_standings',
   hole_number: null,
   image_url: '',
   banner_text: '',
@@ -65,6 +69,8 @@ const EMPTY_FORM: AdPlacementInsert = {
   image_layout: 'banner',
   is_active: true,
 };
+
+type FormMode = 'event' | 'other';
 
 interface AdminAdPlacementsSectionProps {
   accessToken: string;
@@ -81,6 +87,10 @@ export function AdminAdPlacementsSection({
 }: AdminAdPlacementsSectionProps) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(initialOpenForm);
+  const [formMode, setFormMode] = useState<FormMode>('event');
+  const [selectedEventTabs, setSelectedEventTabs] = useState<TournamentEventTabKey[]>(['standings']);
+  const [alsoEventHeader, setAlsoEventHeader] = useState(false);
+  const [showOtherLocations, setShowOtherLocations] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<AdPlacementInsert>(EMPTY_FORM);
   const [rotationSettings, setRotationSettings] = useState<AdRotationSettings>(
@@ -99,12 +109,6 @@ export function AdminAdPlacementsSection({
       rotationSettings.interval_seconds !== savedRotation.interval_seconds,
     [rotationSettings, savedRotation]
   );
-
-  const rotationStatusLabel = useMemo(() => {
-    const mode = savedRotation.enabled ? 'Rotation on' : 'Rotation off';
-    const interval = `${savedRotation.interval_seconds}s per sponsor`;
-    return `${mode} · ${interval}`;
-  }, [savedRotation]);
 
   const { data: loadedRotationSettings } = useQuery({
     queryKey: ['adRotationSettings'],
@@ -131,6 +135,8 @@ export function AdminAdPlacementsSection({
       setShowForm(true);
       setEditingId(null);
       setForm(EMPTY_FORM);
+      setFormMode('event');
+      setSelectedEventTabs(['standings']);
       onFormOpened?.();
     }
   }, [initialOpenForm, onFormOpened]);
@@ -207,7 +213,24 @@ export function AdminAdPlacementsSection({
   };
 
   const createMutation = useMutation({
-    mutationFn: () => createAdPlacementAuth(accessToken, form),
+    mutationFn: async () => {
+      if (formMode === 'event' && !editingId) {
+        const tabs = selectedEventTabs.length > 0 ? selectedEventTabs : ['standings' as const];
+        const placementTypes: AdPlacementType[] = [
+          ...tabs.map((tab) => EVENT_TAB_PLACEMENTS[tab]),
+          ...(alsoEventHeader ? (['tournament_detail'] as AdPlacementType[]) : []),
+        ];
+
+        let lastError: string | null = null;
+        for (const placement_type of placementTypes) {
+          const result = await createAdPlacementAuth(accessToken, { ...form, placement_type });
+          if (result.error) lastError = result.error;
+        }
+        return lastError ? { data: null, error: lastError } : { data: [], error: null };
+      }
+
+      return createAdPlacementAuth(accessToken, form);
+    },
     onSuccess: (result) => {
       if (result.error) {
         Alert.alert('Could not create ad', result.error);
@@ -264,18 +287,37 @@ export function AdminAdPlacementsSection({
     setForm(EMPTY_FORM);
     setEditingId(null);
     setShowForm(false);
+    setFormMode('event');
+    setSelectedEventTabs(['standings']);
+    setAlsoEventHeader(false);
   };
 
-  const startCreate = () => {
+  const startCreateEvent = (tabs: TournamentEventTabKey[]) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, placement_type: EVENT_TAB_PLACEMENTS[tabs[0] ?? 'standings'] });
+    setFormMode('event');
+    setSelectedEventTabs(tabs);
+    setAlsoEventHeader(false);
+    setShowForm(true);
+  };
+
+  const startCreateOther = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM, placement_type: 'member_hub' });
+    setFormMode('other');
     setShowForm(true);
   };
 
   const startEdit = (ad: AdPlacement) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingId(ad.id);
+    const isEvent = isEventTabPlacement(ad.placement_type);
+    setFormMode(isEvent ? 'event' : 'other');
+    const tabKey = eventTabKeyFromPlacement(ad.placement_type);
+    setSelectedEventTabs(tabKey ? [tabKey] : ['standings']);
+    setAlsoEventHeader(false);
     setForm({
       sponsor_name: ad.sponsor_name,
       placement_type: ad.placement_type,
@@ -290,12 +332,28 @@ export function AdminAdPlacementsSection({
     setShowForm(true);
   };
 
+  const toggleEventTab = (tab: TournamentEventTabKey) => {
+    if (editingId) return;
+    setSelectedEventTabs((current) => {
+      const next = current.includes(tab)
+        ? current.filter((item) => item !== tab)
+        : [...current, tab];
+      const primary = next[0] ?? tab;
+      setForm((f) => ({ ...f, placement_type: EVENT_TAB_PLACEMENTS[primary] }));
+      return next.length > 0 ? next : [tab];
+    });
+  };
+
   const handleSave = () => {
     if (!form.sponsor_name.trim() || !form.image_url.trim() || !form.banner_text.trim()) {
       Alert.alert('Missing fields', 'Sponsor name, image URL, and banner text are required.');
       return;
     }
-    if (isHoleSponsorPlacement(form.placement_type) && !form.hole_number) {
+    if (formMode === 'event' && !editingId && selectedEventTabs.length === 0) {
+      Alert.alert('Pick a tab', 'Choose at least one event tab for this sponsor.');
+      return;
+    }
+    if (formMode === 'other' && isHoleSponsorPlacement(form.placement_type) && !form.hole_number) {
       Alert.alert('Hole required', 'Pick a hole number (1–18) for match hole ads.');
       return;
     }
@@ -309,6 +367,7 @@ export function AdminAdPlacementsSection({
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  const otherAds = ads.filter((ad) => !isEventTabPlacement(ad.placement_type));
 
   return (
     <>
@@ -319,24 +378,18 @@ export function AdminAdPlacementsSection({
       <Animated.View entering={FadeInDown.delay(100).duration(500)}>
         <Text className="text-white text-xl font-bold mb-2">Sponsor Ads</Text>
         <Text className="text-neutral-500 text-sm mb-4">
-          Manage sponsor ads across the home screen, events, scorecards, and TV display. Use the live
-          preview when creating ads to pick the right placement and image shape.
+          Event tab sponsors are the fastest way to get ads in front of members during a tournament.
+          Turn on rotation to cycle multiple sponsors in each tab.
         </Text>
 
         <View className="bg-[#141414] rounded-2xl border border-neutral-800 p-4 mb-6">
-          <Text className="text-white font-semibold mb-1">Ad Rotation</Text>
-          <Text className="text-neutral-500 text-sm mb-4 leading-5">
-            Turn on rotation, then create multiple active ads with the same placement (and hole /
-            TV position when applicable). Each ad renders in the layout that fits its image shape
-            (Banner, Portrait, or Square). Home uses two streams: banners in the footer, flyers in
-            the feed.
-          </Text>
-
-          <View className="flex-row items-center justify-between py-2 mb-3">
+          <View className="flex-row items-center justify-between mb-3">
             <View className="flex-1 pr-4">
-              <Text className="text-white font-medium">Rotate multiple sponsors</Text>
+              <Text className="text-white font-semibold">Rotation</Text>
               <Text className="text-neutral-500 text-xs mt-1">
-                Off = newest ad only. On = carousel through all active ads in each slot.
+                {savedRotation.enabled
+                  ? `On · ${savedRotation.interval_seconds}s per sponsor`
+                  : 'Off · newest ad only'}
               </Text>
             </View>
             <Switch
@@ -349,10 +402,7 @@ export function AdminAdPlacementsSection({
             />
           </View>
 
-          <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
-            Seconds per sponsor
-          </Text>
-          <View className="flex-row flex-wrap gap-2 mb-4">
+          <View className="flex-row flex-wrap gap-2 mb-3">
             {AD_ROTATION_INTERVAL_OPTIONS.map((seconds) => (
               <Pressable
                 key={seconds}
@@ -380,77 +430,47 @@ export function AdminAdPlacementsSection({
             ))}
           </View>
 
-          <View
-            className={cn(
-              'rounded-lg px-3 py-2 mb-3 border',
-              rotationSaveStatus === 'saved'
-                ? 'bg-lime-900/30 border-lime-700'
-                : rotationSaveStatus === 'error'
-                  ? 'bg-red-900/30 border-red-700'
-                  : isRotationDirty
-                    ? 'bg-amber-950/30 border-amber-800'
-                    : 'bg-neutral-900/50 border-neutral-800'
-            )}
-          >
-            <Text
-              className={cn(
-                'text-xs font-medium',
-                rotationSaveStatus === 'saved'
-                  ? 'text-lime-300'
-                  : rotationSaveStatus === 'error'
-                    ? 'text-red-300'
-                    : isRotationDirty
-                      ? 'text-amber-200'
-                      : 'text-neutral-400'
-              )}
-            >
-              {rotationSaveStatus === 'saved'
-                ? 'Rotation settings saved.'
-                : rotationSaveStatus === 'error'
-                  ? 'Save failed — try again.'
-                  : isRotationDirty
-                    ? 'You have unsaved changes.'
-                    : `Saved: ${rotationStatusLabel}`}
-            </Text>
-          </View>
-
           <Pressable
             onPress={handleSaveRotation}
             disabled={isSavingRotation || (!isRotationDirty && rotationSaveStatus !== 'error')}
             className={cn(
-              'rounded-xl py-3 items-center flex-row justify-center active:opacity-80',
+              'rounded-xl py-2.5 items-center flex-row justify-center active:opacity-80',
               isSavingRotation || (!isRotationDirty && rotationSaveStatus !== 'error')
                 ? 'bg-neutral-800'
-                : rotationSaveStatus === 'saved'
-                  ? 'bg-lime-700'
-                  : 'bg-lime-600'
+                : 'bg-lime-600'
             )}
           >
             {isSavingRotation ? (
               <ActivityIndicator color="#fff" />
             ) : rotationSaveStatus === 'saved' ? (
               <>
-                <Check size={18} color="#fff" />
-                <Text className="text-white font-semibold ml-2">Saved</Text>
+                <Check size={16} color="#fff" />
+                <Text className="text-white font-semibold text-sm ml-2">Saved</Text>
               </>
             ) : (
-              <Text className="text-white font-semibold">Save Rotation Settings</Text>
+              <Text className="text-white font-semibold text-sm">
+                {isRotationDirty ? 'Save rotation' : 'Rotation saved'}
+              </Text>
             )}
           </Pressable>
         </View>
 
-        <Pressable
-          onPress={startCreate}
-          className="flex-row items-center justify-center bg-lime-600 py-3.5 rounded-xl mb-6 active:opacity-80"
-        >
-          <Plus size={18} color="#fff" />
-          <Text className="text-white font-semibold text-base ml-2">New Ad</Text>
-        </Pressable>
+        {!showForm ? (
+          <AdminEventTabAdsPanel
+            ads={ads}
+            rotationEnabled={savedRotation.enabled}
+            onAddToTab={(tab) => startCreateEvent([tab])}
+            onAddToAllTabs={() => startCreateEvent([...EVENT_TAB_KEYS])}
+            onEditAd={startEdit}
+            onToggleAd={(id, is_active) => toggleMutation.mutate({ id, is_active })}
+            onDeleteAd={(id) => deleteMutation.mutate(id)}
+          />
+        ) : null}
 
         {showForm && (
           <View className="bg-[#141414] rounded-2xl border border-neutral-800 p-4 mb-6">
             <Text className="text-white font-semibold mb-4">
-              {editingId ? 'Edit Ad' : 'Create Ad'}
+              {editingId ? 'Edit sponsor' : formMode === 'event' ? 'Add event sponsor' : 'Add sponsor'}
             </Text>
 
             <AdPlacementHelpGuide
@@ -460,43 +480,106 @@ export function AdminAdPlacementsSection({
               }
             />
 
-            <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
-              Placement
-            </Text>
-            <View className="flex-row flex-wrap gap-2 mb-4">
-              {PLACEMENT_TYPES.map((type) => (
-                <Pressable
-                  key={type}
-                  onPress={() =>
-                    setForm((f) => ({
-                      ...f,
-                      placement_type: type,
-                      hole_number: isHoleSponsorPlacement(type) ? f.hole_number ?? 1 : null,
-                      display_position: type === 'leaderboard' ? f.display_position ?? 'sidebar' : null,
-                    }))
-                  }
-                  className={cn(
-                    'px-3 py-2 rounded-lg border',
-                    form.placement_type === type
-                      ? 'bg-lime-900/40 border-lime-600'
-                      : 'bg-[#0c0c0c] border-neutral-800'
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      'text-xs',
-                      form.placement_type === type ? 'text-lime-400' : 'text-neutral-400'
-                    )}
-                  >
-                    {PLACEMENT_TYPE_LABELS[type]}
+            {formMode === 'event' ? (
+              <>
+                <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
+                  Event tabs
+                </Text>
+                <View className="flex-row flex-wrap gap-2 mb-3">
+                  {EVENT_TAB_KEYS.map((tab) => {
+                    const selected = selectedEventTabs.includes(tab);
+                    return (
+                      <Pressable
+                        key={tab}
+                        disabled={Boolean(editingId)}
+                        onPress={() => toggleEventTab(tab)}
+                        className={cn(
+                          'px-3 py-2 rounded-lg border',
+                          selected
+                            ? 'bg-lime-900/40 border-lime-600'
+                            : 'bg-[#0c0c0c] border-neutral-800',
+                          editingId && 'opacity-60'
+                        )}
+                      >
+                        <Text
+                          className={cn(
+                            'text-xs font-medium',
+                            selected ? 'text-lime-400' : 'text-neutral-400'
+                          )}
+                        >
+                          {EVENT_TAB_LABELS[tab]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {!editingId ? (
+                  <>
+                    <Pressable
+                      onPress={() => setSelectedEventTabs([...EVENT_TAB_KEYS])}
+                      className="mb-3 active:opacity-80"
+                    >
+                      <Text className="text-lime-400 text-xs font-semibold">Select all tabs</Text>
+                    </Pressable>
+                    <View className="flex-row items-center justify-between py-2 mb-4">
+                      <View className="flex-1 pr-4">
+                        <Text className="text-white font-medium text-sm">Also show above tabs</Text>
+                        <Text className="text-neutral-500 text-xs mt-0.5">
+                          Optional banner under the event name on every tab
+                        </Text>
+                      </View>
+                      <Switch
+                        value={alsoEventHeader}
+                        onValueChange={setAlsoEventHeader}
+                        trackColor={{ false: '#404040', true: '#4d7c0f' }}
+                        thumbColor={alsoEventHeader ? '#a3e635' : '#737373'}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <Text className="text-neutral-600 text-xs mb-4">
+                    Editing one tab slot. Create a new ad to add the same sponsor to more tabs.
                   </Text>
-                </Pressable>
-              ))}
-            </View>
-            <Text className="text-neutral-600 text-xs mb-4 leading-5">
-              Member Hub: Banner = home footer; Portrait/Square = home feed. Event · Schedule /
-              Match / Teams = one ad slot per tab. Event Header = optional ad above all tabs.
-            </Text>
+                )}
+              </>
+            ) : (
+              <>
+                <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
+                  Location
+                </Text>
+                <View className="flex-row flex-wrap gap-2 mb-4">
+                  {OTHER_PLACEMENT_TYPES.map((type) => (
+                    <Pressable
+                      key={type}
+                      onPress={() =>
+                        setForm((f) => ({
+                          ...f,
+                          placement_type: type,
+                          hole_number: isHoleSponsorPlacement(type) ? f.hole_number ?? 1 : null,
+                          display_position:
+                            type === 'leaderboard' ? f.display_position ?? 'sidebar' : null,
+                        }))
+                      }
+                      className={cn(
+                        'px-3 py-2 rounded-lg border',
+                        form.placement_type === type
+                          ? 'bg-lime-900/40 border-lime-600'
+                          : 'bg-[#0c0c0c] border-neutral-800'
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          'text-xs',
+                          form.placement_type === type ? 'text-lime-400' : 'text-neutral-400'
+                        )}
+                      >
+                        {PLACEMENT_TYPE_LABELS[type]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
 
             <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
               Image Shape
@@ -529,7 +612,7 @@ export function AdminAdPlacementsSection({
               card in the home feed). Square = social-style graphics.
             </Text>
 
-            {isHoleSponsorPlacement(form.placement_type) && (
+            {formMode === 'other' && isHoleSponsorPlacement(form.placement_type) && (
               <View className="mb-4">
                 <Text className="text-neutral-400 text-xs uppercase tracking-wide mb-2">
                   Hole Number
@@ -624,7 +707,11 @@ export function AdminAdPlacementsSection({
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text className="text-white font-semibold">
-                    {editingId ? 'Save Changes' : 'Create Ad'}
+                    {editingId
+                      ? 'Save Changes'
+                      : formMode === 'event' && selectedEventTabs.length > 1
+                        ? `Create for ${selectedEventTabs.length} tabs`
+                        : 'Create Ad'}
                   </Text>
                 )}
               </Pressable>
@@ -632,106 +719,135 @@ export function AdminAdPlacementsSection({
           </View>
         )}
 
-        {isLoading ? (
-          <ActivityIndicator color="#a3e635" className="mt-8" />
-        ) : ads.length === 0 ? (
-          <View className="bg-[#141414] rounded-xl border border-neutral-800 p-8 items-center">
-            <ImageIcon size={40} color="#525252" />
-            <Text className="text-neutral-500 text-sm mt-4">No sponsor ads yet</Text>
-            <Text className="text-neutral-600 text-xs mt-1 text-center">
-              Tap New Ad to create your first banner
-            </Text>
-          </View>
-        ) : (
-          ads.map((ad, index) => (
-            <Animated.View key={ad.id} entering={FadeInDown.delay(index * 40).duration(300)}>
-              <View className="bg-[#141414] rounded-xl border border-neutral-800 mb-3 overflow-hidden">
-                <Image
-                  source={{ uri: ad.image_url }}
-                  className="w-full bg-white"
-                  style={{
-                    height: ad.image_layout === 'portrait' ? 180 : ad.image_layout === 'square' ? 140 : 96,
-                  }}
-                  resizeMode="contain"
-                />
-                <View className="p-4">
-                  <View className="flex-row items-start justify-between mb-2">
-                    <View className="flex-1 mr-2">
-                      <Text className="text-white font-semibold">{ad.sponsor_name}</Text>
-                      <Text className="text-lime-400/80 text-xs mt-0.5">
-                        {PLACEMENT_TYPE_LABELS[ad.placement_type]}
-                        {` · ${IMAGE_LAYOUT_LABELS[ad.image_layout ?? 'banner']}`}
-                        {ad.hole_number ? ` · Hole ${ad.hole_number}` : ''}
-                        {ad.display_position
-                          ? ` · ${DISPLAY_POSITION_LABELS[ad.display_position]}`
-                          : ''}
-                        {ad.is_active && getRotationPoolSize(ad) > 1
-                          ? ` · Rotation pool (${getRotationPoolSize(ad)})`
-                          : ''}
-                      </Text>
-                    </View>
-                    <View
-                      className={cn(
-                        'px-2 py-0.5 rounded',
-                        ad.is_active ? 'bg-green-900/40' : 'bg-neutral-800'
-                      )}
-                    >
-                      <Text
-                        className={cn(
-                          'text-xs font-medium',
-                          ad.is_active ? 'text-green-400' : 'text-neutral-500'
-                        )}
-                      >
-                        {ad.is_active ? 'Live' : 'Off'}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text className="text-neutral-400 text-sm mb-3" numberOfLines={2}>
-                    {ad.banner_text}
-                  </Text>
-                  <View className="flex-row items-center justify-between">
-                    <Switch
-                      value={ad.is_active}
-                      onValueChange={(v) => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        toggleMutation.mutate({ id: ad.id, is_active: v });
-                      }}
-                      trackColor={{ false: '#404040', true: '#4d7c0f' }}
-                      thumbColor={ad.is_active ? '#a3e635' : '#737373'}
-                    />
-                    <View className="flex-row gap-2">
-                      <Pressable
-                        onPress={() => startEdit(ad)}
-                        className="w-9 h-9 bg-neutral-800 rounded-lg items-center justify-center active:opacity-80"
-                      >
-                        <Pencil size={16} color="#a3e635" />
-                      </Pressable>
-                      <Pressable
-                        onPress={() => {
-                          Alert.alert(
-                            'Delete ad?',
-                            `Remove "${ad.sponsor_name}"?`,
-                            [
-                              { text: 'Cancel', style: 'cancel' },
-                              {
-                                text: 'Delete',
-                                style: 'destructive',
-                                onPress: () => deleteMutation.mutate(ad.id),
-                              },
-                            ]
-                          );
-                        }}
-                        className="w-9 h-9 bg-neutral-800 rounded-lg items-center justify-center active:opacity-80"
-                      >
-                        <Trash2 size={16} color="#f87171" />
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
+        {!showForm ? (
+          <Pressable
+            onPress={() => setShowOtherLocations((current) => !current)}
+            className="flex-row items-center justify-between bg-[#141414] rounded-xl border border-neutral-800 px-4 py-3 mb-3 active:opacity-80"
+          >
+            <View>
+              <Text className="text-white font-semibold">Other ad locations</Text>
+              <Text className="text-neutral-500 text-xs mt-0.5">
+                Home, scorecard, TV display, event header
+              </Text>
+            </View>
+            {showOtherLocations ? (
+              <ChevronUp size={18} color="#737373" />
+            ) : (
+              <ChevronDown size={18} color="#737373" />
+            )}
+          </Pressable>
+        ) : null}
+
+        {!showForm && showOtherLocations ? (
+          <>
+            <Pressable
+              onPress={startCreateOther}
+              className="flex-row items-center justify-center bg-neutral-800 border border-neutral-700 py-3 rounded-xl mb-4 active:opacity-80"
+            >
+              <Plus size={16} color="#a3e635" />
+              <Text className="text-neutral-200 font-semibold text-sm ml-2">Add other sponsor</Text>
+            </Pressable>
+
+            {isLoading ? (
+              <ActivityIndicator color="#a3e635" className="mt-4" />
+            ) : otherAds.length === 0 ? (
+              <View className="bg-[#141414] rounded-xl border border-neutral-800 p-6 items-center mb-4">
+                <ImageIcon size={32} color="#525252" />
+                <Text className="text-neutral-500 text-sm mt-3">No other sponsors yet</Text>
               </View>
-            </Animated.View>
-          ))
-        )}
+            ) : (
+              otherAds.map((ad, index) => (
+                <Animated.View key={ad.id} entering={FadeInDown.delay(index * 40).duration(300)}>
+                  <View className="bg-[#141414] rounded-xl border border-neutral-800 mb-3 overflow-hidden">
+                    <Image
+                      source={{ uri: ad.image_url }}
+                      className="w-full bg-white"
+                      style={{
+                        height:
+                          ad.image_layout === 'portrait'
+                            ? 180
+                            : ad.image_layout === 'square'
+                              ? 140
+                              : 96,
+                      }}
+                      resizeMode="contain"
+                    />
+                    <View className="p-4">
+                      <View className="flex-row items-start justify-between mb-2">
+                        <View className="flex-1 mr-2">
+                          <Text className="text-white font-semibold">{ad.sponsor_name}</Text>
+                          <Text className="text-lime-400/80 text-xs mt-0.5">
+                            {PLACEMENT_TYPE_LABELS[ad.placement_type]}
+                            {` · ${IMAGE_LAYOUT_LABELS[ad.image_layout ?? 'banner']}`}
+                            {ad.hole_number ? ` · Hole ${ad.hole_number}` : ''}
+                            {ad.display_position
+                              ? ` · ${DISPLAY_POSITION_LABELS[ad.display_position]}`
+                              : ''}
+                            {ad.is_active && getRotationPoolSize(ad) > 1
+                              ? ` · Rotation pool (${getRotationPoolSize(ad)})`
+                              : ''}
+                          </Text>
+                        </View>
+                        <View
+                          className={cn(
+                            'px-2 py-0.5 rounded',
+                            ad.is_active ? 'bg-green-900/40' : 'bg-neutral-800'
+                          )}
+                        >
+                          <Text
+                            className={cn(
+                              'text-xs font-medium',
+                              ad.is_active ? 'text-green-400' : 'text-neutral-500'
+                            )}
+                          >
+                            {ad.is_active ? 'Live' : 'Off'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text className="text-neutral-400 text-sm mb-3" numberOfLines={2}>
+                        {ad.banner_text}
+                      </Text>
+                      <View className="flex-row items-center justify-between">
+                        <Switch
+                          value={ad.is_active}
+                          onValueChange={(v) => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            toggleMutation.mutate({ id: ad.id, is_active: v });
+                          }}
+                          trackColor={{ false: '#404040', true: '#4d7c0f' }}
+                          thumbColor={ad.is_active ? '#a3e635' : '#737373'}
+                        />
+                        <View className="flex-row gap-2">
+                          <Pressable
+                            onPress={() => startEdit(ad)}
+                            className="w-9 h-9 bg-neutral-800 rounded-lg items-center justify-center active:opacity-80"
+                          >
+                            <Pencil size={16} color="#a3e635" />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => {
+                              Alert.alert('Delete ad?', `Remove "${ad.sponsor_name}"?`, [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Delete',
+                                  style: 'destructive',
+                                  onPress: () => deleteMutation.mutate(ad.id),
+                                },
+                              ]);
+                            }}
+                            className="w-9 h-9 bg-neutral-800 rounded-lg items-center justify-center active:opacity-80"
+                          >
+                            <Trash2 size={16} color="#f87171" />
+                          </Pressable>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                </Animated.View>
+              ))
+            )}
+          </>
+        ) : null}
       </Animated.View>
     </>
   );

@@ -19,6 +19,7 @@ function parsePreviewScreen(param: string | string[] | undefined): MemberPreview
   if (
     raw === 'member_hub' ||
     raw === 'tournament_detail' ||
+    raw === 'tournament_tab_standings' ||
     raw === 'tournament_tab_schedule' ||
     raw === 'tournament_tab_match' ||
     raw === 'tournament_tab_teams' ||

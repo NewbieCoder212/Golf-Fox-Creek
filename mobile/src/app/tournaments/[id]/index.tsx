@@ -438,14 +438,19 @@ export default function TournamentDetailScreen() {
               isManager={isManager}
             />
           ) : tab === 'standings' ? (
-            <View className="px-5">
-              <TournamentLiveStandingsPanel
-                tournamentId={id!}
-                displayToken={isManager ? tournament.display_token : null}
-                showTvLink={isManager}
-                compact
-              />
-            </View>
+            <>
+              <View className="px-5 mb-4">
+                <TournamentTabAdBanner tab="standings" />
+              </View>
+              <View className="px-5">
+                <TournamentLiveStandingsPanel
+                  tournamentId={id!}
+                  displayToken={isManager ? tournament.display_token : null}
+                  showTvLink={isManager}
+                  compact
+                />
+              </View>
+            </>
           ) : tab === 'teams' ? (
             <>
               <View className="px-5 mb-4">

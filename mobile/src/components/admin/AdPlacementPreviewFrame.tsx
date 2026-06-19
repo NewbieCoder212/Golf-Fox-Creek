@@ -119,16 +119,18 @@ export function AdPlacementPreviewFrame({
 
   if (isTournamentTabPlacement(placementType)) {
     const tabLabel =
-      placementType === 'tournament_tab_schedule'
-        ? 'Schedule'
-        : placementType === 'tournament_tab_match'
-          ? 'Match'
-          : 'Teams';
+      placementType === 'tournament_tab_standings'
+        ? 'Standings'
+        : placementType === 'tournament_tab_schedule'
+          ? 'Schedule'
+          : placementType === 'tournament_tab_match'
+            ? 'Match'
+            : 'Teams';
 
     return (
       <PreviewChrome title="Event screen" subtitle={`${tabLabel} tab content`}>
-        <View className="flex-row gap-2 mb-3">
-          {(['Schedule', 'Match', 'Teams'] as const).map((label) => (
+        <View className="flex-row flex-wrap gap-2 mb-3">
+          {(['Standings', 'Schedule', 'Match', 'Teams'] as const).map((label) => (
             <View
               key={label}
               className={cn(

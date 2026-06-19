@@ -20,11 +20,13 @@ async function updateProfileAfterInvite(params: {
   handicapIndex?: number;
 }): Promise<void> {
   const body: Record<string, unknown> = {
+    id: params.userId,
     first_name: params.firstName.trim(),
     last_name: params.lastName.trim(),
     full_name: buildFullName(params.firstName, params.lastName),
     email: params.email.trim().toLowerCase(),
     invite_status: 'pending',
+    role: 'member',
     updated_at: new Date().toISOString(),
   };
 
@@ -32,9 +34,26 @@ async function updateProfileAfterInvite(params: {
     body.handicap_index = params.handicapIndex;
   }
 
-  const { ok, data } = await adminFetch(`/rest/v1/user_profiles?id=eq.${params.userId}`, {
-    method: 'PATCH',
+  const existing = await adminFetch<Array<{ id: string }>>(
+    `/rest/v1/user_profiles?id=eq.${params.userId}&select=id&limit=1`
+  );
+
+  if (existing.ok && existing.data?.[0]) {
+    const { ok, data } = await adminFetch(`/rest/v1/user_profiles?id=eq.${params.userId}`, {
+      method: 'PATCH',
+      body,
+    });
+
+    if (!ok) {
+      throw new Error(getErrorMessage(data as Record<string, unknown>));
+    }
+    return;
+  }
+
+  const { ok, data } = await adminFetch('/rest/v1/user_profiles', {
+    method: 'POST',
     body,
+    prefer: 'return=minimal',
   });
 
   if (!ok) {

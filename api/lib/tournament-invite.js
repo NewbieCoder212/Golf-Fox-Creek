@@ -197,17 +197,48 @@ async function createAuthUserInviteLink({ email, firstName, lastName, redirectTo
   return { userId, setupUrl };
 }
 
+async function ensureUserProfile({ userId, email, firstName, lastName, inviteStatus = 'pending' }) {
+  const existing = await adminFetch(
+    `/rest/v1/user_profiles?id=eq.${userId}&select=id&limit=1`
+  );
+  if (existing.ok && existing.data?.[0]) {
+    return;
+  }
+
+  const result = await adminFetch('/rest/v1/user_profiles', {
+    method: 'POST',
+    body: {
+      id: userId,
+      email: email.trim().toLowerCase(),
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      full_name: buildFullName(firstName, lastName),
+      role: 'member',
+      invite_status: inviteStatus,
+    },
+    prefer: 'return=minimal',
+  });
+
+  if (!result.ok) {
+    throw new Error(result.data?.message ?? result.data?.msg ?? 'Could not create user profile');
+  }
+}
+
 async function ensureAuthUserId({ email, firstName, lastName, redirectTo }) {
   const existingId = await lookupAuthUserIdByEmail(email);
   if (existingId) {
+    await ensureUserProfile({ userId: existingId, email, firstName, lastName });
     return { userId: existingId, setupUrl: null };
   }
 
   try {
-    return await createAuthUserInviteLink({ email, firstName, lastName, redirectTo });
+    const created = await createAuthUserInviteLink({ email, firstName, lastName, redirectTo });
+    await ensureUserProfile({ userId: created.userId, email, firstName, lastName });
+    return created;
   } catch (error) {
     const retryId = await lookupAuthUserIdByEmail(email);
     if (retryId) {
+      await ensureUserProfile({ userId: retryId, email, firstName, lastName });
       return { userId: retryId, setupUrl: null };
     }
     throw error;

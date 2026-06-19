@@ -267,6 +267,40 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   return match?.id ?? null;
 }
 
+async function ensureUserProfileForInvite(params: {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  inviteStatus?: 'pending' | 'active';
+}): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const { data: existing } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('id', params.userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return;
+  }
+
+  const { error } = await supabase.from('user_profiles').insert({
+    id: params.userId,
+    email: params.email.trim().toLowerCase(),
+    first_name: params.firstName.trim(),
+    last_name: params.lastName.trim(),
+    full_name: buildFullName(params.firstName, params.lastName),
+    role: 'member',
+    invite_status: params.inviteStatus ?? 'pending',
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 async function ensureAuthUserIdForInvite(params: {
   email: string;
   firstName: string;
@@ -275,14 +309,33 @@ async function ensureAuthUserIdForInvite(params: {
 }): Promise<{ userId: string; setupUrl: string | null }> {
   const existingId = await findAuthUserIdByEmail(params.email);
   if (existingId) {
+    await ensureUserProfileForInvite({
+      userId: existingId,
+      email: params.email,
+      firstName: params.firstName,
+      lastName: params.lastName,
+    });
     return { userId: existingId, setupUrl: null };
   }
 
   try {
-    return await createAuthUserInviteLink(params);
+    const created = await createAuthUserInviteLink(params);
+    await ensureUserProfileForInvite({
+      userId: created.userId,
+      email: params.email,
+      firstName: params.firstName,
+      lastName: params.lastName,
+    });
+    return created;
   } catch (error) {
     const retryId = await findAuthUserIdByEmail(params.email);
     if (retryId) {
+      await ensureUserProfileForInvite({
+        userId: retryId,
+        email: params.email,
+        firstName: params.firstName,
+        lastName: params.lastName,
+      });
       return { userId: retryId, setupUrl: null };
     }
     throw error;

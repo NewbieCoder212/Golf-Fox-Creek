@@ -21,7 +21,7 @@ import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBo
 import { TournamentTvTeeSheet } from '@/components/TournamentTvTeeSheet';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
-import { buildMatchPointsLeaderboard } from '@/lib/tournament-service';
+import { buildMatchPointsLeaderboard, buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-service';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 import {
   buildTournamentTeeSheetRows,
@@ -110,7 +110,11 @@ export function TournamentTvDisplayContent({
   const sideBTeam = getTeamBySide(teams, 'side_b');
 
   const teamStats = useMemo(() => {
-    const pointsStats = buildMatchPointsLeaderboard(teams, matchGroups);
+    const pointsStats = buildMatchPointsLeaderboardFromHoleResults(
+      teams,
+      matchGroups,
+      holeResults
+    );
     const hasMatchPoints = pointsStats.some(
       (row) => row.matchPoints > 0 || row.matchesPlayed > 0
     );
@@ -136,7 +140,7 @@ export function TournamentTvDisplayContent({
       matchPoints: row.matchPoints,
       matchesWon: row.matchesWon,
     }));
-  }, [teams, matchGroups, data?.matchPlay, sideATeam, sideBTeam]);
+  }, [teams, matchGroups, holeResults, data?.matchPlay, sideATeam, sideBTeam]);
 
   const handleRealtimeUpdate = useCallback(() => {
     onRefetch();

@@ -5,11 +5,15 @@
 import type {
   Tournament,
   TournamentInsert,
+  TournamentMatchGroup,
+  TournamentMatchHoleResult,
   TournamentScore,
   TournamentScoreInsert,
   TournamentTeam,
   TournamentTeamInsert,
 } from '@/types';
+import { buildMatchStatusFromHoleResults } from './tournament-match-play-status';
+import { getTeamSideDisplayName } from './tournament-labels';
 import {
   getManagerAccessToken,
   isTournamentSupabaseConfigured,
@@ -698,8 +702,11 @@ export function buildMatchPointsLeaderboard(
   }
 
   for (const group of matchGroups) {
+    if (group.match_winner == null) continue;
+
     const pointsA = Number(group.match_points_a ?? 0);
     const pointsB = Number(group.match_points_b ?? 0);
+    if (pointsA === 0 && pointsB === 0) continue;
 
     const teamA = byTeamId.get(group.side_a_team_id);
     const teamB = byTeamId.get(group.side_b_team_id);
@@ -720,6 +727,28 @@ export function buildMatchPointsLeaderboard(
     if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
     return b.matchesWon - a.matchesWon;
   });
+}
+
+/** Team standings from groups that are actually complete (ignores stale winner flags). */
+export function buildMatchPointsLeaderboardFromHoleResults(
+  teams: { id: string; team_name: string; side: string | null }[],
+  matchGroups: TournamentMatchGroup[],
+  holeResults: TournamentMatchHoleResult[]
+): MatchPointsStanding[] {
+  const sideAName = getTeamSideDisplayName('side_a', teams as TournamentTeam[]);
+  const sideBName = getTeamSideDisplayName('side_b', teams as TournamentTeam[]);
+
+  const completedGroups = matchGroups.filter((group) => {
+    const { playStatus } = buildMatchStatusFromHoleResults(
+      group,
+      holeResults,
+      sideAName,
+      sideBName
+    );
+    return playStatus === 'complete';
+  });
+
+  return buildMatchPointsLeaderboard(teams, completedGroups);
 }
 
 export function isTournamentServiceConfigured(): boolean {

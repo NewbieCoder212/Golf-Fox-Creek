@@ -169,7 +169,10 @@ export async function syncTournamentMatchScores(params: {
     holeResults: params.holeResults,
   });
 
-  const matchPoints = params.matchPoints ?? recomputedPoints;
+  const matchPoints =
+    params.holeResults.length === 0 && params.matchPoints?.match_winner != null
+      ? params.matchPoints
+      : recomputedPoints;
 
   try {
     if (params.scores.length > 0) {

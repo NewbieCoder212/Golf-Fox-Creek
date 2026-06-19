@@ -14,6 +14,8 @@ import type {
 import { FOX_CREEK_DATA } from './course-data';
 import { resolveHoleWinner } from './tournament-match-service';
 import { isSinglesFormat } from './tournament-labels';
+import { isMatchActuallyComplete } from './tournament-match-play-status';
+import { computeLiveMatchStatus } from './tournament-match-status';
 import {
   buildTournamentHoleScores,
   sumHoleScores,
@@ -497,18 +499,77 @@ export function getTeamSideHoleScore(
     : teamGrossForSide(teamId, scores, hole);
 }
 
-function pointsFromWinTally(aWins: number, bWins: number): {
-  match_winner: TournamentTeamSide | 'tie';
+export const EMPTY_PERSISTED_CUP_POINTS = {
+  match_winner: null,
+  match_points_a: 0,
+  match_points_b: 0,
+} as const;
+
+type PersistedCupPoints = {
+  match_winner: TournamentTeamSide | 'tie' | null;
   match_points_a: number;
   match_points_b: number;
-} {
-  if (aWins > bWins) {
+};
+
+function cupPointsFromMatchPlayLead(lead: number): PersistedCupPoints {
+  if (lead > 0) {
     return { match_winner: 'side_a', match_points_a: 1, match_points_b: 0 };
   }
-  if (bWins > aWins) {
+  if (lead < 0) {
     return { match_winner: 'side_b', match_points_a: 0, match_points_b: 1 };
   }
   return { match_winner: 'tie', match_points_a: 0.5, match_points_b: 0.5 };
+}
+
+/** Cup points for one match-play contest — only awarded when clinched or through 18. */
+function persistedCupPointsForHoleResults(
+  holeResults: Array<Pick<TournamentMatchHoleResult, 'hole' | 'hole_winner'>>
+): PersistedCupPoints {
+  const rows = [...holeResults].sort((a, b) => a.hole - b.hole);
+  if (rows.length === 0) {
+    return { ...EMPTY_PERSISTED_CUP_POINTS };
+  }
+
+  const matchStatus = computeLiveMatchStatus({ holeResults: rows });
+  const emptyGroup = { match_winner: null, match_points_a: 0, match_points_b: 0 };
+
+  if (!isMatchActuallyComplete(emptyGroup, matchStatus, rows.length)) {
+    return { ...EMPTY_PERSISTED_CUP_POINTS };
+  }
+
+  return cupPointsFromMatchPlayLead(matchStatus.lead);
+}
+
+function aggregateSinglesCupPoints(
+  matchGroup: TournamentMatchGroup,
+  holeResults: Array<Pick<TournamentMatchHoleResult, 'hole' | 'hole_winner' | 'pairing_index'>>
+): PersistedCupPoints {
+  const pairCount = Math.min(
+    matchGroup.side_a_player_ids.length,
+    matchGroup.side_b_player_ids.length
+  );
+
+  let totalA = 0;
+  let totalB = 0;
+
+  for (let index = 0; index < pairCount; index += 1) {
+    const pairingRows = holeResults.filter((row) => (row.pairing_index ?? 0) === index);
+    const pairPoints = persistedCupPointsForHoleResults(pairingRows);
+    totalA += pairPoints.match_points_a;
+    totalB += pairPoints.match_points_b;
+  }
+
+  if (totalA === 0 && totalB === 0) {
+    return { ...EMPTY_PERSISTED_CUP_POINTS };
+  }
+
+  if (totalA > totalB) {
+    return { match_winner: 'side_a', match_points_a: totalA, match_points_b: totalB };
+  }
+  if (totalB > totalA) {
+    return { match_winner: 'side_b', match_points_a: totalA, match_points_b: totalB };
+  }
+  return { match_winner: 'tie', match_points_a: totalA, match_points_b: totalB };
 }
 
 /** Cup points when a manager declares the match result without hole-by-hole entry. */
@@ -534,45 +595,12 @@ export function computeMatchPoints(params: {
   scores: TournamentScore[];
   holeResults: TournamentMatchHoleResult[];
   useNetScoring?: boolean;
-}): {
-  match_winner: TournamentTeamSide | 'tie';
-  match_points_a: number;
-  match_points_b: number;
-} {
-  const { matchGroup, format, scores, holeResults, useNetScoring = false } = params;
-
-  if (isSinglesFormat(format)) {
-    const pairCount = Math.min(
-      matchGroup.side_a_player_ids.length,
-      matchGroup.side_b_player_ids.length
-    );
-
-    let totalA = 0;
-    let totalB = 0;
-
-    for (let i = 0; i < pairCount; i++) {
-      const wins = subMatchHoleWins(
-        matchGroup.side_a_player_ids[i],
-        matchGroup.side_b_player_ids[i],
-        scores,
-        useNetScoring
-      );
-      const pairPoints = pointsFromWinTally(wins.side_a, wins.side_b);
-      totalA += pairPoints.match_points_a;
-      totalB += pairPoints.match_points_b;
-    }
-
-    if (totalA > totalB) {
-      return { match_winner: 'side_a', match_points_a: totalA, match_points_b: totalB };
-    }
-    if (totalB > totalA) {
-      return { match_winner: 'side_b', match_points_a: totalA, match_points_b: totalB };
-    }
-    return { match_winner: 'tie', match_points_a: totalA, match_points_b: totalB };
-  }
-
-  const wins = countMatchHoleWinsFromResults(holeResults);
-  return pointsFromWinTally(wins.side_a, wins.side_b);
+}): PersistedCupPoints {
+  return computeMatchPointsFromHoleResults({
+    matchGroup: params.matchGroup,
+    format: params.format,
+    holeResults: params.holeResults,
+  });
 }
 
 /** Compute cup points from direct hole_winner results (no strokes). */
@@ -580,42 +608,13 @@ export function computeMatchPointsFromHoleResults(params: {
   matchGroup: TournamentMatchGroup;
   format: TournamentFormat;
   holeResults: Array<Pick<TournamentMatchHoleResult, 'hole' | 'hole_winner' | 'pairing_index'>>;
-}): {
-  match_winner: TournamentTeamSide | 'tie';
-  match_points_a: number;
-  match_points_b: number;
-} {
+}): PersistedCupPoints {
   const { matchGroup, format, holeResults } = params;
 
   if (isSinglesFormat(format)) {
-    const pairCount = Math.min(
-      matchGroup.side_a_player_ids.length,
-      matchGroup.side_b_player_ids.length
-    );
-
-    let totalA = 0;
-    let totalB = 0;
-
-    for (let i = 0; i < pairCount; i++) {
-      const pairingRows = holeResults.filter((r) => (r.pairing_index ?? 0) === i);
-      const wins = countMatchHoleWinsFromResults(
-        pairingRows as TournamentMatchHoleResult[]
-      );
-      const pairPoints = pointsFromWinTally(wins.side_a, wins.side_b);
-      totalA += pairPoints.match_points_a;
-      totalB += pairPoints.match_points_b;
-    }
-
-    if (totalA > totalB) {
-      return { match_winner: 'side_a', match_points_a: totalA, match_points_b: totalB };
-    }
-    if (totalB > totalA) {
-      return { match_winner: 'side_b', match_points_a: totalA, match_points_b: totalB };
-    }
-    return { match_winner: 'tie', match_points_a: totalA, match_points_b: totalB };
+    return aggregateSinglesCupPoints(matchGroup, holeResults);
   }
 
-  const teamRows = holeResults.filter((r) => (r.pairing_index ?? 0) === 0);
-  const wins = countMatchHoleWinsFromResults(teamRows as TournamentMatchHoleResult[]);
-  return pointsFromWinTally(wins.side_a, wins.side_b);
+  const teamRows = holeResults.filter((row) => (row.pairing_index ?? 0) === 0);
+  return persistedCupPointsForHoleResults(teamRows);
 }

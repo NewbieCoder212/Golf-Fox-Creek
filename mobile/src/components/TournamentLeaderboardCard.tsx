@@ -9,11 +9,13 @@ import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBo
 import { TournamentRoundMatchList } from '@/components/TournamentRoundMatchList';
 import {
   buildMatchPointsLeaderboard,
+  buildMatchPointsLeaderboardFromHoleResults,
   getTournamentById,
   getTournamentTeams,
 } from '@/lib/tournament-service';
 import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
+import { getMatchHoleResultsForTournament } from '@/lib/tournament-match-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import { formatTournamentDates } from '@/lib/tournament-labels';
 import { cn } from '@/lib/cn';
@@ -60,12 +62,24 @@ export function TournamentLeaderboardCard({
     enabled: hubEmbedded,
   });
 
+  const { data: holeResults = [] } = useQuery({
+    queryKey: ['matchHoleResults', 'tournament', tournamentId],
+    queryFn: () => getMatchHoleResultsForTournament(tournamentId),
+    enabled: Boolean(tournamentId) && hubEmbedded,
+    refetchInterval: hubEmbedded ? 30_000 : false,
+  });
+
   const playerNameById = useMemo(
     () => buildTournamentPlayerMaps(tournamentPlayers, members).nameById,
     [tournamentPlayers, members]
   );
 
-  const standings = buildMatchPointsLeaderboard(teams, matchGroups);
+  const standings = useMemo(() => {
+    if (hubEmbedded) {
+      return buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults);
+    }
+    return buildMatchPointsLeaderboard(teams, matchGroups);
+  }, [hubEmbedded, holeResults, teams, matchGroups]);
   const teamStats = standings.map((row) => ({
     teamId: row.teamId,
     matchPoints: row.matchPoints,

@@ -237,10 +237,13 @@ function buildMatchPoints(
   }
 
   for (const group of matchGroups) {
+    if (group.match_winner == null) continue;
+
     const teamA = byTeamId.get(group.side_a_team_id);
     const teamB = byTeamId.get(group.side_b_team_id);
     const pointsA = Number(group.match_points_a ?? 0);
     const pointsB = Number(group.match_points_b ?? 0);
+    if (pointsA === 0 && pointsB === 0) continue;
 
     if (teamA) {
       teamA.matchPoints += pointsA;

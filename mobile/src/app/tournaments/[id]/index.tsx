@@ -328,6 +328,7 @@ export default function TournamentDetailScreen() {
               <TournamentCopyTvLinkButton
                 tournamentId={tournament.id}
                 displayToken={tournament.display_token}
+                displaySlug={tournament.display_slug}
                 compact
               />
             </View>

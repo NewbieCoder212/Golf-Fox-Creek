@@ -71,6 +71,7 @@ function useProtectedRoute() {
     const inForgotPassword = segments[0] === 'forgot-password';
     const inAcceptInvite = segments[0] === 'accept-invite';
     const inDisplay = segments[0] === 'display';
+    const inTv = segments[0] === 'tv';
     const isPublicAuthRoute =
       inAuthGroup ||
       inAdminGroup ||
@@ -78,6 +79,7 @@ function useProtectedRoute() {
       inForgotPassword ||
       inAcceptInvite ||
       inDisplay ||
+      inTv ||
       (Platform.OS === 'web' && isWebPublicAuthLocation());
 
     // If not authenticated and not on a public auth route, redirect to login
@@ -104,6 +106,7 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
     segments[0] === 'login' ||
     segments[0] === 'admin' ||
     segments[0] === 'display' ||
+    segments[0] === 'tv' ||
     segments[0] === 'forgot-password' ||
     segments[0] === 'reset-password' ||
     segments[0] === 'accept-invite';
@@ -138,6 +141,7 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="tournament" options={{ headerShown: false }} />
         <Stack.Screen name="wagering/[sessionId]" options={{ headerShown: false }} />
         <Stack.Screen name="display" options={{ headerShown: false }} />
+        <Stack.Screen name="tv/[slug]" options={{ headerShown: false }} />
         </Stack>
         <AddToHomeScreenPrompt visible={isAuthenticated && !inPublicRoute} />
       </View>

@@ -2,12 +2,13 @@ import { useCallback } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchTournamentDisplay } from '@/lib/display-service';
+import { fetchTournamentDisplayBySlug } from '@/lib/display-service';
 import { TournamentTvDisplayContent } from '@/components/TournamentTvDisplayContent';
 
-export default function TournamentTvDisplayByIdScreen() {
-  const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
-  const displayEnabled = Boolean(id && token);
+export default function TournamentTvDisplayBySlugScreen() {
+  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const normalizedSlug = typeof slug === 'string' ? slug.trim().toLowerCase() : '';
+  const displayEnabled = Boolean(normalizedSlug);
 
   const {
     data,
@@ -17,8 +18,8 @@ export default function TournamentTvDisplayByIdScreen() {
     isFetching,
     dataUpdatedAt,
   } = useQuery({
-    queryKey: ['tournamentDisplay', id, token],
-    queryFn: () => fetchTournamentDisplay(id!, token!),
+    queryKey: ['tournamentDisplaySlug', normalizedSlug],
+    queryFn: () => fetchTournamentDisplayBySlug(normalizedSlug),
     enabled: displayEnabled,
     staleTime: 10_000,
     refetchInterval: 10_000,
@@ -30,15 +31,15 @@ export default function TournamentTvDisplayByIdScreen() {
 
   return (
     <TournamentTvDisplayContent
-      tournamentId={id}
+      tournamentId={data?.tournament.id}
       data={data}
       isLoading={displayEnabled ? isLoading : false}
       error={error}
       isFetching={isFetching}
       dataUpdatedAt={dataUpdatedAt}
       onRefetch={handleRefetch}
-      showInvalidLink={!token}
-      invalidLinkMessage="Ask the pro shop for the full TV display URL including the access token."
+      showInvalidLink={!displayEnabled}
+      invalidLinkMessage="Use a short TV link like foxcreek.golf/tv/generation-cup"
     />
   );
 }

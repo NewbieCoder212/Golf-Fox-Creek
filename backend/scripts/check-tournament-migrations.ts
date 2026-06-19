@@ -17,6 +17,7 @@ const REQUIRED_POLICIES = [
 
 const REQUIRED_COLUMNS = [
   { table: 'tournaments', column: 'display_token' },
+  { table: 'tournaments', column: 'display_slug' },
   { table: 'ad_placements', column: 'display_position' },
   { table: 'tournament_match_hole_results', column: 'pairing_index' },
 ] as const;

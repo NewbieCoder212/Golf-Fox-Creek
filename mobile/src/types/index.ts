@@ -698,6 +698,8 @@ export interface TournamentMatchGroup {
   match_winner: 'side_a' | 'side_b' | 'tie' | null;
   match_points_a: number;
   match_points_b: number;
+  /** Manager declared result (forfeit / manual award) without hole-by-hole scoring */
+  match_result_declared?: boolean;
   created_at: string;
 }
 

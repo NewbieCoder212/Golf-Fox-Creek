@@ -203,11 +203,17 @@ export async function syncTournamentMatchScores(params: {
       }
     }
 
+    const isDeclared =
+      params.holeResults.length === 0 && params.matchPoints?.match_winner != null;
+
     const patchRes = await adminFetch<unknown>(
       `/rest/v1/tournament_match_groups?id=eq.${params.matchGroupId}`,
       {
         method: 'PATCH',
-        body: matchPoints,
+        body: {
+          ...matchPoints,
+          match_result_declared: isDeclared,
+        },
         prefer: 'return=minimal',
       }
     );
@@ -262,6 +268,7 @@ export async function clearTournamentMatchScores(params: {
           match_winner: null,
           match_points_a: 0,
           match_points_b: 0,
+          match_result_declared: false,
         },
         prefer: 'return=minimal',
       }

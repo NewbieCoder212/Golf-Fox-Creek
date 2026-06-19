@@ -28,7 +28,7 @@ const TOURNAMENT_SELECT =
 async function buildDisplayPayloadForTournament(tournament: DisplayTournamentRow) {
   const tournamentId = tournament.id;
   const matchGroupSelect =
-    'id,tournament_id,round_number,format,side_a_team_id,side_b_team_id,side_a_player_ids,side_b_player_ids,tee_time,starting_hole,group_number,notes,match_winner,match_points_a,match_points_b,created_at';
+    'id,tournament_id,round_number,format,side_a_team_id,side_b_team_id,side_a_player_ids,side_b_player_ids,tee_time,starting_hole,group_number,notes,match_winner,match_points_a,match_points_b,match_result_declared,created_at';
 
   const [teams, players, scores, matchGroups, fullMatchGroups, ads] = await Promise.all([
     fetchRows(`/rest/v1/tournament_teams?tournament_id=eq.${tournamentId}&select=id,tournament_id,team_name,side,logo_url`),

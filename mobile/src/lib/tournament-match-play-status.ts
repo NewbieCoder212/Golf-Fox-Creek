@@ -17,11 +17,22 @@ export function hasRecordedMatchResult(
   );
 }
 
+export function isAdminDeclaredMatchResult(
+  group: Pick<TournamentMatchGroup, 'match_result_declared' | 'match_winner'>
+): boolean {
+  return Boolean(group.match_result_declared && group.match_winner != null);
+}
+
 export function isMatchActuallyComplete(
-  group: Pick<TournamentMatchGroup, 'match_winner' | 'match_points_a' | 'match_points_b'>,
+  group: Pick<
+    TournamentMatchGroup,
+    'match_winner' | 'match_points_a' | 'match_points_b' | 'match_result_declared'
+  >,
   matchStatus: MatchStatus,
   holeResultCount: number
 ): boolean {
+  if (isAdminDeclaredMatchResult(group)) return true;
+
   if (matchStatus.clinched) return true;
 
   if (matchStatus.throughHole >= 18) {
@@ -39,7 +50,10 @@ export function isMatchActuallyComplete(
 
 export function isMatchPlayComplete(
   status: MatchStatus,
-  group?: Pick<TournamentMatchGroup, 'match_winner' | 'match_points_a' | 'match_points_b'> | null,
+  group?: Pick<
+    TournamentMatchGroup,
+    'match_winner' | 'match_points_a' | 'match_points_b' | 'match_result_declared'
+  > | null,
   holeResultCount = 0
 ): boolean {
   if (!group) return false;
@@ -98,6 +112,12 @@ export function formatMatchResultSummary(
   sideAName: string,
   sideBName: string
 ): string | null {
+  if (isAdminDeclaredMatchResult(group)) {
+    if (group.match_winner === 'tie') return 'Halved';
+    if (group.match_winner === 'side_a') return `${sideAName} won`;
+    if (group.match_winner === 'side_b') return `${sideBName} won`;
+  }
+
   if (matchStatus.throughHole > 0) {
     return matchStatus.label;
   }

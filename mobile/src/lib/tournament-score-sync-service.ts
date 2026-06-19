@@ -5,6 +5,7 @@ import type {
   TournamentScore,
   TournamentScoreInsert,
 } from '@/types';
+import { bridgeAdminAuthToMember, ensureManagerAccessToken } from './admin-auth-bridge';
 import { getBackendUrl, isBackendReachableInBrowser } from './backend-url';
 import { ensureFreshMemberAccessToken, getMemberAccessToken } from './tournament-supabase';
 import { clearTournamentMatchRound, syncMatchHoleResults, syncMatchHoleResultsDirect } from './tournament-match-service';
@@ -316,7 +317,8 @@ export async function declareMatchWinnerOverride(params: {
     matchPoints,
   };
 
-  const accessToken = await ensureFreshMemberAccessToken();
+  await bridgeAdminAuthToMember();
+  const accessToken = await ensureManagerAccessToken();
   if (!accessToken) {
     return { success: false, error: 'Not signed in' };
   }
@@ -344,6 +346,7 @@ export async function declareMatchWinnerOverride(params: {
       roundNumber: params.roundNumber,
       holeResults: [],
       matchPoints,
+      matchResultDeclared: true,
       accessToken,
     });
     return { success: true };
@@ -358,7 +361,8 @@ export async function clearTournamentMatchScoresViaBackend(params: {
   matchGroupId: string;
   roundNumber: number;
 }): Promise<{ success: boolean; error?: string }> {
-  const accessToken = await ensureFreshMemberAccessToken();
+  await bridgeAdminAuthToMember();
+  const accessToken = await ensureManagerAccessToken();
   if (!accessToken) {
     return { success: false, error: 'Not signed in' };
   }

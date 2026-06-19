@@ -12,7 +12,7 @@ import type {
   TournamentTeam,
   TournamentTeamInsert,
 } from '@/types';
-import { buildMatchStatusFromHoleResults } from './tournament-match-play-status';
+import { buildMatchStatusFromHoleResults, isAdminDeclaredMatchResult } from './tournament-match-play-status';
 import { getTeamSideDisplayName } from './tournament-labels';
 import {
   getManagerAccessToken,
@@ -739,6 +739,10 @@ export function buildMatchPointsLeaderboardFromHoleResults(
   const sideBName = getTeamSideDisplayName('side_b', teams as TournamentTeam[]);
 
   const completedGroups = matchGroups.filter((group) => {
+    if (isAdminDeclaredMatchResult(group)) {
+      return true;
+    }
+
     const groupHoles = holeResults.filter((row) => row.match_group_id === group.id);
     if (groupHoles.length === 0) return false;
 

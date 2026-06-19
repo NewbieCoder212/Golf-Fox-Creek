@@ -74,6 +74,7 @@ export interface DisplayMatchGroupRow {
   match_winner: 'side_a' | 'side_b' | 'tie' | null;
   match_points_a: number;
   match_points_b: number;
+  match_result_declared: boolean;
   created_at: string;
 }
 
@@ -217,6 +218,70 @@ function buildLeaderboard(
   }));
 }
 
+function isAdminDeclaredMatchResult(
+  group: Pick<DisplayMatchGroupRow, 'match_result_declared' | 'match_winner'>
+): boolean {
+  return Boolean(group.match_result_declared && group.match_winner != null);
+}
+
+function computeMatchLeadFromHoleResults(
+  results: DisplayHoleResultRow[],
+  throughHole = 18
+): number {
+  let lead = 0;
+  for (const row of results) {
+    if (row.hole > throughHole) continue;
+    if (row.hole_winner === 'side_a') lead += 1;
+    else if (row.hole_winner === 'side_b') lead -= 1;
+  }
+  return lead;
+}
+
+function isHoleScoredMatchComplete(
+  group: DisplayMatchGroupRow,
+  holeResults: DisplayHoleResultRow[]
+): boolean {
+  if (holeResults.length === 0) return false;
+
+  const sorted = [...holeResults].sort((a, b) => a.hole - b.hole);
+  const lead = computeMatchLeadFromHoleResults(sorted);
+  const throughHole = Math.max(...sorted.map((row) => row.hole));
+  const holesRemaining = Math.max(0, 18 - throughHole);
+  const clinched = lead !== 0 && Math.abs(lead) > holesRemaining;
+
+  if (clinched) return true;
+
+  if (throughHole >= 18) {
+    if (lead !== 0) return true;
+    if (group.match_winner === 'tie') return true;
+  }
+
+  if (group.match_winner != null) {
+    return clinched || throughHole >= 18;
+  }
+
+  return false;
+}
+
+function filterGroupsForMatchPoints(
+  matchGroups: DisplayMatchGroupRow[],
+  holeResults: DisplayHoleResultRow[]
+): DisplayMatchGroupRow[] {
+  const holesByGroup = new Map<string, DisplayHoleResultRow[]>();
+
+  for (const row of holeResults) {
+    const list = holesByGroup.get(row.match_group_id) ?? [];
+    list.push(row);
+    holesByGroup.set(row.match_group_id, list);
+  }
+
+  return matchGroups.filter((group) => {
+    if (isAdminDeclaredMatchResult(group)) return true;
+    const groupHoles = holesByGroup.get(group.id) ?? [];
+    return isHoleScoredMatchComplete(group, groupHoles);
+  });
+}
+
 function buildMatchPoints(
   teams: TeamRow[],
   matchGroups: MatchGroupRow[]
@@ -351,7 +416,13 @@ export function buildTournamentDisplayPayload(params: {
     holeResults: params.fullHoleResults ?? [],
     grossStandings: buildLeaderboard(scores, nameByKey, 'gross'),
     netStandings: buildLeaderboard(scores, nameByKey, 'net'),
-    matchPoints: buildMatchPoints(teams, matchGroups),
+    matchPoints:
+      fullMatchGroups && fullMatchGroups.length > 0
+        ? buildMatchPoints(
+            teams,
+            filterGroupsForMatchPoints(fullMatchGroups, fullHoleResults ?? [])
+          )
+        : buildMatchPoints(teams, matchGroups),
     matchPlay:
       sideATeam && sideBTeam && holeResults.length > 0
         ? {

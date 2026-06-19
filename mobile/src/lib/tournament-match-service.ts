@@ -231,6 +231,7 @@ export async function syncMatchHoleResultsDirect(params: {
     match_points_a: number;
     match_points_b: number;
   };
+  matchResultDeclared?: boolean;
   accessToken?: string | null;
 }): Promise<TournamentMatchHoleResult[]> {
   const token =
@@ -250,16 +251,33 @@ export async function syncMatchHoleResultsDirect(params: {
     'clear prior match hole results'
   );
 
-  if (params.holeResults.length === 0) return [];
+  if (params.holeResults.length > 0) {
+    const saved = requireMatchMutation(
+      await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
+        method: 'POST',
+        body: params.holeResults as unknown as Record<string, unknown>[],
+        accessToken: token,
+      }),
+      'save match hole results'
+    );
 
-  const saved = requireMatchMutation(
-    await tournamentSupabaseRequest<TournamentMatchHoleResult[]>('tournament_match_hole_results', {
-      method: 'POST',
-      body: params.holeResults as unknown as Record<string, unknown>[],
-      accessToken: token,
-    }),
-    'save match hole results'
-  );
+    requireMatchMutation(
+      await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
+        method: 'PATCH',
+        query: { id: `eq.${params.matchGroupId}` },
+        body: {
+          match_winner: params.matchPoints.match_winner,
+          match_points_a: params.matchPoints.match_points_a,
+          match_points_b: params.matchPoints.match_points_b,
+          match_result_declared: params.matchResultDeclared ?? false,
+        },
+        accessToken: token,
+      }),
+      'update match points'
+    );
+
+    return saved ?? [];
+  }
 
   requireMatchMutation(
     await tournamentSupabaseRequest<TournamentMatchGroup[]>('tournament_match_groups', {
@@ -269,13 +287,14 @@ export async function syncMatchHoleResultsDirect(params: {
         match_winner: params.matchPoints.match_winner,
         match_points_a: params.matchPoints.match_points_a,
         match_points_b: params.matchPoints.match_points_b,
+        match_result_declared: params.matchResultDeclared ?? false,
       },
       accessToken: token,
     }),
     'update match points'
   );
 
-  return saved ?? [];
+  return [];
 }
 
 export async function computeAndSaveMatchResults(params: {
@@ -300,6 +319,7 @@ export async function computeAndSaveMatchResults(params: {
         match_winner: points.match_winner,
         match_points_a: points.match_points_a,
         match_points_b: points.match_points_b,
+        match_result_declared: false,
       },
       accessToken: token,
     }),
@@ -343,6 +363,7 @@ export async function clearTournamentMatchRound(params: {
           match_winner: null,
           match_points_a: 0,
           match_points_b: 0,
+          match_result_declared: false,
         },
         accessToken: token,
       }),

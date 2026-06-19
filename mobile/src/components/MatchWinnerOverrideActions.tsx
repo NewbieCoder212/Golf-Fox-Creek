@@ -1,4 +1,4 @@
-import { View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, Alert, type GestureResponderEvent } from 'react-native';
 import { Gavel } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import {
   declareMatchWinnerOverride,
 } from '@/lib/tournament-score-sync-service';
 import { hasRecordedMatchResult } from '@/lib/tournament-match-play-status';
+import { confirmAction } from '@/lib/confirm-action';
 import type { TournamentMatchGroup, TournamentTeamSide } from '@/types';
 import { cn } from '@/lib/cn';
 
@@ -19,23 +20,8 @@ interface MatchWinnerOverrideActionsProps {
   sideBName: string;
 }
 
-function confirmDeclare(
-  label: string,
-  hasExistingResults: boolean,
-  onConfirm: () => void
-) {
-  const warning = hasExistingResults
-    ? ' This replaces any hole-by-hole results already entered for this match.'
-    : '';
-
-  Alert.alert(
-    'Declare match result',
-    `Award cup points: ${label}.${warning}`,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', style: 'default', onPress: onConfirm },
-    ]
-  );
+function stopPressPropagation(event: GestureResponderEvent) {
+  event.stopPropagation?.();
 }
 
 export function MatchWinnerOverrideActions({
@@ -53,6 +39,8 @@ export function MatchWinnerOverrideActions({
       queryClient.invalidateQueries({ queryKey: ['tournamentMatchGroups', tournamentId] }),
       queryClient.invalidateQueries({ queryKey: ['matchHoleResults'] }),
       queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] }),
+      queryClient.invalidateQueries({ queryKey: ['tournamentDisplay'] }),
+      queryClient.invalidateQueries({ queryKey: ['tournamentDisplaySlug'] }),
     ]);
   };
 
@@ -99,25 +87,32 @@ export function MatchWinnerOverrideActions({
 
   const isPending = declareMutation.isPending || clearMutation.isPending;
 
-  const handleDeclare = (winner: TournamentTeamSide | 'tie', label: string) => {
+  const handleDeclare = async (winner: TournamentTeamSide | 'tie', label: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    confirmDeclare(label, hasResult, () => declareMutation.mutate(winner));
+
+    const warning = hasResult
+      ? ' This replaces any hole-by-hole results already entered for this match.'
+      : '';
+
+    const confirmed = await confirmAction(
+      'Declare match result',
+      `Award cup points: ${label}.${warning}`
+    );
+    if (!confirmed) return;
+
+    declareMutation.mutate(winner);
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(
+
+    const confirmed = await confirmAction(
       'Clear match result',
-      'Remove declared points and hole results for this match?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => clearMutation.mutate(),
-        },
-      ]
+      'Remove declared points and hole results for this match?'
     );
+    if (!confirmed) return;
+
+    clearMutation.mutate();
   };
 
   return (
@@ -129,7 +124,7 @@ export function MatchWinnerOverrideActions({
         </Text>
       </View>
       <Text className="text-neutral-500 text-xs mb-2">
-        Declare result and award cup points without hole-by-hole entry.
+        Award cup points without hole-by-hole entry. This does not open the scorecard.
       </Text>
 
       {hasResult ? (
@@ -150,7 +145,10 @@ export function MatchWinnerOverrideActions({
 
       <View className="flex-row gap-2">
         <Pressable
-          onPress={() => handleDeclare('side_a', `${sideAName} wins (1 pt)`)}
+          onPress={(event) => {
+            stopPressPropagation(event);
+            void handleDeclare('side_a', `${sideAName} wins (1 pt)`);
+          }}
           disabled={isPending}
           className={cn(
             'flex-1 items-center rounded-lg py-2.5 border border-lime-700/50 bg-lime-900/30 active:opacity-80',
@@ -161,22 +159,30 @@ export function MatchWinnerOverrideActions({
             <ActivityIndicator color="#a3e635" size="small" />
           ) : (
             <Text className="text-lime-400 font-semibold text-[11px] text-center">
-              {sideAName} wins
+              {sideAName} wins (1 pt)
             </Text>
           )}
         </Pressable>
         <Pressable
-          onPress={() => handleDeclare('tie', 'Match halved (0.5 pt each)')}
+          onPress={(event) => {
+            stopPressPropagation(event);
+            void handleDeclare('tie', 'Match halved (0.5 pt each)');
+          }}
           disabled={isPending}
           className={cn(
             'flex-1 items-center rounded-lg py-2.5 border border-neutral-600 bg-neutral-900 active:opacity-80',
             isPending && 'opacity-50'
           )}
         >
-          <Text className="text-neutral-300 font-semibold text-[11px] text-center">Halved</Text>
+          <Text className="text-neutral-300 font-semibold text-[11px] text-center">
+            Halved (0.5 pt)
+          </Text>
         </Pressable>
         <Pressable
-          onPress={() => handleDeclare('side_b', `${sideBName} wins (1 pt)`)}
+          onPress={(event) => {
+            stopPressPropagation(event);
+            void handleDeclare('side_b', `${sideBName} wins (1 pt)`);
+          }}
           disabled={isPending}
           className={cn(
             'flex-1 items-center rounded-lg py-2.5 border border-lime-700/50 bg-lime-900/30 active:opacity-80',
@@ -184,14 +190,17 @@ export function MatchWinnerOverrideActions({
           )}
         >
           <Text className="text-lime-400 font-semibold text-[11px] text-center">
-            {sideBName} wins
+            {sideBName} wins (1 pt)
           </Text>
         </Pressable>
       </View>
 
       {hasResult ? (
         <Pressable
-          onPress={handleClear}
+          onPress={(event) => {
+            stopPressPropagation(event);
+            void handleClear();
+          }}
           disabled={isPending}
           className={cn(
             'mt-2 items-center rounded-lg py-2 border border-neutral-700 active:opacity-80',

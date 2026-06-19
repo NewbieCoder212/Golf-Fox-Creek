@@ -54,7 +54,11 @@ import type { Tournament, TournamentTeam, TournamentTeamSide } from '@/types';
 import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
 import { bridgeAdminAuthToMember } from '@/lib/admin-auth-bridge';
 import { setScorecardReturnDestination } from '@/lib/scorecard-navigation';
-import { hasRecordedMatchResult } from '@/lib/tournament-match-play-status';
+import {
+  buildMatchStatusFromHoleResults,
+  hasRecordedMatchResult,
+  type MatchPlayStatus,
+} from '@/lib/tournament-match-play-status';
 import { cn } from '@/lib/cn';
 
 interface MemberOption {
@@ -251,6 +255,38 @@ export function TournamentMatchGroupsTab({
     () => Object.fromEntries(matchGroups.map((group) => [group.id, group])),
     [matchGroups]
   );
+
+  const matchPlayByGroupId = useMemo(() => {
+    const map: Record<
+      string,
+      { playStatus: MatchPlayStatus; resultSummary: string | null }
+    > = {};
+
+    for (const groupId of savedGroupIds) {
+      const group = savedGroupById[groupId];
+      if (!group) continue;
+
+      const { matchStatus, playStatus } = buildMatchStatusFromHoleResults(
+        group,
+        holeResults,
+        sideAName,
+        sideBName
+      );
+
+      let resultSummary: string | null = null;
+      if (group.match_result_declared && group.match_winner != null) {
+        if (group.match_winner === 'tie') resultSummary = 'Halved';
+        else if (group.match_winner === 'side_a') resultSummary = `${sideAName} won`;
+        else if (group.match_winner === 'side_b') resultSummary = `${sideBName} won`;
+      } else if (matchStatus.throughHole > 0) {
+        resultSummary = matchStatus.label;
+      }
+
+      map[groupId] = { playStatus, resultSummary };
+    }
+
+    return map;
+  }, [savedGroupIds, savedGroupById, holeResults, sideAName, sideBName]);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -752,8 +788,10 @@ export function TournamentMatchGroupsTab({
             ? getMatchGroupFormat(savedGroup, tournament)
             : roundFormat;
           const wins = row.groupId ? holeWinsByGroupId[row.groupId] : undefined;
+          const matchPlay = row.groupId ? matchPlayByGroupId[row.groupId] : undefined;
           const pairingComplete = isPairingRowComplete(row, playersPerMatch);
           const teeSlotOnly = isPairingRowTeeSlotOnly(row);
+          const matchComplete = matchPlay?.playStatus === 'complete';
 
           return (
             <View
@@ -800,7 +838,15 @@ export function TournamentMatchGroupsTab({
 
               {row.groupId ? (
                 <View className="mb-3">
-                  {pairingComplete ? (
+                  {matchComplete ? (
+                    <Text className="text-lime-400 text-[10px] font-semibold uppercase tracking-widest">
+                      Match complete
+                    </Text>
+                  ) : matchPlay?.playStatus === 'in_progress' ? (
+                    <Text className="text-amber-400 text-[10px] font-semibold uppercase tracking-widest">
+                      In progress
+                    </Text>
+                  ) : pairingComplete ? (
                     <Text className="text-lime-500 text-[10px] font-semibold uppercase tracking-widest">
                       Pairing complete
                     </Text>
@@ -813,6 +859,11 @@ export function TournamentMatchGroupsTab({
                       Partial pairing · {playersPerMatch} per side needed
                     </Text>
                   )}
+                  {matchPlay?.resultSummary ? (
+                    <Text className="text-neutral-300 text-sm font-semibold mt-1">
+                      {matchPlay.resultSummary}
+                    </Text>
+                  ) : null}
                 </View>
               ) : null}
 
@@ -907,7 +958,17 @@ export function TournamentMatchGroupsTab({
                 </View>
               ) : null}
 
-              {row.groupId && pairingComplete ? (
+              {isManager && row.groupId && pairingComplete && savedGroup ? (
+                <MatchWinnerOverrideActions
+                  tournamentId={tournamentId}
+                  matchGroup={savedGroup}
+                  roundNumber={roundNumber}
+                  sideAName={sideAName}
+                  sideBName={sideBName}
+                />
+              ) : null}
+
+              {row.groupId && pairingComplete && !matchComplete ? (
                 <View className="flex-row gap-2 mt-3">
                   {isSinglesFormat(groupFormat) ? (
                     <Pressable
@@ -915,7 +976,7 @@ export function TournamentMatchGroupsTab({
                       className="flex-1 flex-row items-center justify-center bg-lime-600 rounded-lg py-2.5 active:opacity-80"
                     >
                       <ClipboardList size={14} color="#fff" />
-                      <Text className="text-white font-semibold text-xs ml-1.5">Enter Scores</Text>
+                      <Text className="text-white font-semibold text-xs ml-1.5">Enter scores</Text>
                     </Pressable>
                   ) : (
                     (['side_a', 'side_b'] as const).map((matchSide) => (
@@ -926,22 +987,12 @@ export function TournamentMatchGroupsTab({
                       >
                         <ClipboardList size={14} color="#a3e635" />
                         <Text className="text-lime-400 font-semibold text-xs ml-1.5">
-                          {getTeamSideDisplayName(matchSide, teams)}
+                          Scorecard · {getTeamSideDisplayName(matchSide, teams)}
                         </Text>
                       </Pressable>
                     ))
                   )}
                 </View>
-              ) : null}
-
-              {isManager && row.groupId && pairingComplete && savedGroup ? (
-                <MatchWinnerOverrideActions
-                  tournamentId={tournamentId}
-                  matchGroup={savedGroup}
-                  roundNumber={roundNumber}
-                  sideAName={sideAName}
-                  sideBName={sideBName}
-                />
               ) : null}
             </View>
           );

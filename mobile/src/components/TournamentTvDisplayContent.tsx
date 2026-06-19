@@ -22,6 +22,7 @@ import { TournamentTvTeeSheet } from '@/components/TournamentTvTeeSheet';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
 import { buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-service';
+import { cn } from '@/lib/cn';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 import {
   buildTournamentTeeSheetRows,

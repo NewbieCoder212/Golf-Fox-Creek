@@ -10,11 +10,16 @@ function isLoungeModeParam(mode: string | string[] | undefined): boolean {
   return value?.trim().toLowerCase() === 'lounge';
 }
 
-export default function TournamentTvDisplayBySlugScreen() {
+interface TournamentTvSlugScreenProps {
+  /** Path-based lounge route — overrides `?mode=lounge` */
+  loungeMode?: boolean;
+}
+
+export function TournamentTvSlugScreen({ loungeMode: loungeModeProp }: TournamentTvSlugScreenProps = {}) {
   const { slug, mode } = useLocalSearchParams<{ slug: string; mode?: string }>();
   const normalizedSlug = typeof slug === 'string' ? slug.trim().toLowerCase() : '';
   const displayEnabled = Boolean(normalizedSlug);
-  const loungeMode = isLoungeModeParam(mode);
+  const loungeMode = loungeModeProp ?? isLoungeModeParam(mode);
 
   const {
     data,

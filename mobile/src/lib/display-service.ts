@@ -16,6 +16,12 @@ export function buildTournamentTvShortUrl(displaySlug: string): string {
   return `${WEB_APP_URL}/tv/${slug}`;
 }
 
+/** Lounge TV layout — large type for wall-mounted displays */
+export function buildTournamentTvLoungeUrl(displaySlug: string): string {
+  const slug = displaySlug.trim().toLowerCase();
+  return `${WEB_APP_URL}/tv/${slug}/lounge`;
+}
+
 export function getPreferredTournamentTvDisplayUrl(
   tournamentId: string,
   displayToken: string,
@@ -27,12 +33,13 @@ export function getPreferredTournamentTvDisplayUrl(
   return buildTournamentTvDisplayUrl(tournamentId, displayToken);
 }
 
-export function formatTvShortUrlForTyping(displaySlug: string): string {
+export function formatTvShortUrlForTyping(displaySlug: string, lounge = false): string {
   const host =
     typeof window !== 'undefined'
       ? window.location.host.replace(/^www\./, '')
       : 'foxcreek.golf';
-  return `${host}/tv/${displaySlug.trim().toLowerCase()}`;
+  const slug = displaySlug.trim().toLowerCase();
+  return lounge ? `${host}/tv/${slug}/lounge` : `${host}/tv/${slug}`;
 }
 
 async function parseDisplayResponse(response: Response): Promise<TournamentDisplayPayload> {

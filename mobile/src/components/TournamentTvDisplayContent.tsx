@@ -23,6 +23,10 @@ import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
 import { buildMatchPointsLeaderboard } from '@/lib/tournament-service';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
+import {
+  buildTournamentTeeSheetRows,
+  summarizeTvLiveEmptyState,
+} from '@/lib/tournament-tee-sheet';
 import type { Tournament, TournamentDisplayPayload, TournamentPlayer, TournamentTeam } from '@/types';
 
 const TV_WIDE_MIN_WIDTH = 860;
@@ -88,6 +92,19 @@ export function TournamentTvDisplayContent({
   );
 
   const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
+
+  const liveEmptySummary = useMemo(() => {
+    if (!tournament || matchGroups.length === 0) return null;
+    const rows = buildTournamentTeeSheetRows({
+      tournament,
+      teams,
+      matchGroups,
+      holeResults,
+      playerNameById,
+      roundNumber: displayRound,
+    });
+    return summarizeTvLiveEmptyState(rows);
+  }, [tournament, teams, matchGroups, holeResults, playerNameById, displayRound]);
 
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
@@ -258,6 +275,7 @@ export function TournamentTvDisplayContent({
                   hideTitle
                   layout="tv-carousel"
                   liveOnly
+                  liveEmptySummary={liveEmptySummary}
                 />
               </View>
               {teeSheet ? <View className="shrink-0">{teeSheet}</View> : null}
@@ -280,6 +298,7 @@ export function TournamentTvDisplayContent({
                 hideTitle
                 layout="tv-carousel"
                 liveOnly
+                liveEmptySummary={liveEmptySummary}
               />
             </View>
             {teeSheet ? <View className="shrink-0">{teeSheet}</View> : null}

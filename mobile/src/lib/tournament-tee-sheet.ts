@@ -33,6 +33,18 @@ export interface TournamentTeeSheetRow {
   resultSummary: string | null;
 }
 
+export interface TvLiveEmptySummary {
+  onCourseCount: number;
+  onCourseRows: Array<{
+    teeTimeLabel: string;
+    groupNumber: number;
+    sideAName: string;
+    sideBName: string;
+  }>;
+  nextUp: { teeTimeLabel: string; groupNumber: number } | null;
+  allFinal: boolean;
+}
+
 const ON_TEE_GRACE_MS = 2 * 60 * 1000;
 
 export function resolveTeeSheetDisplayStatus(
@@ -63,6 +75,27 @@ export function teeSheetStatusLabel(status: TeeSheetDisplayStatus): string {
     default:
       return 'Up next';
   }
+}
+
+export function summarizeTvLiveEmptyState(rows: TournamentTeeSheetRow[]): TvLiveEmptySummary {
+  const active = rows.filter(
+    (row) => row.displayStatus === 'on_course' || row.displayStatus === 'live'
+  );
+  const nextUp = rows.find((row) => row.displayStatus === 'upcoming');
+
+  return {
+    onCourseCount: active.length,
+    onCourseRows: active.slice(0, 3).map((row) => ({
+      teeTimeLabel: row.teeTimeLabel,
+      groupNumber: row.groupNumber,
+      sideAName: row.sideAName,
+      sideBName: row.sideBName,
+    })),
+    nextUp: nextUp
+      ? { teeTimeLabel: nextUp.teeTimeLabel, groupNumber: nextUp.groupNumber }
+      : null,
+    allFinal: rows.length > 0 && rows.every((row) => row.displayStatus === 'complete'),
+  };
 }
 
 function formatPlayersLabel(

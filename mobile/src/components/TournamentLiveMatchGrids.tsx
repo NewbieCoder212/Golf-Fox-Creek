@@ -8,6 +8,7 @@ import {
   groupMatchGridsByRound,
 } from '@/lib/tournament-match-grid';
 import type { MatchGridModel } from '@/lib/tournament-match-grid';
+import type { TvLiveEmptySummary } from '@/lib/tournament-tee-sheet';
 import { cn } from '@/lib/cn';
 import type { TournamentMatchGroup, TournamentMatchHoleResult, TournamentScore } from '@/types';
 
@@ -24,6 +25,8 @@ interface TournamentLiveMatchGridsProps {
   layout?: 'stack' | 'tv-row' | 'tv-carousel';
   /** TV hero layout — only show in-progress matches, no finished rotation */
   liveOnly?: boolean;
+  /** Context for the live-only empty state (tee sheet schedule below) */
+  liveEmptySummary?: TvLiveEmptySummary | null;
 }
 
 const TV_CAROUSEL_INTERVAL_MS = 12_000;
@@ -46,18 +49,82 @@ function chunkMatches<T>(items: T[], size: number): T[][] {
   return pages.length > 0 ? pages : [[]];
 }
 
+function TvLiveEmptyStrip({ summary }: { summary: TvLiveEmptySummary | null | undefined }) {
+  if (summary?.allFinal) {
+    return (
+      <View className="bg-[#141414] rounded-xl border border-neutral-800 px-4 py-3">
+        <Text className="text-neutral-400 text-sm">All matches complete for this round</Text>
+        <Text className="text-neutral-600 text-xs mt-1">Final results are in the tee sheet below</Text>
+      </View>
+    );
+  }
+
+  if (summary && summary.onCourseCount > 0) {
+    const preview = summary.onCourseRows
+      .map((row) => `G${row.groupNumber} ${row.teeTimeLabel}`)
+      .join(' · ');
+    const more =
+      summary.onCourseCount > summary.onCourseRows.length
+        ? ` · +${summary.onCourseCount - summary.onCourseRows.length} more`
+        : '';
+
+    return (
+      <View className="bg-[#141414] rounded-xl border border-lime-900/40 px-4 py-3">
+        <View className="flex-row items-center gap-2 mb-1">
+          <View className="w-1.5 h-1.5 rounded-full bg-lime-400" />
+          <Text className="text-lime-400 text-xs font-semibold uppercase tracking-wide">
+            {summary.onCourseCount} group{summary.onCourseCount !== 1 ? 's' : ''} on course
+          </Text>
+        </View>
+        <Text className="text-neutral-300 text-sm" numberOfLines={1}>
+          {preview}
+          {more}
+        </Text>
+        <Text className="text-neutral-600 text-xs mt-1">
+          Live scorecards appear here once scoring starts
+        </Text>
+      </View>
+    );
+  }
+
+  if (summary?.nextUp) {
+    return (
+      <View className="bg-[#141414] rounded-xl border border-neutral-800 px-4 py-3">
+        <Text className="text-neutral-400 text-sm">
+          First tee at {summary.nextUp.teeTimeLabel}
+          {summary.nextUp.groupNumber ? ` · Group ${summary.nextUp.groupNumber}` : ''}
+        </Text>
+        <Text className="text-neutral-600 text-xs mt-1">
+          See full schedule in the tee sheet below
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className="bg-[#141414] rounded-xl border border-neutral-800 px-4 py-3">
+      <Text className="text-neutral-400 text-sm">No live scorecards yet</Text>
+      <Text className="text-neutral-600 text-xs mt-1">
+        Matches appear here once players start entering scores
+      </Text>
+    </View>
+  );
+}
+
 function TvMatchCarousel({
   matches,
   variant,
   cardsPerPage,
   prioritizeLive = true,
   liveOnly = false,
+  liveEmptySummary,
 }: {
   matches: MatchGridModel[];
   variant: MatchGridCardVariant;
   cardsPerPage: number;
   prioritizeLive?: boolean;
   liveOnly?: boolean;
+  liveEmptySummary?: TvLiveEmptySummary | null;
 }) {
   const liveMatches = useMemo(() => matches.filter((model) => model.inProgress), [matches]);
   const finishedMatches = useMemo(() => matches.filter(isFinishedMatch), [matches]);
@@ -161,7 +228,13 @@ function TvMatchCarousel({
   const statusLine = liveOnly
     ? hasLive
       ? `${liveMatches.length} match${liveMatches.length !== 1 ? 'es' : ''} in progress`
-      : 'No matches on the course right now'
+      : liveEmptySummary?.onCourseCount
+        ? `${liveEmptySummary.onCourseCount} on course · awaiting scores`
+        : liveEmptySummary?.nextUp
+          ? `First tee ${liveEmptySummary.nextUp.teeTimeLabel}`
+          : liveEmptySummary?.allFinal
+            ? 'Round complete'
+            : 'Awaiting first scores'
     : activePhase === 'live'
       ? `${liveMatches.length} in progress${hasFinished ? ` · ${finishedMatches.length} done` : ''}`
       : activePhase === 'finished'
@@ -181,11 +254,7 @@ function TvMatchCarousel({
             <Text className="text-neutral-600 text-xs mt-1">{statusLine}</Text>
           </View>
         </View>
-        <View className="flex-1 min-h-[100px] max-h-[160px] items-center justify-center bg-[#141414] rounded-xl border border-neutral-800 border-dashed">
-          <Text className="text-neutral-500 text-sm text-center px-4">
-            Check back when tee times are on the course
-          </Text>
-        </View>
+        <TvLiveEmptyStrip summary={liveEmptySummary} />
       </View>
     );
   }
@@ -272,6 +341,7 @@ export function TournamentLiveMatchGrids({
   hideTitle = false,
   layout = 'stack',
   liveOnly = false,
+  liveEmptySummary,
 }: TournamentLiveMatchGridsProps) {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
@@ -344,6 +414,7 @@ export function TournamentLiveMatchGrids({
         cardsPerPage={tvCardsPerPage}
         prioritizeLive={!liveOnly}
         liveOnly={liveOnly}
+        liveEmptySummary={liveEmptySummary}
       />
     );
   }

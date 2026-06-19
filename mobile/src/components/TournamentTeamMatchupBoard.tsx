@@ -241,7 +241,7 @@ export function TournamentTeamMatchupBoard({
                 {stat.holesWon}
               </Text>
             ) : null}
-            {stat?.matchesWon != null && !showMinimalChrome && !tvStrip ? (
+            {stat?.matchesWon != null && stat.matchesWon > 0 && !showMinimalChrome && !tvStrip ? (
               <Text style={{ color: theme.colorLight }} className="text-[10px] font-body mt-1 opacity-80">
                 {stat.matchesWon} match win{stat.matchesWon !== 1 ? 's' : ''}
               </Text>

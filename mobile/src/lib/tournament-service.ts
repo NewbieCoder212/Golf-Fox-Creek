@@ -739,6 +739,9 @@ export function buildMatchPointsLeaderboardFromHoleResults(
   const sideBName = getTeamSideDisplayName('side_b', teams as TournamentTeam[]);
 
   const completedGroups = matchGroups.filter((group) => {
+    const groupHoles = holeResults.filter((row) => row.match_group_id === group.id);
+    if (groupHoles.length === 0) return false;
+
     const { playStatus } = buildMatchStatusFromHoleResults(
       group,
       holeResults,

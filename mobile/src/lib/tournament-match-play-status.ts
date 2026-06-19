@@ -29,11 +29,6 @@ export function isMatchActuallyComplete(
     if (group.match_winner === 'tie') return true;
   }
 
-  // Admin/direct result with no hole-by-hole scoring recorded
-  if (group.match_winner != null && holeResultCount === 0) {
-    return true;
-  }
-
   // Persisted winner with partial scoring — only final once clinched or through 18
   if (group.match_winner != null && holeResultCount > 0) {
     return matchStatus.clinched || matchStatus.throughHole >= 18;

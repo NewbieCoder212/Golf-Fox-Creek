@@ -26,9 +26,8 @@ export function getBackendUrl(): string {
   }
 
   if (isProductionWebHost()) {
-    if (typeof window !== 'undefined') {
-      return window.location.origin;
-    }
+    // Hono API (display, score sync, team admin). Same-origin /api/* on foxcreek.golf
+    // is only for invite + password-reset handlers — use getInviteBackendUrl() for those.
     if (configured && /^https:\/\//i.test(configured) && !isLocalhostBackendUrl(configured)) {
       return normalizeBackendUrl(configured);
     }

@@ -106,6 +106,15 @@ export function TournamentTvDisplayContent({
     return summarizeTvLiveEmptyState(rows);
   }, [tournament, teams, matchGroups, holeResults, playerNameById, displayRound]);
 
+  const hasTeeSheet = Boolean(tournament && matchGroups.length > 0);
+
+  const tvLiveMaxHeight = useMemo(() => {
+    if (!hasTeeSheet) return undefined;
+    const reserved = insets.top + insets.bottom + 168;
+    const mainHeight = Math.max(260, height - reserved);
+    return Math.floor(mainHeight * 0.34);
+  }, [hasTeeSheet, height, insets.top, insets.bottom]);
+
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
 
@@ -183,7 +192,7 @@ export function TournamentTvDisplayContent({
   const hasFooterAd = footerSponsors.length > 0;
 
   const teeSheet =
-    tournament && matchGroups.length > 0 ? (
+    hasTeeSheet && tournament ? (
       <TournamentTvTeeSheet
         tournament={tournament}
         teams={teams}
@@ -258,15 +267,15 @@ export function TournamentTvDisplayContent({
       <View className="flex-1 min-h-0 px-4 py-3">
         {isWideLayout ? (
           <View className="flex-1 min-h-0 flex-row gap-4 overflow-hidden">
-            <View className="w-[320px] shrink-0 gap-3 z-20">
+            <View className="w-[320px] shrink-0 gap-3">
               {standingsBoard}
               {sidebarSponsors.length > 0 ? (
                 <TvSidebarSponsorStack sponsors={sidebarSponsors} />
               ) : null}
             </View>
 
-            <View className="flex-1 min-w-0 min-h-0 gap-3 overflow-hidden">
-              <View className="flex-1 min-h-0 overflow-hidden">
+            <View className="flex-1 min-w-0 min-h-0 gap-2">
+              <View className="shrink-0 overflow-hidden" style={tvLiveMaxHeight ? { maxHeight: tvLiveMaxHeight } : undefined}>
                 <TournamentLiveMatchGrids
                   matchGroups={matchGroups}
                   scores={scores}
@@ -280,16 +289,17 @@ export function TournamentTvDisplayContent({
                   layout="tv-carousel"
                   liveOnly
                   liveEmptySummary={liveEmptySummary}
+                  maxHeight={tvLiveMaxHeight}
                 />
               </View>
-              {teeSheet ? <View className="shrink-0 z-10">{teeSheet}</View> : null}
+              {teeSheet ? <View className="flex-1 min-h-0 shrink pt-0.5">{teeSheet}</View> : null}
             </View>
           </View>
         ) : (
-          <View className="flex-1 min-h-0 gap-3 overflow-hidden">
+          <View className="flex-1 min-h-0 gap-2">
             {standingsBoard}
 
-            <View className="flex-1 min-h-0 overflow-hidden">
+            <View className="shrink-0 overflow-hidden" style={tvLiveMaxHeight ? { maxHeight: tvLiveMaxHeight } : undefined}>
               <TournamentLiveMatchGrids
                 matchGroups={matchGroups}
                 scores={scores}
@@ -303,9 +313,10 @@ export function TournamentTvDisplayContent({
                 layout="tv-carousel"
                 liveOnly
                 liveEmptySummary={liveEmptySummary}
+                maxHeight={tvLiveMaxHeight}
               />
             </View>
-            {teeSheet ? <View className="shrink-0 z-10">{teeSheet}</View> : null}
+            {teeSheet ? <View className="flex-1 min-h-0 shrink pt-0.5">{teeSheet}</View> : null}
           </View>
         )}
       </View>

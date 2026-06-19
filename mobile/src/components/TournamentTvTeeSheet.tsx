@@ -16,7 +16,7 @@ import type {
   TournamentTeam,
 } from '@/types';
 
-const ROWS_PER_PAGE = 7;
+const ROWS_PER_PAGE = 5;
 const PAGE_INTERVAL_MS = 12_000;
 const CLOCK_TICK_MS = 30_000;
 
@@ -161,7 +161,7 @@ export function TournamentTvTeeSheet({
   const clubClockLabel = formatClubTime(now.toISOString(), true);
 
   return (
-    <View className={cn('rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden', className)}>
+    <View className={cn('rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden relative z-30', className)}>
       <View className="px-3 py-2 border-b border-neutral-800 flex-row items-center justify-between">
         <View>
           <Text className="text-neutral-400 text-[10px] font-semibold uppercase tracking-widest">

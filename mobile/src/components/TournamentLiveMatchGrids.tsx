@@ -27,6 +27,8 @@ interface TournamentLiveMatchGridsProps {
   liveOnly?: boolean;
   /** Context for the live-only empty state (tee sheet schedule below) */
   liveEmptySummary?: TvLiveEmptySummary | null;
+  /** Cap height when stacked above tee sheet on TV display */
+  maxHeight?: number;
 }
 
 const TV_CAROUSEL_INTERVAL_MS = 12_000;
@@ -118,6 +120,7 @@ function TvMatchCarousel({
   prioritizeLive = true,
   liveOnly = false,
   liveEmptySummary,
+  maxHeight,
 }: {
   matches: MatchGridModel[];
   variant: MatchGridCardVariant;
@@ -125,6 +128,7 @@ function TvMatchCarousel({
   prioritizeLive?: boolean;
   liveOnly?: boolean;
   liveEmptySummary?: TvLiveEmptySummary | null;
+  maxHeight?: number;
 }) {
   const liveMatches = useMemo(() => matches.filter((model) => model.inProgress), [matches]);
   const finishedMatches = useMemo(() => matches.filter(isFinishedMatch), [matches]);
@@ -268,7 +272,10 @@ function TvMatchCarousel({
   }
 
   return (
-    <View className="flex-1 min-h-0 overflow-hidden">
+    <View
+      className={liveOnly ? 'shrink-0 overflow-hidden' : 'flex-1 min-h-0 overflow-hidden'}
+      style={maxHeight != null ? { maxHeight } : undefined}
+    >
       <View className="flex-row items-center justify-between mb-2 px-0.5 shrink-0">
         <View className="flex-1 mr-2">
           <View className="flex-row items-center gap-2">
@@ -295,7 +302,7 @@ function TvMatchCarousel({
         </Text>
       </View>
 
-      <View className="flex-1 flex-row gap-3 min-h-0 overflow-hidden">
+      <View className={liveOnly ? 'flex-row gap-3 overflow-hidden' : 'flex-1 flex-row gap-3 min-h-0 overflow-hidden'}>
         {currentPage.map((model) => (
           <View key={model.matchGroupId} className="flex-1 min-w-0 min-h-0">
             <TournamentMatchGridCard
@@ -342,6 +349,7 @@ export function TournamentLiveMatchGrids({
   layout = 'stack',
   liveOnly = false,
   liveEmptySummary,
+  maxHeight,
 }: TournamentLiveMatchGridsProps) {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
@@ -415,6 +423,7 @@ export function TournamentLiveMatchGrids({
         prioritizeLive={!liveOnly}
         liveOnly={liveOnly}
         liveEmptySummary={liveEmptySummary}
+        maxHeight={maxHeight}
       />
     );
   }

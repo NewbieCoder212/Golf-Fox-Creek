@@ -1,8 +1,11 @@
 {
   "expo": {
-    "name": "vibecode",
+    "name": "Generation Cup 2026",
     "slug": "vibecode",
     "scheme": "vibecode",
+    "web": {
+      "name": "Generation Cup 2026"
+    },
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

@@ -19,8 +19,12 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { getPostLoginRoute, restoreStoredAuthSession } from '@/lib/admin-auth-bridge';
 import { AddToHomeScreenPrompt } from '@/components/AddToHomeScreenPrompt';
-import { getAuthCallbackRouteFromUrl } from '@/lib/supabase';
+import { ensureAuthEmailLinkRoute } from '@/lib/supabase';
 import { foxColors } from '@/theme/tokens';
+
+if (typeof window !== 'undefined') {
+  ensureAuthEmailLinkRoute();
+}
 
 export const unstable_settings = {
   // Ensure that reloading on `/modal` keeps a back button present.
@@ -32,25 +36,12 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-/** Supabase email links may land on `/` with tokens in the hash — send users to the right screen. */
+/** Backup redirect if the URL gains auth tokens after the initial page load. */
 function useAuthEmailLinkRedirect() {
-  const router = useRouter();
-  const segments = useSegments();
-
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-
-    const callbackRoute = getAuthCallbackRouteFromUrl(window.location.href);
-    if (!callbackRoute) return;
-
-    const segmentRoute =
-      callbackRoute === '/reset-password' ? 'reset-password' : 'accept-invite';
-    if (segments[0] === segmentRoute) return;
-
-    // Keep hash tokens on the URL when moving to the auth callback route.
-    window.history.replaceState(null, '', `${callbackRoute}${window.location.hash}`);
-    router.replace(callbackRoute);
-  }, [router, segments]);
+    ensureAuthEmailLinkRoute();
+  }, []);
 }
 
 function useProtectedRoute() {

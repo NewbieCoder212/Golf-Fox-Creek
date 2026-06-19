@@ -13,12 +13,15 @@ import {
   useAdPlacement,
 } from '@/components/SponsorBanner';
 import { isBannerLayout } from '@/lib/ad-placement-service';
+import { TournamentLeaderboardCard } from '@/components/TournamentLeaderboardCard';
+import { HubSection } from '@/components/ui/HubSection';
 import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { useAdminAuthStore } from '@/lib/admin-auth-store';
 import { bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bridge';
 import { getUserProfile, isSupabaseConfigured, signOut } from '@/lib/supabase';
+import { useTranslations } from '@/lib/language-store';
 import { useTournamentStore } from '@/lib/tournament-store';
-import { isTournamentActiveToday } from '@/lib/tournament-scorecard-routing';
+import { pickHubLeaderboardTournamentId, isTournamentActiveToday } from '@/lib/tournament-scorecard-routing';
 import { getTournamentsForUserList } from '@/lib/tournament-service';
 import type { UserProfile } from '@/types';
 
@@ -39,6 +42,7 @@ export function MemberHubContent({
 }: MemberHubContentProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const t = useTranslations();
 
   const authUser = useMemberAuthStore((s) => s.user);
   const authProfile = useMemberAuthStore((s) => s.profile);
@@ -59,6 +63,7 @@ export function MemberHubContent({
   });
 
   const primaryTournament = myEvents[0] ?? null;
+  const leaderboardTournamentId = pickHubLeaderboardTournamentId(myEvents);
 
   useEffect(() => {
     if (!previewMode) {
@@ -126,6 +131,16 @@ export function MemberHubContent({
       </View>
 
       <HubAdFeedCards />
+
+      {leaderboardTournamentId ? (
+        <HubSection title={t.tournamentStandings} className="mt-2" panelClassName="p-2" dense>
+          <TournamentLeaderboardCard
+            tournamentId={leaderboardTournamentId}
+            compact
+            hubEmbedded
+          />
+        </HubSection>
+      ) : null}
     </>
   );
 

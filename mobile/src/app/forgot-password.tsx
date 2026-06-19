@@ -56,22 +56,24 @@ export default function ForgotPasswordScreen() {
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const result = await requestPasswordReset(trimmedEmail);
+    try {
+      const result = await requestPasswordReset(trimmedEmail);
 
-    setIsLoading(false);
-
-    if (!result.success) {
-      setError(result.error ?? 'Failed to send reset email');
-      if (isRateLimitError(result.error)) {
-        setShowDevTools(true);
+      if (!result.success) {
+        setError(result.error ?? 'Failed to send reset email');
+        if (isRateLimitError(result.error)) {
+          setShowDevTools(true);
+        }
+        return;
       }
-      return;
-    }
 
-    setResetRedirectUrl(result.redirectTo ?? getPasswordResetRedirectUrl());
-    setSentPendingSetup(result.pendingSetup === true);
-    setSent(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setResetRedirectUrl(result.redirectTo ?? getPasswordResetRedirectUrl());
+      setSentPendingSetup(result.pendingSetup === true);
+      setSent(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGenerateDevLink = async () => {

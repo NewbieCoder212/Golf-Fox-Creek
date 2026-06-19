@@ -830,6 +830,72 @@ export type AuthLinkTokens = {
   refreshToken: string | null;
 };
 
+const AUTH_LINK_TOKENS_STORAGE_KEY = 'foxcreek.pending_auth_link_tokens';
+
+/** Persist email-link tokens when in-app browsers drop the URL hash during client routing. */
+export function captureAuthLinkTokensFromUrl(url: string): AuthLinkTokens | null {
+  const tokens = parseAuthTokensFromUrl(url);
+  if (!tokens || typeof sessionStorage === 'undefined') return tokens;
+
+  try {
+    sessionStorage.setItem(AUTH_LINK_TOKENS_STORAGE_KEY, JSON.stringify(tokens));
+  } catch {
+    // Ignore quota / private mode errors.
+  }
+
+  return tokens;
+}
+
+export function readCapturedAuthLinkTokens(): AuthLinkTokens | null {
+  if (typeof sessionStorage === 'undefined') return null;
+
+  try {
+    const raw = sessionStorage.getItem(AUTH_LINK_TOKENS_STORAGE_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(AUTH_LINK_TOKENS_STORAGE_KEY);
+    return JSON.parse(raw) as AuthLinkTokens;
+  } catch {
+    return null;
+  }
+}
+
+function peekCapturedAuthLinkTokens(): AuthLinkTokens | null {
+  if (typeof sessionStorage === 'undefined') return null;
+
+  try {
+    const raw = sessionStorage.getItem(AUTH_LINK_TOKENS_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as AuthLinkTokens;
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve tokens from the current URL, with sessionStorage fallback after client navigations. */
+export function resolveAuthLinkTokensFromUrl(url: string): AuthLinkTokens | null {
+  return captureAuthLinkTokensFromUrl(url) ?? peekCapturedAuthLinkTokens();
+}
+
+/**
+ * On web, immediately route email auth links to the correct screen before React routing
+ * can drop hash fragments (common in mobile Mail in-app browsers).
+ */
+export function ensureAuthEmailLinkRoute(): void {
+  if (typeof window === 'undefined') return;
+
+  const href = window.location.href;
+  captureAuthLinkTokensFromUrl(href);
+
+  const callbackRoute = getAuthCallbackRouteFromUrl(href);
+  if (!callbackRoute) return;
+
+  const pathname = window.location.pathname.replace(/\/$/, '') || '/';
+  const targetPath = callbackRoute.replace(/\/$/, '') || '/';
+  if (pathname === targetPath) return;
+
+  window.location.replace(`${callbackRoute}${window.location.hash}${window.location.search}`);
+}
+
 function parseAuthLinkParams(url: string): URLSearchParams | null {
   try {
     const parsed = new URL(url);
@@ -875,7 +941,7 @@ export function parseAuthTokensFromUrl(url: string): AuthLinkTokens | null {
  * Parse a Supabase recovery or invite link for the access token (hash or query params).
  */
 export function parseRecoveryTokenFromUrl(url: string): string | null {
-  return parseAuthTokensFromUrl(url)?.accessToken ?? null;
+  return resolveAuthLinkTokensFromUrl(url)?.accessToken ?? null;
 }
 
 export function parseInviteTokenFromUrl(url: string): string | null {
@@ -903,6 +969,13 @@ export function getAuthCallbackRouteFromUrl(url: string): '/reset-password' | '/
 /**
  * Send a password reset email via the backend (Resend), avoiding Supabase SMTP rate limits.
  */
+function getPasswordResetApiUrl(): string {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/api/auth/request-password-reset`;
+  }
+  return '/api/auth/request-password-reset';
+}
+
 export async function requestPasswordReset(
   email: string,
   redirectTo?: string
@@ -917,18 +990,18 @@ export async function requestPasswordReset(
     console.log('[Supabase] Password reset redirect:', resetRedirectUrl);
   }
 
-  const { getInviteBackendUrl, isLocalhostBackendUrl } = await import('./backend-url');
-  const backendUrl = getInviteBackendUrl();
+  const resetApiUrl = getPasswordResetApiUrl();
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const timeout = setTimeout(() => controller.abort(), 8_000);
 
   try {
-    const response = await fetch(`${backendUrl}/api/auth/request-password-reset`, {
+    const response = await fetch(resetApiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim(), redirectTo: resetRedirectUrl }),
       signal: controller.signal,
+      cache: 'no-store',
     });
 
     const data = (await response.json().catch(() => ({}))) as {
@@ -950,17 +1023,20 @@ export async function requestPasswordReset(
     };
   } catch (err) {
     const aborted = err instanceof Error && err.name === 'AbortError';
-    console.log('[Supabase] Backend password reset request error:', err);
+    console.log('[Supabase] Password reset request error:', err);
 
-    if (__DEV__ && isLocalhostBackendUrl(backendUrl)) {
-      return requestPasswordResetViaSupabase(email, resetRedirectUrl);
+    if (__DEV__) {
+      const { isLocalhostBackendUrl, getInviteBackendUrl } = await import('./backend-url');
+      if (isLocalhostBackendUrl(getInviteBackendUrl())) {
+        return requestPasswordResetViaSupabase(email, resetRedirectUrl);
+      }
     }
 
     return {
       success: false,
       error: aborted
-        ? 'Request timed out. Please try again in a moment.'
-        : 'Could not reach password reset service. Try again shortly.',
+        ? 'Request timed out. Check your connection and try again.'
+        : 'Could not send reset email. Try again shortly.',
     };
   } finally {
     clearTimeout(timeout);

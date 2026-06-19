@@ -15,11 +15,21 @@ import { Eye, EyeOff, Lock, CheckCircle, AlertCircle } from 'lucide-react-native
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
-import { parseRecoveryTokenFromUrl, updatePasswordWithRecoveryToken } from '@/lib/supabase';
+import {
+  parseRecoveryTokenFromUrl,
+  readCapturedAuthLinkTokens,
+  resolveAuthLinkTokensFromUrl,
+  updatePasswordWithRecoveryToken,
+} from '@/lib/supabase';
 
 function getRecoveryTokenFromWebLocation(): string | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
-  return parseRecoveryTokenFromUrl(window.location.href);
+  return (
+    parseRecoveryTokenFromUrl(window.location.href) ??
+    resolveAuthLinkTokensFromUrl(window.location.href)?.accessToken ??
+    readCapturedAuthLinkTokens()?.accessToken ??
+    null
+  );
 }
 
 export default function ResetPasswordScreen() {

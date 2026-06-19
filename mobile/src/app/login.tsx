@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,7 +25,7 @@ import { Eye, EyeOff, LogIn } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useMemberAuthStore } from '@/lib/member-auth-store';
-import { getAuthenticatedUserProfile, signIn } from '@/lib/supabase';
+import { getAuthenticatedUserProfile, getAuthCallbackRouteFromUrl, signIn } from '@/lib/supabase';
 import { bridgeMemberAuthToAdmin, getPostLoginRoute } from '@/lib/admin-auth-bridge';
 
 const GENERATION_CUP_LOGO = require('@/assets/images/generation-cup-logo.png');
@@ -51,6 +51,14 @@ export default function LoginScreen() {
   const signInButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: signInButtonScale.value }],
   }));
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const callbackRoute = getAuthCallbackRouteFromUrl(window.location.href);
+    if (callbackRoute) {
+      router.replace(`${callbackRoute}${window.location.hash}` as never);
+    }
+  }, [router]);
 
   const handleMemberSignIn = async () => {
     if (!email.trim() || !password.trim()) {

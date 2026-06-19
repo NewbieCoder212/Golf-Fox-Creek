@@ -20,6 +20,8 @@ import * as Haptics from 'expo-haptics';
 import {
   getAuthenticatedUserProfile,
   parseAuthTokensFromUrl,
+  readCapturedAuthLinkTokens,
+  resolveAuthLinkTokensFromUrl,
   signIn,
   updatePasswordWithRecoveryToken,
   type AuthLinkTokens,
@@ -34,7 +36,10 @@ import { getPostLoginRoute, bridgeMemberAuthToAdmin } from '@/lib/admin-auth-bri
 
 function getTokensFromWebLocation(): AuthLinkTokens | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
-  return parseAuthTokensFromUrl(window.location.href);
+  return (
+    resolveAuthLinkTokensFromUrl(window.location.href) ??
+    readCapturedAuthLinkTokens()
+  );
 }
 
 export default function AcceptInviteScreen() {

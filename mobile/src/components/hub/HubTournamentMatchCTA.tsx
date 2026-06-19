@@ -125,8 +125,16 @@ export function HubTournamentMatchCTA({
   const startingHole = matchGroup.starting_hole;
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push(matchContext.scorecardRoute as never);
+    Haptics.impactAsync(
+      scorecardTimeOpen
+        ? Haptics.ImpactFeedbackStyle.Medium
+        : Haptics.ImpactFeedbackStyle.Light
+    );
+    if (scorecardTimeOpen) {
+      router.push(matchContext.scorecardRoute as never);
+      return;
+    }
+    router.push(`/tournaments/${tournament.id}?tab=match` as never);
   };
 
   return (

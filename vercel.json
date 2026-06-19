@@ -4,7 +4,7 @@
   "installCommand": "cd mobile && bun install",
   "framework": null,
   "functions": {
-    "mobile/api/**/*.js": {
+    "api/**/*.js": {
       "maxDuration": 60
     }
   },
@@ -12,6 +12,17 @@
     {
       "source": "/((?!_expo/|api/).*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
     }
   ]
 }

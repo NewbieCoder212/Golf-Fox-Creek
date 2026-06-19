@@ -26,6 +26,9 @@ export function getBackendUrl(): string {
   }
 
   if (isProductionWebHost()) {
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
     if (configured && /^https:\/\//i.test(configured) && !isLocalhostBackendUrl(configured)) {
       return normalizeBackendUrl(configured);
     }
@@ -76,8 +79,11 @@ export function isBackendReachableInBrowser(): boolean {
  * (fast, fixed path). Other admin calls may still use the Hono backend URL.
  */
 export function getInviteBackendUrl(): string {
-  if (typeof window !== 'undefined' && isProductionWebHost()) {
-    return window.location.origin;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const host = window.location.hostname;
+    if (!isLocalWebHost(host)) {
+      return window.location.origin;
+    }
   }
   return getBackendUrl();
 }

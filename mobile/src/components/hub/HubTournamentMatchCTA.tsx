@@ -21,7 +21,6 @@ import { formatRoundPickerLabel } from '@/lib/tournament-labels';
 import { useTranslations } from '@/lib/language-store';
 import type { Tournament } from '@/types';
 import { foxColors } from '@/theme/tokens';
-import { cn } from '@/lib/cn';
 
 interface HubTournamentMatchCTAProps {
   userId: string | undefined;
@@ -125,20 +124,22 @@ export function HubTournamentMatchCTA({
   const teeTimeLabel = matchGroup.tee_time ? formatTeeTimeLabel(matchGroup.tee_time) : null;
   const startingHole = matchGroup.starting_hole;
 
+  const handlePress = () => {
+    Haptics.impactAsync(
+      scorecardTimeOpen
+        ? Haptics.ImpactFeedbackStyle.Medium
+        : Haptics.ImpactFeedbackStyle.Light
+    );
+    if (scorecardTimeOpen) {
+      router.push(matchContext.scorecardRoute as never);
+      return;
+    }
+    router.push(`/tournaments/${tournament.id}?tab=match` as never);
+  };
+
   return (
     <Animated.View entering={FadeInDown.delay(150).duration(600)} className={sectionClass}>
-      <Pressable
-        onPress={() => {
-          if (!scorecardTimeOpen) return;
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          router.push(matchContext.scorecardRoute as never);
-        }}
-        disabled={!scorecardTimeOpen}
-        className={cn(
-          'active:opacity-80 active:scale-[0.99]',
-          !scorecardTimeOpen && 'opacity-80'
-        )}
-      >
+      <Pressable onPress={handlePress} className="active:opacity-80 active:scale-[0.99]">
         <SurfaceCard variant="accent" className={compact ? 'p-3 pl-4' : 'p-4 pl-5'}>
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center flex-1">
@@ -171,18 +172,13 @@ export function HubTournamentMatchCTA({
                 ) : null}
               </View>
             </View>
-            {scorecardTimeOpen ? <ChevronRight size={22} color={foxColors.lime} /> : null}
+            <ChevronRight size={22} color={foxColors.lime} />
           </View>
           <View className="flex-row items-center mt-3 pt-2 border-t border-fox-border-accent/40">
-            <Text
-              className={cn(
-                'text-sm font-body-semibold flex-1',
-                scorecardTimeOpen ? 'text-fox-lime' : 'text-neutral-500'
-              )}
-            >
-              {scorecardTimeOpen ? t.tapToEnterTournament : 'Opens soon'}
+            <Text className="text-fox-lime text-sm font-body-semibold flex-1">
+              {t.tapToEnterTournament}
             </Text>
-            {scorecardTimeOpen ? <ChevronRight size={16} color={foxColors.lime} /> : null}
+            <ChevronRight size={16} color={foxColors.lime} />
           </View>
         </SurfaceCard>
       </Pressable>

@@ -846,7 +846,12 @@ function parseAuthLinkParams(url: string): URLSearchParams | null {
 }
 
 function isAuthLinkType(type: string | null): boolean {
-  return type === 'recovery' || type === 'invite' || type === 'signup';
+  return (
+    type === 'recovery' ||
+    type === 'invite' ||
+    type === 'signup' ||
+    type === 'magiclink'
+  );
 }
 
 /**
@@ -888,7 +893,7 @@ export function getAuthCallbackRouteFromUrl(url: string): '/reset-password' | '/
     const type = params.get('type');
     if (!token) return null;
     if (type === 'recovery') return '/reset-password';
-    if (type === 'invite' || type === 'signup') return '/accept-invite';
+    if (type === 'invite' || type === 'signup' || type === 'magiclink') return '/accept-invite';
   } catch {
     // Invalid URL
   }

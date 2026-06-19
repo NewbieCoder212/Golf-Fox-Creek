@@ -128,9 +128,15 @@ async function requestPasswordResetEmail(params) {
   const profile = await lookupProfileByEmail(email);
   const pendingSetup = profile?.invite_status === 'pending';
 
-  const linkType = pendingSetup ? 'magiclink' : 'recovery';
+  const linkType = pendingSetup ? 'invite' : 'recovery';
   const redirectTo = pendingSetup ? inviteRedirect : resetRedirect;
-  const { actionLink, error: linkError } = await generateAuthLink(email, linkType, redirectTo);
+  let { actionLink, error: linkError } = await generateAuthLink(email, linkType, redirectTo);
+
+  if (!actionLink && pendingSetup) {
+    const fallback = await generateAuthLink(email, 'magiclink', inviteRedirect);
+    actionLink = fallback.actionLink;
+    linkError = fallback.error;
+  }
 
   if (!actionLink) {
     console.log('[password-reset] Link not generated:', linkError);

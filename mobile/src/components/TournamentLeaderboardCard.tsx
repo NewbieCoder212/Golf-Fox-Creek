@@ -20,6 +20,7 @@ import { getMatchHoleResultsForTournament } from '@/lib/tournament-match-service
 import { getMembersForChallenge } from '@/lib/social-service';
 import { formatTournamentDates, getTeamSideDisplayName } from '@/lib/tournament-labels';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
+import { resolveTvTeeSheetRound } from '@/lib/tournament-tee-sheet';
 import { cn } from '@/lib/cn';
 
 interface TournamentLeaderboardCardProps {
@@ -95,14 +96,37 @@ export function TournamentLeaderboardCard({
     [holeResults, teams, matchGroups, scores, matchUseNetScoring, tournament]
   );
 
-  const sessionRound = useMemo(
+  const displayRound = useMemo(
     () => (tournament ? getTvDisplayRoundNumber(tournament, matchGroups) : 1),
     [tournament, matchGroups]
   );
   const roundMatchGroups = useMemo(
-    () => matchGroups.filter((group) => group.round_number === sessionRound),
-    [matchGroups, sessionRound]
+    () => matchGroups.filter((group) => group.round_number === displayRound),
+    [matchGroups, displayRound]
   );
+
+  const teeSheetRound = useMemo(() => {
+    if (!tournament) return 1;
+    return resolveTvTeeSheetRound({
+      activeRound: displayRound,
+      tournament,
+      teams,
+      matchGroups,
+      holeResults,
+      playerNameById,
+      scores,
+      useNetScoring: matchUseNetScoring,
+    }).teeSheetRound;
+  }, [
+    tournament,
+    displayRound,
+    teams,
+    matchGroups,
+    holeResults,
+    playerNameById,
+    scores,
+    matchUseNetScoring,
+  ]);
 
   const sessionStandings = useMemo(() => {
     if (!tournament) return [];
@@ -234,6 +258,7 @@ export function TournamentLeaderboardCard({
             playerNameById={playerNameById}
             scores={scores}
             useNetScoring={matchUseNetScoring}
+            roundNumber={teeSheetRound}
             compact
             className="mt-3 pt-3 border-t border-neutral-800/60"
           />

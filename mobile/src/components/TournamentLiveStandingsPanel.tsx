@@ -18,6 +18,7 @@ import {
 import { buildRoundSessionPointsLeaderboard } from '@/lib/tournament-session-scoring';
 import { getTeamSideDisplayName } from '@/lib/tournament-labels';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
+import { resolveTvTeeSheetRound } from '@/lib/tournament-tee-sheet';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
   getMatchHoleResultsForTournament,
@@ -94,6 +95,11 @@ export function TournamentLiveStandingsPanel({
 
   const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
 
+  const { nameById: playerNameById } = useMemo(
+    () => buildTournamentPlayerMaps(tournamentPlayers, members),
+    [tournamentPlayers, members]
+  );
+
   const matchPointsLeaderboard = useMemo(
     () =>
       buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults, {
@@ -104,14 +110,37 @@ export function TournamentLiveStandingsPanel({
     [teams, matchGroups, holeResults, scores, matchUseNetScoring, tournament]
   );
 
-  const sessionRound = useMemo(
+  const displayRound = useMemo(
     () => (tournament ? getTvDisplayRoundNumber(tournament, matchGroups) : 1),
     [tournament, matchGroups]
   );
   const roundMatchGroups = useMemo(
-    () => matchGroups.filter((group) => group.round_number === sessionRound),
-    [matchGroups, sessionRound]
+    () => matchGroups.filter((group) => group.round_number === displayRound),
+    [matchGroups, displayRound]
   );
+
+  const teeSheetRound = useMemo(() => {
+    if (!tournament) return 1;
+    return resolveTvTeeSheetRound({
+      activeRound: displayRound,
+      tournament,
+      teams,
+      matchGroups,
+      holeResults,
+      playerNameById,
+      scores,
+      useNetScoring: matchUseNetScoring,
+    }).teeSheetRound;
+  }, [
+    tournament,
+    displayRound,
+    teams,
+    matchGroups,
+    holeResults,
+    playerNameById,
+    scores,
+    matchUseNetScoring,
+  ]);
 
   const sessionStandings = useMemo(() => {
     if (!tournament) return [];
@@ -137,11 +166,6 @@ export function TournamentLiveStandingsPanel({
   const teamNameById = useMemo(
     () => Object.fromEntries(teams.map((team) => [team.id, team.team_name])),
     [teams]
-  );
-
-  const { nameById: playerNameById } = useMemo(
-    () => buildTournamentPlayerMaps(tournamentPlayers, members),
-    [tournamentPlayers, members]
   );
 
   const isInitialLoad = scoresPending;
@@ -239,6 +263,7 @@ export function TournamentLiveStandingsPanel({
           playerNameById={playerNameById}
           scores={scores}
           useNetScoring={matchUseNetScoring}
+          roundNumber={teeSheetRound}
           compact={compact}
           className="mb-3"
         />

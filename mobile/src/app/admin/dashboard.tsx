@@ -165,13 +165,14 @@ export default function AdminDashboardScreen() {
       buildMatchPointsLeaderboardFromHoleResults(
         adminTeams,
         adminMatchGroups,
-        adminHoleResults
+        adminHoleResults,
+        { tournament: adminTournaments[0] }
       ).map((row) => ({
         teamId: row.teamId,
         matchPoints: row.matchPoints,
         matchesWon: row.matchesWon,
       })),
-    [adminTeams, adminMatchGroups, adminHoleResults]
+    [adminTeams, adminMatchGroups, adminHoleResults, adminTournaments]
   );
 
   useEffect(() => {

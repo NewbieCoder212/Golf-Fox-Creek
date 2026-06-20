@@ -12,8 +12,12 @@ import type {
   TournamentTeam,
   TournamentTeamInsert,
 } from '@/types';
-import { buildMatchStatusFromHoleResults, isAdminDeclaredMatchResult } from './tournament-match-play-status';
-import { getTeamSideDisplayName } from './tournament-labels';
+import {
+  isAdminDeclaredMatchResult,
+  resolveEffectiveGroupHoleResults,
+} from './tournament-match-play-status';
+import { getMatchGroupFormat } from './tournament-labels';
+import { computeMatchPointsFromHoleResults } from './tournament-match-scoring';
 import {
   getManagerAccessToken,
   isTournamentSupabaseConfigured,
@@ -729,33 +733,110 @@ export function buildMatchPointsLeaderboard(
   });
 }
 
-/** Team standings from groups that are actually complete (ignores stale winner flags). */
+function applyCupPointsToStandings(
+  byTeamId: Map<string, MatchPointsStanding>,
+  group: Pick<
+    TournamentMatchGroup,
+    'side_a_team_id' | 'side_b_team_id' | 'match_winner'
+  >,
+  cupPoints: {
+    match_winner: TournamentMatchGroup['match_winner'];
+    match_points_a: number;
+    match_points_b: number;
+  }
+): void {
+  const pointsA = Number(cupPoints.match_points_a ?? 0);
+  const pointsB = Number(cupPoints.match_points_b ?? 0);
+  if (pointsA === 0 && pointsB === 0) return;
+
+  const teamA = byTeamId.get(group.side_a_team_id);
+  const teamB = byTeamId.get(group.side_b_team_id);
+
+  if (teamA) {
+    teamA.matchPoints += pointsA;
+    teamA.matchesPlayed += 1;
+    if (cupPoints.match_winner === 'side_a') teamA.matchesWon += 1;
+  }
+  if (teamB) {
+    teamB.matchPoints += pointsB;
+    teamB.matchesPlayed += 1;
+    if (cupPoints.match_winner === 'side_b') teamB.matchesWon += 1;
+  }
+}
+
+/** Cumulative team standings from completed matches across all tournament rounds. */
 export function buildMatchPointsLeaderboardFromHoleResults(
   teams: { id: string; team_name: string; side: string | null }[],
   matchGroups: TournamentMatchGroup[],
-  holeResults: TournamentMatchHoleResult[]
+  holeResults: TournamentMatchHoleResult[],
+  options?: {
+    scores?: TournamentScore[];
+    useNetScoring?: boolean;
+    tournament?: Pick<Tournament, 'round_schedule'>;
+  }
 ): MatchPointsStanding[] {
-  const sideAName = getTeamSideDisplayName('side_a', teams as TournamentTeam[]);
-  const sideBName = getTeamSideDisplayName('side_b', teams as TournamentTeam[]);
+  const byTeamId = new Map<string, MatchPointsStanding>();
 
-  const completedGroups = matchGroups.filter((group) => {
+  for (const team of teams) {
+    if (!team.side) continue;
+    byTeamId.set(team.id, {
+      teamId: team.id,
+      teamName: team.team_name,
+      side: team.side as 'side_a' | 'side_b',
+      matchPoints: 0,
+      matchesWon: 0,
+      matchesPlayed: 0,
+    });
+  }
+
+  for (const group of matchGroups) {
     if (isAdminDeclaredMatchResult(group)) {
-      return true;
+      applyCupPointsToStandings(byTeamId, group, {
+        match_winner: group.match_winner,
+        match_points_a: group.match_points_a,
+        match_points_b: group.match_points_b,
+      });
+      continue;
     }
 
-    const groupHoles = holeResults.filter((row) => row.match_group_id === group.id);
-    if (groupHoles.length === 0) return false;
-
-    const { playStatus } = buildMatchStatusFromHoleResults(
+    const effectiveHoles = resolveEffectiveGroupHoleResults(
       group,
       holeResults,
-      sideAName,
-      sideBName
+      options?.scores,
+      options?.useNetScoring ?? false
     );
-    return playStatus === 'complete';
-  });
 
-  return buildMatchPointsLeaderboard(teams, completedGroups);
+    if (effectiveHoles.length > 0) {
+      const format = getMatchGroupFormat(group, options?.tournament);
+      const cupPoints = computeMatchPointsFromHoleResults({
+        matchGroup: group,
+        format,
+        holeResults: effectiveHoles,
+      });
+      if (cupPoints.match_points_a > 0 || cupPoints.match_points_b > 0) {
+        applyCupPointsToStandings(byTeamId, group, cupPoints);
+        continue;
+      }
+    }
+
+    // Prior sessions with official persisted results when hole rows aren't available.
+    if (group.match_winner != null) {
+      const pointsA = Number(group.match_points_a ?? 0);
+      const pointsB = Number(group.match_points_b ?? 0);
+      if (group.match_winner === 'tie' || pointsA > 0 || pointsB > 0) {
+        applyCupPointsToStandings(byTeamId, group, {
+          match_winner: group.match_winner,
+          match_points_a: pointsA,
+          match_points_b: pointsB,
+        });
+      }
+    }
+  }
+
+  return Array.from(byTeamId.values()).sort((a, b) => {
+    if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
+    return b.matchesWon - a.matchesWon;
+  });
 }
 
 export function isTournamentServiceConfigured(): boolean {

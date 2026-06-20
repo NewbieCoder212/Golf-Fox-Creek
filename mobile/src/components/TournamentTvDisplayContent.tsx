@@ -9,7 +9,7 @@ import { Trophy, Radio } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTournamentDisplayRealtime } from '@/hooks/useTournamentDisplayRealtime';
-import { formatTournamentDates, formatRoundPickerLabel } from '@/lib/tournament-labels';
+import { formatTournamentDates, formatRoundPickerLabel, getTeamSideDisplayName } from '@/lib/tournament-labels';
 import { formatClubTime } from '@/lib/club-timezone';
 import {
   TvFooterSponsorStrip,
@@ -24,6 +24,7 @@ import { cn } from '@/lib/cn';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
 import { buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-service';
+import { buildRoundSessionPointsLeaderboard } from '@/lib/tournament-session-scoring';
 import { getTvDisplayRoundNumber, getTournamentEventTitle, getTournamentTvChampion, isTournamentTvComplete } from '@/lib/tournament-tv-display';
 import {
   buildTournamentTeeSheetRows,
@@ -31,6 +32,27 @@ import {
   summarizeTvLiveEmptyState,
 } from '@/lib/tournament-tee-sheet';
 import type { Tournament, TournamentDisplayPayload, TournamentPlayer, TournamentTeam } from '@/types';
+
+function mergeOverallTeamStats(
+  teams: TournamentTeam[],
+  computed: Array<{ teamId: string; matchPoints: number; matchesWon: number }>,
+  payloadRows: TournamentDisplayPayload['matchPoints'] | undefined
+): Array<{ teamId: string; matchPoints: number; matchesWon: number }> {
+  if (!payloadRows?.length) return computed;
+
+  const computedById = new Map(computed.map((row) => [row.teamId, row]));
+  return teams
+    .filter((team) => team.side)
+    .map((team) => {
+      const fromComputed = computedById.get(team.id);
+      const fromApi = payloadRows.find((row) => row.teamName === team.team_name);
+      return {
+        teamId: team.id,
+        matchPoints: Math.max(fromComputed?.matchPoints ?? 0, fromApi?.matchPoints ?? 0),
+        matchesWon: Math.max(fromComputed?.matchesWon ?? 0, fromApi?.matchesWon ?? 0),
+      };
+    });
+}
 
 const TV_WIDE_MIN_WIDTH = 860;
 
@@ -84,6 +106,8 @@ export function TournamentTvDisplayContent({
     return getTvDisplayRoundNumber(tournament, matchGroups);
   }, [tournament, matchGroups]);
 
+  const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
+
   const { teeSheetRound, isPreviewingNextRound } = useMemo(() => {
     if (!tournament) {
       return { teeSheetRound: 1, isPreviewingNextRound: false };
@@ -95,8 +119,10 @@ export function TournamentTvDisplayContent({
       matchGroups,
       holeResults,
       playerNameById,
+      scores,
+      useNetScoring: matchUseNetScoring,
     });
-  }, [tournament, displayRound, teams, matchGroups, holeResults, playerNameById]);
+  }, [tournament, displayRound, teams, matchGroups, holeResults, playerNameById, scores, matchUseNetScoring]);
 
   const roundLabel = useMemo(() => {
     if (!tournament) return `Round ${displayRound}`;
@@ -108,8 +134,6 @@ export function TournamentTvDisplayContent({
     [matchGroups, displayRound]
   );
 
-  const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
-
   const liveEmptySummary = useMemo(() => {
     if (!tournament || matchGroups.length === 0) return null;
     const rows = buildTournamentTeeSheetRows({
@@ -119,9 +143,11 @@ export function TournamentTvDisplayContent({
       holeResults,
       playerNameById,
       roundNumber: displayRound,
+      scores,
+      useNetScoring: matchUseNetScoring,
     });
     return summarizeTvLiveEmptyState(rows);
-  }, [tournament, teams, matchGroups, holeResults, playerNameById, displayRound]);
+  }, [tournament, teams, matchGroups, holeResults, playerNameById, displayRound, scores, matchUseNetScoring]);
 
   const hasTeeSheet = Boolean(tournament && matchGroups.length > 0);
 
@@ -139,15 +165,52 @@ export function TournamentTvDisplayContent({
     const pointsStats = buildMatchPointsLeaderboardFromHoleResults(
       teams,
       matchGroups,
-      holeResults
+      holeResults,
+      { scores, useNetScoring: matchUseNetScoring, tournament }
     );
 
-    return pointsStats.map((row) => ({
+    const computed = pointsStats.map((row) => ({
       teamId: row.teamId,
       matchPoints: row.matchPoints,
       matchesWon: row.matchesWon,
     }));
-  }, [teams, matchGroups, holeResults]);
+
+    return mergeOverallTeamStats(teams, computed, data?.matchPoints);
+  }, [teams, matchGroups, holeResults, scores, matchUseNetScoring, tournament, data?.matchPoints]);
+
+  const round1RecordedCount = useMemo(() => {
+    const round1Groups = matchGroups.filter((group) => group.round_number === 1);
+    return round1Groups.filter(
+      (group) =>
+        group.match_winner != null ||
+        group.match_result_declared ||
+        holeResults.some((row) => row.match_group_id === group.id)
+    ).length;
+  }, [matchGroups, holeResults]);
+  const round1TotalCount = useMemo(
+    () => matchGroups.filter((group) => group.round_number === 1).length,
+    [matchGroups]
+  );
+
+  const sessionTeamStats = useMemo(() => {
+    if (!tournament) return [];
+    const sideAName = getTeamSideDisplayName('side_a', teams);
+    const sideBName = getTeamSideDisplayName('side_b', teams);
+    return buildRoundSessionPointsLeaderboard(
+      teams,
+      currentRoundMatchGroups,
+      holeResults,
+      tournament,
+      sideAName,
+      sideBName,
+      scores,
+      matchUseNetScoring
+    ).map((row) => ({
+      teamId: row.teamId,
+      matchPoints: row.matchPoints,
+      matchesWon: row.matchesWon,
+    }));
+  }, [tournament, teams, currentRoundMatchGroups, holeResults, scores, matchUseNetScoring]);
 
   const tournamentComplete = useMemo(() => {
     if (!tournament) return false;
@@ -219,6 +282,8 @@ export function TournamentTvDisplayContent({
         holeResults={holeResults}
         playerNameById={playerNameById}
         roundNumber={teeSheetRound}
+        scores={scores}
+        useNetScoring={matchUseNetScoring}
         isPreviewingNextRound={isPreviewingNextRound}
         compact={false}
       />
@@ -226,13 +291,47 @@ export function TournamentTvDisplayContent({
 
   const standingsBoard =
     sideATeam && sideBTeam ? (
-      <TournamentTeamMatchupBoard
-        teams={teams}
-        teamStats={teamStats}
-        subtitle={tournamentComplete ? 'Final Standings · Match pts' : 'Live Standings · Match pts'}
-        tvDisplay={isWideLayout}
-        tvStrip={!isWideLayout}
-      />
+      <View className="gap-3">
+        <View>
+          <Text
+            className={cn(
+              'text-neutral-500 uppercase tracking-widest mb-2',
+              isWideLayout ? 'text-[10px]' : 'text-[9px]'
+            )}
+          >
+            {tournamentComplete ? 'Final Standings' : 'Overall Standings'}
+          </Text>
+          {!tournamentComplete &&
+          round1TotalCount > 0 &&
+          round1RecordedCount < round1TotalCount ? (
+            <Text className="text-neutral-600 text-[9px] mb-1.5">
+              Best ball: {round1RecordedCount}/{round1TotalCount} matches in system
+            </Text>
+          ) : null}
+          <TournamentTeamMatchupBoard
+            teams={teams}
+            teamStats={teamStats}
+            tvDisplay={isWideLayout}
+            tvStrip={!isWideLayout}
+          />
+        </View>
+        <View>
+          <Text
+            className={cn(
+              'text-neutral-500 uppercase tracking-widest mb-2',
+              isWideLayout ? 'text-[10px]' : 'text-[9px]'
+            )}
+          >
+            Current session score
+          </Text>
+          <TournamentTeamMatchupBoard
+            teams={teams}
+            teamStats={sessionTeamStats}
+            tvDisplay={isWideLayout}
+            tvStrip={!isWideLayout}
+          />
+        </View>
+      </View>
     ) : !sideATeam && !sideBTeam && currentRoundMatchGroups.length === 0 ? (
       <View className="py-8 items-center bg-[#141414] rounded-xl border border-neutral-800">
         <Trophy size={28} color="#525252" />

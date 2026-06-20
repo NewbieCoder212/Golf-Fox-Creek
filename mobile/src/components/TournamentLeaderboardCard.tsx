@@ -83,9 +83,16 @@ export function TournamentLeaderboardCard({
     [tournamentPlayers, members]
   );
 
+  const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
+
   const standings = useMemo(
-    () => buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults),
-    [holeResults, teams, matchGroups]
+    () =>
+      buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults, {
+        scores,
+        useNetScoring: matchUseNetScoring,
+        tournament,
+      }),
+    [holeResults, teams, matchGroups, scores, matchUseNetScoring, tournament]
   );
 
   const activeRound = tournament ? getActiveRoundNumber(tournament) : 1;
@@ -93,8 +100,6 @@ export function TournamentLeaderboardCard({
     () => matchGroups.filter((group) => group.round_number === activeRound),
     [matchGroups, activeRound]
   );
-
-  const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
 
   const sessionStandings = useMemo(() => {
     if (!tournament) return [];

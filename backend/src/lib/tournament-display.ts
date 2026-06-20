@@ -2,6 +2,8 @@
  * Build sanitized tournament display payload for TV / public leaderboard.
  */
 
+import { computeMatchPointsFromHoleResults } from './tournament-match-points';
+
 export interface DisplaySponsor {
   id: string;
   sponsor_name: string;
@@ -280,8 +282,129 @@ function filterGroupsForMatchPoints(
   return matchGroups.filter((group) => {
     if (isAdminDeclaredMatchResult(group)) return true;
     const groupHoles = holesByGroup.get(group.id) ?? [];
-    return isHoleScoredMatchComplete(group, groupHoles);
+    if (groupHoles.length > 0 && isHoleScoredMatchComplete(group, groupHoles)) {
+      return true;
+    }
+
+    // Prior sessions with official persisted results (e.g. yesterday best ball).
+    if (group.match_winner != null) {
+      const pointsA = Number(group.match_points_a ?? 0);
+      const pointsB = Number(group.match_points_b ?? 0);
+      if (group.match_winner === 'tie' || pointsA > 0 || pointsB > 0) {
+        return true;
+      }
+    }
+
+    return false;
   });
+}
+
+function applyCupPointsToTeamTotals(
+  byTeamId: Map<
+    string,
+    { teamName: string; matchPoints: number; matchesWon: number; matchesPlayed: number }
+  >,
+  group: Pick<MatchGroupRow, 'side_a_team_id' | 'side_b_team_id' | 'match_winner'>,
+  cupPoints: {
+    match_winner: MatchGroupRow['match_winner'];
+    match_points_a: number;
+    match_points_b: number;
+  }
+): void {
+  const pointsA = Number(cupPoints.match_points_a ?? 0);
+  const pointsB = Number(cupPoints.match_points_b ?? 0);
+  if (pointsA === 0 && pointsB === 0) return;
+
+  const teamA = byTeamId.get(group.side_a_team_id);
+  const teamB = byTeamId.get(group.side_b_team_id);
+
+  if (teamA) {
+    teamA.matchPoints += pointsA;
+    teamA.matchesPlayed += 1;
+    if (cupPoints.match_winner === 'side_a') teamA.matchesWon += 1;
+  }
+  if (teamB) {
+    teamB.matchPoints += pointsB;
+    teamB.matchesPlayed += 1;
+    if (cupPoints.match_winner === 'side_b') teamB.matchesWon += 1;
+  }
+}
+
+function buildMatchPointsFromHoleResults(
+  teams: TeamRow[],
+  matchGroups: DisplayMatchGroupRow[],
+  holeResults: DisplayHoleResultRow[]
+): DisplayMatchPointsRow[] {
+  const holesByGroup = new Map<string, DisplayHoleResultRow[]>();
+  for (const row of holeResults) {
+    const list = holesByGroup.get(row.match_group_id) ?? [];
+    list.push(row);
+    holesByGroup.set(row.match_group_id, list);
+  }
+
+  const byTeamId = new Map<
+    string,
+    { teamName: string; matchPoints: number; matchesWon: number; matchesPlayed: number }
+  >();
+
+  for (const team of teams) {
+    if (!team.side) continue;
+    byTeamId.set(team.id, {
+      teamName: team.team_name,
+      matchPoints: 0,
+      matchesWon: 0,
+      matchesPlayed: 0,
+    });
+  }
+
+  for (const group of matchGroups) {
+    if (isAdminDeclaredMatchResult(group)) {
+      applyCupPointsToTeamTotals(byTeamId, group, {
+        match_winner: group.match_winner,
+        match_points_a: group.match_points_a,
+        match_points_b: group.match_points_b,
+      });
+      continue;
+    }
+
+    const groupHoles = holesByGroup.get(group.id) ?? [];
+    if (groupHoles.length > 0) {
+      const cupPoints = computeMatchPointsFromHoleResults({
+        format: group.format,
+        matchGroup: group,
+        holeResults: groupHoles,
+      });
+      if (cupPoints.match_points_a > 0 || cupPoints.match_points_b > 0) {
+        applyCupPointsToTeamTotals(byTeamId, group, cupPoints);
+        continue;
+      }
+    }
+
+    if (group.match_winner != null) {
+      const pointsA = Number(group.match_points_a ?? 0);
+      const pointsB = Number(group.match_points_b ?? 0);
+      if (group.match_winner === 'tie' || pointsA > 0 || pointsB > 0) {
+        applyCupPointsToTeamTotals(byTeamId, group, {
+          match_winner: group.match_winner,
+          match_points_a: pointsA,
+          match_points_b: pointsB,
+        });
+      }
+    }
+  }
+
+  return Array.from(byTeamId.values())
+    .sort((a, b) => {
+      if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
+      return b.matchesWon - a.matchesWon;
+    })
+    .map((row, index) => ({
+      rank: index + 1,
+      teamName: row.teamName,
+      matchPoints: row.matchPoints,
+      matchesWon: row.matchesWon,
+      matchesPlayed: row.matchesPlayed,
+    }));
 }
 
 function buildMatchPoints(
@@ -421,9 +544,10 @@ export function buildTournamentDisplayPayload(params: {
     netStandings: buildLeaderboard(scores, nameByKey, 'net'),
     matchPoints:
       fullMatchGroups && fullMatchGroups.length > 0
-        ? buildMatchPoints(
+        ? buildMatchPointsFromHoleResults(
             teams,
-            filterGroupsForMatchPoints(fullMatchGroups, fullHoleResults ?? [])
+            fullMatchGroups,
+            fullHoleResults ?? []
           )
         : buildMatchPoints(teams, matchGroups),
     matchPlay:

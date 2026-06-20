@@ -240,8 +240,11 @@ export function AdminTournamentManagementSection({
   const sideA = getTeamBySide(teams, 'side_a');
   const sideB = getTeamBySide(teams, 'side_b');
   const standings = useMemo(
-    () => buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults),
-    [teams, matchGroups, holeResults]
+    () =>
+      buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults, {
+        tournament,
+      }),
+    [teams, matchGroups, holeResults, tournament]
   );
   const teamStats = useMemo(
     () =>

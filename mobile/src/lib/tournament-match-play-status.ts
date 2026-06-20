@@ -215,6 +215,53 @@ export function resolveMatchGroupDisplayStatus(
   return { label: 'Scheduled', tone: 'scheduled' };
 }
 
+/** Whether a match counts toward tournament-wide overall standings (all rounds combined). */
+export function isMatchGroupCountedInOverallStandings(
+  group: TournamentMatchGroup,
+  holeResults: TournamentMatchHoleResult[],
+  sideAName: string,
+  sideBName: string,
+  options?: {
+    scores?: TournamentScore[];
+    useNetScoring?: boolean;
+  }
+): boolean {
+  if (isAdminDeclaredMatchResult(group)) {
+    return true;
+  }
+
+  const effectiveHoles = resolveEffectiveGroupHoleResults(
+    group,
+    holeResults,
+    options?.scores,
+    options?.useNetScoring ?? false
+  );
+
+  if (effectiveHoles.length > 0) {
+    const { playStatus } = buildMatchStatusFromHoleResults(
+      group,
+      holeResults,
+      sideAName,
+      sideBName,
+      options
+    );
+    if (playStatus === 'complete') {
+      return true;
+    }
+  }
+
+  // Prior sessions with official persisted results (e.g. yesterday best ball).
+  if (group.match_winner != null) {
+    const pointsA = Number(group.match_points_a ?? 0);
+    const pointsB = Number(group.match_points_b ?? 0);
+    if (group.match_winner === 'tie' || pointsA > 0 || pointsB > 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function formatMatchPlayStatusLabel(
   status: MatchPlayStatus,
   group?: Pick<TournamentMatchGroup, 'tee_time'>,

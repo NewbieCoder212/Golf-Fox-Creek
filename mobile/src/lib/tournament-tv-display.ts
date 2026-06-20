@@ -137,7 +137,8 @@ export function getTournamentTvChampion(params: {
   const standings = buildMatchPointsLeaderboardFromHoleResults(
     params.teams,
     params.matchGroups,
-    params.holeResults
+    params.holeResults,
+    { tournament: params.tournament }
   );
 
   if (standings.length === 0) return null;

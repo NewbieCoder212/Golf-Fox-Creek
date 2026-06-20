@@ -15,6 +15,9 @@ import {
   getTournamentScores,
   getTournamentTeams,
 } from '@/lib/tournament-service';
+import { buildRoundSessionPointsLeaderboard } from '@/lib/tournament-session-scoring';
+import { getTeamSideDisplayName } from '@/lib/tournament-labels';
+import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
   getMatchHoleResultsForTournament,
@@ -89,10 +92,39 @@ export function TournamentLiveStandingsPanel({
     refetchInterval: 15_000,
   });
 
+  const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
+
   const matchPointsLeaderboard = useMemo(
-    () => buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults),
-    [teams, matchGroups, holeResults]
+    () =>
+      buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults, {
+        scores,
+        useNetScoring: matchUseNetScoring,
+        tournament,
+      }),
+    [teams, matchGroups, holeResults, scores, matchUseNetScoring, tournament]
   );
+
+  const activeRound = tournament ? getActiveRoundNumber(tournament) : 1;
+  const roundMatchGroups = useMemo(
+    () => matchGroups.filter((group) => group.round_number === activeRound),
+    [matchGroups, activeRound]
+  );
+
+  const sessionStandings = useMemo(() => {
+    if (!tournament) return [];
+    const sideAName = getTeamSideDisplayName('side_a', teams);
+    const sideBName = getTeamSideDisplayName('side_b', teams);
+    return buildRoundSessionPointsLeaderboard(
+      teams,
+      roundMatchGroups,
+      holeResults,
+      tournament,
+      sideAName,
+      sideBName,
+      scores,
+      matchUseNetScoring
+    );
+  }, [teams, roundMatchGroups, holeResults, tournament, scores, matchUseNetScoring]);
 
   const leaderboard = useMemo(
     () => buildTournamentLeaderboard(scores, leaderboardMode),
@@ -158,18 +190,36 @@ export function TournamentLiveStandingsPanel({
       ) : null}
 
       {sideATeam && sideBTeam ? (
-        <TournamentTeamMatchupBoard
-          teams={teams}
-          teamStats={matchPointsLeaderboard.map((row) => ({
-            teamId: row.teamId,
-            matchPoints: row.matchPoints,
-            matchesWon: row.matchesWon,
-          }))}
-          subtitle="Team Matchup"
-          compact={compact}
-          minimal={compact}
-          className="mb-3"
-        />
+        <View className="mb-3">
+          <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-2 px-1">
+            Overall Standings
+          </Text>
+          <TournamentTeamMatchupBoard
+            teams={teams}
+            teamStats={matchPointsLeaderboard.map((row) => ({
+              teamId: row.teamId,
+              matchPoints: row.matchPoints,
+              matchesWon: row.matchesWon,
+            }))}
+            compact={compact}
+            minimal={compact}
+            className="mb-3 border-0 bg-transparent"
+          />
+          <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-2 px-1">
+            Current session score
+          </Text>
+          <TournamentTeamMatchupBoard
+            teams={teams}
+            teamStats={sessionStandings.map((row) => ({
+              teamId: row.teamId,
+              matchPoints: row.matchPoints,
+              matchesWon: row.matchesWon,
+            }))}
+            compact={compact}
+            minimal={compact}
+            className="border-0 bg-transparent"
+          />
+        </View>
       ) : (
         <View className="py-8 items-center bg-[#141414] rounded-2xl border border-neutral-800 mb-3">
           <Text className="text-neutral-400 text-sm text-center px-4">
@@ -184,6 +234,8 @@ export function TournamentLiveStandingsPanel({
           teams={teams}
           matchGroups={matchGroups}
           playerNameById={playerNameById}
+          scores={scores}
+          useNetScoring={matchUseNetScoring}
           compact={compact}
           className="mb-3"
         />

@@ -531,7 +531,7 @@ export function getAdPreviewConfig(
     locationHint:
       position === 'header_left'
         ? 'Header area on the live leaderboard display'
-        : 'Sidebar carousel on the live leaderboard display',
+        : 'Top-left partners hub on the live leaderboard display',
     variant: 'default',
   };
 }

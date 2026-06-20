@@ -201,6 +201,11 @@ export function TournamentTvTeeSheet({
     return result;
   }, [rows, rowsPerPage]);
 
+  const rowsIdentity = useMemo(
+    () => `${roundNumber}:${rows.map((row) => row.groupId).join(',')}`,
+    [roundNumber, rows]
+  );
+
   useEffect(() => {
     if (pages.length <= 1) return;
     const timer = setInterval(() => {
@@ -211,7 +216,11 @@ export function TournamentTvTeeSheet({
 
   useEffect(() => {
     setPageIndex(0);
-  }, [roundNumber, rows.length]);
+  }, [rowsIdentity]);
+
+  useEffect(() => {
+    setPageIndex((current) => Math.min(current, Math.max(0, pages.length - 1)));
+  }, [pages.length]);
 
   if (rows.length === 0) return null;
 

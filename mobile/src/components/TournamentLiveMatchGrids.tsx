@@ -218,9 +218,18 @@ function TvMatchCarousel({
     [carouselMatches, effectiveCardsPerPage]
   );
 
+  const carouselIdentity = useMemo(
+    () => `${activePhase}:${carouselMatches.map((model) => model.matchGroupId).join(',')}`,
+    [activePhase, carouselMatches]
+  );
+
   useEffect(() => {
     setPageIndex(0);
-  }, [activePhase, carouselMatches, effectiveCardsPerPage]);
+  }, [carouselIdentity, effectiveCardsPerPage]);
+
+  useEffect(() => {
+    setPageIndex((current) => Math.min(current, Math.max(0, pages.length - 1)));
+  }, [pages.length]);
 
   useEffect(() => {
     if (carouselMatches.length === 0) return;

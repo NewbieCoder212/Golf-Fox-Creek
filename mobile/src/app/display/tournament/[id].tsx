@@ -3,7 +3,10 @@ import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchTournamentDisplay } from '@/lib/display-service';
+import { isDisplayRealtimeConfigured } from '@/hooks/useTournamentDisplayRealtime';
 import { TournamentTvDisplayContent } from '@/components/TournamentTvDisplayContent';
+
+const TV_DISPLAY_POLL_MS = isDisplayRealtimeConfigured() ? 60_000 : 30_000;
 
 export default function TournamentTvDisplayByIdScreen() {
   const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
@@ -20,8 +23,8 @@ export default function TournamentTvDisplayByIdScreen() {
     queryKey: ['tournamentDisplay', id, token],
     queryFn: () => fetchTournamentDisplay(id!, token!),
     enabled: displayEnabled,
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: TV_DISPLAY_POLL_MS,
+    refetchInterval: TV_DISPLAY_POLL_MS,
   });
 
   const handleRefetch = useCallback(() => {

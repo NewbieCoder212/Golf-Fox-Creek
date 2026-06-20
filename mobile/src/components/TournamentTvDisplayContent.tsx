@@ -273,6 +273,14 @@ export function TournamentTvDisplayContent({
   const sidebarSponsors = data.sponsors.sidebar;
   const hasFooterAd = footerSponsors.length > 0;
 
+  const sidebarPartners =
+    sidebarSponsors.length > 0 ? (
+      <TvSidebarSponsorStack sponsors={sidebarSponsors} compactTop />
+    ) : null;
+
+  /** Compact strip boards when partners sit above — keeps session score on lounge TVs */
+  const useCompactSidebarStandings = sidebarSponsors.length > 0 && isWideLayout;
+
   const teeSheet =
     hasTeeSheet && tournament ? (
       <TournamentTvTeeSheet
@@ -291,7 +299,7 @@ export function TournamentTvDisplayContent({
 
   const standingsBoard =
     sideATeam && sideBTeam ? (
-      <View className="gap-3">
+      <View className={cn('shrink-0', useCompactSidebarStandings ? 'gap-2' : 'gap-3')}>
         <View>
           <Text
             className={cn(
@@ -311,8 +319,8 @@ export function TournamentTvDisplayContent({
           <TournamentTeamMatchupBoard
             teams={teams}
             teamStats={teamStats}
-            tvDisplay={isWideLayout}
-            tvStrip={!isWideLayout}
+            tvDisplay={isWideLayout && !useCompactSidebarStandings}
+            tvStrip={useCompactSidebarStandings || !isWideLayout}
           />
         </View>
         <View>
@@ -327,8 +335,8 @@ export function TournamentTvDisplayContent({
           <TournamentTeamMatchupBoard
             teams={teams}
             teamStats={sessionTeamStats}
-            tvDisplay={isWideLayout}
-            tvStrip={!isWideLayout}
+            tvDisplay={isWideLayout && !useCompactSidebarStandings}
+            tvStrip={useCompactSidebarStandings || !isWideLayout}
           />
         </View>
       </View>
@@ -376,9 +384,11 @@ export function TournamentTvDisplayContent({
                 <Text className="text-lime-400 font-semibold ml-1 uppercase tracking-wider text-[10px]">
                   Live
                 </Text>
-                {isFetching ? (
-                  <ActivityIndicator size="small" color="#a3e635" style={{ marginLeft: 6 }} />
-                ) : null}
+                <View style={{ width: 18, marginLeft: 6, alignItems: 'center', justifyContent: 'center' }}>
+                  {isFetching ? (
+                    <ActivityIndicator size="small" color="#a3e635" />
+                  ) : null}
+                </View>
               </View>
             )}
             <Text className="text-neutral-600 mt-1 text-[10px]">
@@ -412,12 +422,10 @@ export function TournamentTvDisplayContent({
       <View className="flex-1 min-h-0 px-4 py-3">
         {isWideLayout ? (
           <View className="flex-1 min-h-0 flex-row gap-4 overflow-hidden">
-            <View className="w-[320px] shrink-0 gap-3">
+            <View className="w-[320px] shrink-0 gap-2">
+              {sidebarPartners}
               {championsBanner}
               {standingsBoard}
-              {sidebarSponsors.length > 0 ? (
-                <TvSidebarSponsorStack sponsors={sidebarSponsors} />
-              ) : null}
             </View>
 
             <View className="flex-1 min-w-0 min-h-0 gap-2">
@@ -444,6 +452,7 @@ export function TournamentTvDisplayContent({
           </View>
         ) : (
           <View className="flex-1 min-h-0 gap-2">
+            {sidebarPartners}
             {championsBanner}
             {standingsBoard}
 
@@ -473,8 +482,6 @@ export function TournamentTvDisplayContent({
       <View className="border-t border-neutral-800 bg-[#111111] shrink-0 px-5 py-2.5">
         {hasFooterAd ? (
           <TvFooterSponsorStrip sponsors={footerSponsors} />
-        ) : sidebarSponsors.length > 0 && !isWideLayout ? (
-          <TvFooterSponsorStrip sponsors={sidebarSponsors} />
         ) : (
           <Text className="text-neutral-600 text-xs">Fox Creek Golf Club · Dieppe, NB</Text>
         )}

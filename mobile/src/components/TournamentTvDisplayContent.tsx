@@ -22,7 +22,6 @@ import { TournamentTvTeeSheet } from '@/components/TournamentTvTeeSheet';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
 import { buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-service';
-import { cn } from '@/lib/cn';
 import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 import {
   buildTournamentTeeSheetRows,
@@ -43,8 +42,6 @@ interface TournamentTvDisplayContentProps {
   onRefetch: () => void;
   invalidLinkMessage?: string;
   showInvalidLink?: boolean;
-  /** Large-type layout for wall-mounted clubhouse TVs */
-  loungeMode?: boolean;
 }
 
 export function TournamentTvDisplayContent({
@@ -57,7 +54,6 @@ export function TournamentTvDisplayContent({
   onRefetch,
   invalidLinkMessage = 'Ask the pro shop for the TV display URL.',
   showInvalidLink = false,
-  loungeMode = false,
 }: TournamentTvDisplayContentProps) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -129,10 +125,10 @@ export function TournamentTvDisplayContent({
 
   const tvLiveMaxHeight = useMemo(() => {
     if (!hasTeeSheet) return undefined;
-    const reserved = insets.top + insets.bottom + (loungeMode ? 320 : 168);
+    const reserved = insets.top + insets.bottom + 168;
     const mainHeight = Math.max(260, height - reserved);
-    return Math.floor(mainHeight * (loungeMode ? 0.28 : 0.34));
-  }, [hasTeeSheet, height, insets.top, insets.bottom, loungeMode]);
+    return Math.floor(mainHeight * 0.34);
+  }, [hasTeeSheet, height, insets.top, insets.bottom]);
 
   const sideATeam = getTeamBySide(teams, 'side_a');
   const sideBTeam = getTeamBySide(teams, 'side_b');
@@ -201,12 +197,9 @@ export function TournamentTvDisplayContent({
         playerNameById={playerNameById}
         roundNumber={teeSheetRound}
         isPreviewingNextRound={isPreviewingNextRound}
-        loungeMode={loungeMode}
         compact={false}
       />
     ) : null;
-
-  const matchGridVariant = loungeMode ? 'tv-lounge' : 'tv-compact';
 
   const standingsBoard =
     sideATeam && sideBTeam ? (
@@ -214,10 +207,8 @@ export function TournamentTvDisplayContent({
         teams={teams}
         teamStats={teamStats}
         subtitle="Live Standings · Match pts"
-        tvDisplay={!loungeMode && isWideLayout}
-        tvStrip={!loungeMode && !isWideLayout}
-        tvHero={loungeMode}
-        tvLounge={loungeMode}
+        tvDisplay={isWideLayout}
+        tvStrip={!isWideLayout}
       />
     ) : !sideATeam && !sideBTeam && currentRoundMatchGroups.length === 0 ? (
       <View className="py-8 items-center bg-[#141414] rounded-xl border border-neutral-800">
@@ -231,101 +222,49 @@ export function TournamentTvDisplayContent({
       className="flex-1 bg-[#0c0c0c] overflow-hidden"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <View className={cn('border-b border-neutral-800 bg-[#111111]', loungeMode ? 'px-6 py-3' : 'px-5 py-2')}>
+      <View className="border-b border-neutral-800 bg-[#111111] px-5 py-2">
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center flex-1 mr-3 min-w-0">
-            {data.sponsors.header_left[0] && isLandscape && !loungeMode ? (
+            {data.sponsors.header_left[0] && isLandscape ? (
               <View className="w-28 mr-3">
                 <TvSponsorSlot sponsor={data.sponsors.header_left[0]} variant="header" />
               </View>
             ) : null}
             <View className="flex-1 min-w-0">
-              <Text
-                className={cn(
-                  'text-lime-400 font-semibold uppercase tracking-[0.2em]',
-                  loungeMode ? 'text-xs' : 'text-[10px]'
-                )}
-              >
+              <Text className="text-lime-400 font-semibold uppercase tracking-[0.2em] text-[10px]">
                 Fox Creek Golf Club
               </Text>
-              <Text
-                className={cn('text-white font-bold', loungeMode ? 'text-4xl' : 'text-xl')}
-                numberOfLines={1}
-              >
+              <Text className="text-white font-bold text-xl" numberOfLines={1}>
                 {data.tournament.name}
               </Text>
-              <Text
-                className={cn(
-                  'text-lime-400 font-semibold mt-0.5',
-                  loungeMode ? 'text-xl' : 'text-sm'
-                )}
-                numberOfLines={1}
-              >
+              <Text className="text-lime-400 font-semibold mt-0.5 text-sm" numberOfLines={1}>
                 {roundLabel}
               </Text>
-              {!loungeMode ? (
-                <Text className="text-neutral-500 text-xs" numberOfLines={1}>
-                  {formatTournamentDates(data.tournament.start_date, data.tournament.end_date)}
-                </Text>
-              ) : null}
+              <Text className="text-neutral-500 text-xs" numberOfLines={1}>
+                {formatTournamentDates(data.tournament.start_date, data.tournament.end_date)}
+              </Text>
             </View>
           </View>
 
           <View className="items-end shrink-0">
-            <View
-              className={cn(
-                'flex-row items-center bg-lime-950/40 border border-lime-700/30 rounded-full',
-                loungeMode ? 'px-3 py-1.5' : 'px-2.5 py-1'
-              )}
-            >
-              <Radio size={loungeMode ? 16 : 12} color="#a3e635" />
-              <Text
-                className={cn(
-                  'text-lime-400 font-semibold ml-1 uppercase tracking-wider',
-                  loungeMode ? 'text-sm' : 'text-[10px]'
-                )}
-              >
+            <View className="flex-row items-center bg-lime-950/40 border border-lime-700/30 rounded-full px-2.5 py-1">
+              <Radio size={12} color="#a3e635" />
+              <Text className="text-lime-400 font-semibold ml-1 uppercase tracking-wider text-[10px]">
                 Live
               </Text>
               {isFetching ? (
                 <ActivityIndicator size="small" color="#a3e635" style={{ marginLeft: 6 }} />
               ) : null}
             </View>
-            <Text className={cn('text-neutral-600 mt-1', loungeMode ? 'text-xs' : 'text-[10px]')}>
+            <Text className="text-neutral-600 mt-1 text-[10px]">
               Updated {lastUpdated}
             </Text>
           </View>
         </View>
       </View>
 
-      <View className={cn('flex-1 min-h-0', loungeMode ? 'px-5 py-3' : 'px-4 py-3')}>
-        {loungeMode ? (
-          <View className="flex-1 min-h-0 gap-3">
-            {standingsBoard}
-            <View
-              className="shrink-0 overflow-hidden"
-              style={tvLiveMaxHeight ? { maxHeight: tvLiveMaxHeight } : undefined}
-            >
-              <TournamentLiveMatchGrids
-                matchGroups={matchGroups}
-                scores={scores}
-                holeResults={holeResults}
-                teamNameById={teamNameById}
-                playerNameById={playerNameById}
-                useNetScoring={matchUseNetScoring}
-                variant={matchGridVariant}
-                roundNumber={displayRound}
-                hideTitle
-                layout="tv-carousel"
-                liveOnly
-                liveEmptySummary={liveEmptySummary}
-                maxHeight={tvLiveMaxHeight}
-                loungeMode
-              />
-            </View>
-            {teeSheet ? <View className="flex-1 min-h-0 shrink">{teeSheet}</View> : null}
-          </View>
-        ) : isWideLayout ? (
+      <View className="flex-1 min-h-0 px-4 py-3">
+        {isWideLayout ? (
           <View className="flex-1 min-h-0 flex-row gap-4 overflow-hidden">
             <View className="w-[320px] shrink-0 gap-3">
               {standingsBoard}
@@ -343,7 +282,7 @@ export function TournamentTvDisplayContent({
                   teamNameById={teamNameById}
                   playerNameById={playerNameById}
                   useNetScoring={matchUseNetScoring}
-                  variant={matchGridVariant}
+                  variant="tv-compact"
                   roundNumber={displayRound}
                   hideTitle
                   layout="tv-carousel"
@@ -367,7 +306,7 @@ export function TournamentTvDisplayContent({
                 teamNameById={teamNameById}
                 playerNameById={playerNameById}
                 useNetScoring={matchUseNetScoring}
-                variant={matchGridVariant}
+                variant="tv-compact"
                 roundNumber={displayRound}
                 hideTitle
                 layout="tv-carousel"
@@ -381,11 +320,9 @@ export function TournamentTvDisplayContent({
         )}
       </View>
 
-      <View className={cn('border-t border-neutral-800 bg-[#111111] shrink-0', loungeMode ? 'px-6 py-3' : 'px-5 py-2.5')}>
+      <View className="border-t border-neutral-800 bg-[#111111] shrink-0 px-5 py-2.5">
         {hasFooterAd ? (
           <TvFooterSponsorStrip sponsors={footerSponsors} />
-        ) : loungeMode && sidebarSponsors.length > 0 ? (
-          <TvFooterSponsorStrip sponsors={sidebarSponsors} />
         ) : sidebarSponsors.length > 0 && !isWideLayout ? (
           <TvFooterSponsorStrip sponsors={sidebarSponsors} />
         ) : (

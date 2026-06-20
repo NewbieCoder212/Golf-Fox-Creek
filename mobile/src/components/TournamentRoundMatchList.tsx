@@ -17,6 +17,7 @@ import { formatTeeAssignmentTime } from '@/lib/tournament-tee-service';
 import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
 import { getTeamSideTheme } from '@/lib/match-play-theme';
 import type { MatchStatus } from '@/lib/tournament-match-status';
+import type { MatchPlayStatus } from '@/lib/tournament-match-play-status';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import type { Tournament, TournamentMatchGroup, TournamentTeam } from '@/types';
@@ -103,6 +104,55 @@ function PlayerNames({
       ))}
     </View>
   );
+}
+
+type LeadingSide = 'side_a' | 'side_b' | 'tie' | null;
+
+function resolveLeadingSide(
+  playStatus: MatchPlayStatus,
+  winnerSide: LeadingSide,
+  lead: number
+): LeadingSide {
+  if (playStatus === 'not_started') return null;
+  if (playStatus === 'complete') return winnerSide;
+  if (lead === 0) return 'tie';
+  if (lead > 0) return 'side_a';
+  return 'side_b';
+}
+
+function getTeamSidePanelStyle(
+  side: 'side_a' | 'side_b',
+  leadingSide: LeadingSide,
+  theme: ReturnType<typeof getTeamSideTheme>,
+  layout: 'team' | 'singles'
+) {
+  const isLeading = leadingSide === side;
+  const isTrailing = leadingSide != null && leadingSide !== 'tie' && leadingSide !== side;
+  const isTie = leadingSide === 'tie';
+
+  const borderWidth = isLeading ? 4 : isTie || leadingSide == null ? 2 : 1;
+  const borderColor = isLeading
+    ? theme.color
+    : isTrailing
+      ? theme.panelBorder
+      : theme.color;
+
+  if (layout === 'singles') {
+    return {
+      backgroundColor: theme.panelBg,
+      opacity: isTrailing ? 0.55 : 1,
+      ...(side === 'side_a'
+        ? { borderLeftWidth: borderWidth, borderLeftColor: borderColor }
+        : { borderRightWidth: borderWidth, borderRightColor: borderColor }),
+    };
+  }
+
+  return {
+    backgroundColor: theme.panelBg,
+    opacity: isTrailing ? 0.55 : 1,
+    borderBottomWidth: borderWidth,
+    borderBottomColor: borderColor,
+  };
 }
 
 type StatusAlignment = 'left' | 'center' | 'right';
@@ -231,11 +281,17 @@ function MatchLineupRow({
   sideAName,
   sideBName,
   compact,
+  playStatus,
+  matchStatus,
+  winnerSide,
 }: {
   lineup: RoundMatchLineup;
   sideAName: string;
   sideBName: string;
   compact: boolean;
+  playStatus?: MatchPlayStatus;
+  matchStatus?: MatchStatus;
+  winnerSide?: LeadingSide;
 }) {
   const themeA = getTeamSideTheme('side_a');
   const themeB = getTeamSideTheme('side_b');
@@ -243,16 +299,19 @@ function MatchLineupRow({
   if (lineup.kind === 'singles') {
     return (
       <View className="gap-1.5">
-        {lineup.pairings.map((pairing) => (
+        {lineup.pairings.map((pairing) => {
+          const pairingLeadingSide = resolveLeadingSide(
+            pairing.playStatus,
+            pairing.winnerSide,
+            pairing.matchStatus.lead
+          );
+
+          return (
           <View key={`pair-${pairing.pairingIndex}`}>
             <View className="flex-row items-stretch">
               <View
                 className="flex-1 px-3 py-2 justify-center"
-                style={{
-                  backgroundColor: themeA.panelBg,
-                  borderLeftWidth: 3,
-                  borderLeftColor: themeA.color,
-                }}
+                style={getTeamSidePanelStyle('side_a', pairingLeadingSide, themeA, 'singles')}
               >
                 {pairing.pairingIndex === 0 ? (
                   <Text
@@ -281,11 +340,7 @@ function MatchLineupRow({
 
               <View
                 className="flex-1 px-3 py-2 justify-center items-end"
-                style={{
-                  backgroundColor: themeB.panelBg,
-                  borderRightWidth: 3,
-                  borderRightColor: themeB.color,
-                }}
+                style={getTeamSidePanelStyle('side_b', pairingLeadingSide, themeB, 'singles')}
               >
                 {pairing.pairingIndex === 0 ? (
                   <Text
@@ -314,20 +369,23 @@ function MatchLineupRow({
               sideBName={sideBName}
             />
           </View>
-        ))}
+          );
+        })}
       </View>
     );
   }
+
+  const leadingSide = resolveLeadingSide(
+    playStatus ?? 'not_started',
+    winnerSide ?? null,
+    matchStatus?.lead ?? 0
+  );
 
   return (
     <View className="flex-row items-stretch">
       <View
         className="flex-1 px-3 py-2.5"
-        style={{
-          backgroundColor: themeA.panelBg,
-          borderBottomWidth: 2,
-          borderBottomColor: themeA.color,
-        }}
+        style={getTeamSidePanelStyle('side_a', leadingSide, themeA, 'team')}
       >
         <Text
           style={{ color: themeA.color }}
@@ -345,11 +403,7 @@ function MatchLineupRow({
 
       <View
         className="flex-1 px-3 py-2.5 items-end"
-        style={{
-          backgroundColor: themeB.panelBg,
-          borderBottomWidth: 2,
-          borderBottomColor: themeB.color,
-        }}
+        style={getTeamSidePanelStyle('side_b', leadingSide, themeB, 'team')}
       >
         <Text
           style={{ color: themeB.color }}
@@ -436,6 +490,9 @@ export function TournamentRoundMatchList({
                 sideAName={match.sideAName}
                 sideBName={match.sideBName}
                 compact={compact}
+                playStatus={match.playStatus}
+                matchStatus={match.matchStatus}
+                winnerSide={match.winnerSide}
               />
 
               <View className="px-3 py-2">

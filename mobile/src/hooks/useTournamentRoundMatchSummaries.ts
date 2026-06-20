@@ -2,10 +2,6 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import {
-  holeResultsToOutcomes,
-  outcomesMapToHoleResultRows,
-} from '@/lib/match-hole-outcomes';
-import {
   buildMatchStatusFromHoleResults,
   formatMatchResultSummary,
   resolveMatchWinnerSide,
@@ -17,10 +13,8 @@ import {
   getTeamSideDisplayName,
   isSinglesFormat,
 } from '@/lib/tournament-labels';
-import {
-  computeLiveMatchStatus,
-  type MatchStatus,
-} from '@/lib/tournament-match-status';
+import { buildPairingMatchStatus } from '@/lib/tournament-pairing-status';
+import type { MatchStatus } from '@/lib/tournament-match-status';
 import type { Tournament, TournamentMatchGroup, TournamentMatchHoleResult, TournamentTeam } from '@/types';
 
 export type RoundMatchSinglesPairing = {
@@ -57,61 +51,6 @@ function formatPlayerName(
   return playerNameById[playerId] ?? 'TBD';
 }
 
-function resolvePairingPlayStatus(matchStatus: MatchStatus): MatchPlayStatus {
-  if (matchStatus.throughHole === 0) return 'not_started';
-  if (matchStatus.clinched) return 'complete';
-  if (matchStatus.throughHole >= 18) return 'complete';
-  return 'in_progress';
-}
-
-function formatPairingResultSummary(
-  matchStatus: MatchStatus,
-  sideAName: string,
-  sideBName: string
-): string | null {
-  if (matchStatus.throughHole === 0) return null;
-
-  if (matchStatus.clinched) {
-    return matchStatus.label;
-  }
-
-  if (matchStatus.throughHole >= 18) {
-    if (matchStatus.lead === 0) return 'Halved';
-    if (matchStatus.lead > 0) return `${sideAName} won`;
-    if (matchStatus.lead < 0) return `${sideBName} won`;
-  }
-
-  return matchStatus.label;
-}
-
-function buildPairingMatchSummary(
-  groupHoleResults: Array<
-    Pick<TournamentMatchHoleResult, 'hole' | 'hole_winner' | 'pairing_index'>
-  >,
-  pairingIndex: number,
-  sideAName: string,
-  sideBName: string
-): Pick<
-  RoundMatchSinglesPairing,
-  'matchStatus' | 'playStatus' | 'resultSummary' | 'winnerSide'
-> {
-  const pairingResults = groupHoleResults.filter(
-    (row) => (row.pairing_index ?? 0) === pairingIndex
-  );
-  const outcomes = holeResultsToOutcomes(pairingResults, pairingIndex);
-  const rows = outcomesMapToHoleResultRows(outcomes);
-  const matchStatus = computeLiveMatchStatus({
-    holeResults: rows,
-    sideAName,
-    sideBName,
-  });
-  const playStatus = resolvePairingPlayStatus(matchStatus);
-  const resultSummary = formatPairingResultSummary(matchStatus, sideAName, sideBName);
-  const winnerSide = resolveMatchWinnerSide(null, matchStatus);
-
-  return { matchStatus, playStatus, resultSummary, winnerSide };
-}
-
 function buildMatchLineup(
   group: TournamentMatchGroup,
   tournament: Tournament,
@@ -134,7 +73,7 @@ function buildMatchLineup(
     return {
       kind: 'singles',
       pairings: Array.from({ length: pairingCount }, (_, index) => {
-        const pairingSummary = buildPairingMatchSummary(
+        const pairingSummary = buildPairingMatchStatus(
           groupHoleResults,
           index,
           sideAName,

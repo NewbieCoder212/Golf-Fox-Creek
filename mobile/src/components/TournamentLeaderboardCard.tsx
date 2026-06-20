@@ -12,11 +12,13 @@ import {
   getTournamentById,
   getTournamentTeams,
 } from '@/lib/tournament-service';
+import { buildRoundSessionPointsLeaderboard } from '@/lib/tournament-session-scoring';
 import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { getMatchHoleResultsForTournament } from '@/lib/tournament-match-service';
 import { getMembersForChallenge } from '@/lib/social-service';
-import { formatTournamentDates } from '@/lib/tournament-labels';
+import { formatTournamentDates, getTeamSideDisplayName } from '@/lib/tournament-labels';
+import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
 import { cn } from '@/lib/cn';
 
 interface TournamentLeaderboardCardProps {
@@ -77,7 +79,33 @@ export function TournamentLeaderboardCard({
     () => buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults),
     [holeResults, teams, matchGroups]
   );
-  const teamStats = standings.map((row) => ({
+
+  const activeRound = tournament ? getActiveRoundNumber(tournament) : 1;
+  const roundMatchGroups = useMemo(
+    () => matchGroups.filter((group) => group.round_number === activeRound),
+    [matchGroups, activeRound]
+  );
+
+  const sessionStandings = useMemo(() => {
+    if (!tournament) return [];
+    const sideAName = getTeamSideDisplayName('side_a', teams);
+    const sideBName = getTeamSideDisplayName('side_b', teams);
+    return buildRoundSessionPointsLeaderboard(
+      teams,
+      roundMatchGroups,
+      holeResults,
+      tournament,
+      sideAName,
+      sideBName
+    );
+  }, [teams, roundMatchGroups, holeResults, tournament]);
+
+  const overallTeamStats = standings.map((row) => ({
+    teamId: row.teamId,
+    matchPoints: row.matchPoints,
+    matchesWon: row.matchesWon,
+  }));
+  const sessionTeamStats = sessionStandings.map((row) => ({
     teamId: row.teamId,
     matchPoints: row.matchPoints,
     matchesWon: row.matchesWon,
@@ -143,15 +171,41 @@ export function TournamentLeaderboardCard({
             <ActivityIndicator size="small" color="#a3e635" />
           </View>
         ) : null}
-        <TournamentTeamMatchupBoard
-          teams={teams}
-          teamStats={teamStats}
-          subtitle={hubEmbedded ? undefined : 'Team Matchup'}
-          compact={compact}
-          minimal={hubEmbedded}
-          hubEmbedded={hubEmbedded}
-          className="border-0 bg-transparent"
-        />
+        {hubEmbedded ? (
+          <>
+            <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-2 px-1">
+              Overall Standings
+            </Text>
+            <TournamentTeamMatchupBoard
+              teams={teams}
+              teamStats={overallTeamStats}
+              compact={compact}
+              minimal
+              hubEmbedded
+              className="border-0 bg-transparent mb-3"
+            />
+            <Text className="text-neutral-500 text-[10px] uppercase tracking-widest mb-2 px-1">
+              Current session score
+            </Text>
+            <TournamentTeamMatchupBoard
+              teams={teams}
+              teamStats={sessionTeamStats}
+              compact={compact}
+              minimal
+              className="border-0 bg-transparent"
+            />
+          </>
+        ) : (
+          <TournamentTeamMatchupBoard
+            teams={teams}
+            teamStats={overallTeamStats}
+            subtitle="Team Matchup"
+            compact={compact}
+            minimal={hubEmbedded}
+            hubEmbedded={hubEmbedded}
+            className="border-0 bg-transparent"
+          />
+        )}
         {hubEmbedded && tournament ? (
           <TournamentRoundMatchList
             tournament={tournament}

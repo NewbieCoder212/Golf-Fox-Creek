@@ -99,7 +99,7 @@ export function TournamentLiveStandingsPanel({
       buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults, {
         scores,
         useNetScoring: matchUseNetScoring,
-        tournament,
+        tournament: tournament ?? undefined,
       }),
     [teams, matchGroups, holeResults, scores, matchUseNetScoring, tournament]
   );

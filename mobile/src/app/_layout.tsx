@@ -44,6 +44,26 @@ function useAuthEmailLinkRedirect() {
   }, []);
 }
 
+function isPublicAppRoute(segments: readonly string[]): boolean {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const path = window.location.pathname.replace(/\/$/, '') || '/';
+    if (path.startsWith('/admin')) return true;
+    if (path.startsWith('/display') || path.startsWith('/tv')) return true;
+    if (isWebPublicAuthLocation()) return true;
+  }
+
+  const root = segments[0];
+  return (
+    root === 'login' ||
+    root === 'admin' ||
+    root === 'reset-password' ||
+    root === 'forgot-password' ||
+    root === 'accept-invite' ||
+    root === 'display' ||
+    root === 'tv'
+  );
+}
+
 function useProtectedRoute() {
   const segments = useSegments();
   const router = useRouter();
@@ -65,22 +85,12 @@ function useProtectedRoute() {
   useEffect(() => {
     if (!hasCheckedAuth || isLoading) return;
 
+    const isPublicAuthRoute = isPublicAppRoute(segments);
+
+    // Wait for Expo Router segments unless the browser URL is already a public route.
+    if (!segments[0] && !isPublicAuthRoute) return;
+
     const inAuthGroup = segments[0] === 'login';
-    const inAdminGroup = segments[0] === 'admin';
-    const inResetPassword = segments[0] === 'reset-password';
-    const inForgotPassword = segments[0] === 'forgot-password';
-    const inAcceptInvite = segments[0] === 'accept-invite';
-    const inDisplay = segments[0] === 'display';
-    const inTv = segments[0] === 'tv';
-    const isPublicAuthRoute =
-      inAuthGroup ||
-      inAdminGroup ||
-      inResetPassword ||
-      inForgotPassword ||
-      inAcceptInvite ||
-      inDisplay ||
-      inTv ||
-      (Platform.OS === 'web' && isWebPublicAuthLocation());
 
     // If not authenticated and not on a public auth route, redirect to login
     // (Admin has its own auth system via Supabase)
@@ -128,11 +138,7 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         <Stack.Screen name="history" options={{ headerShown: false }} />
-        <Stack.Screen name="admin/index" options={{ headerShown: false, presentation: 'modal' }} />
-        <Stack.Screen name="admin/dashboard" options={{ headerShown: false }} />
-        <Stack.Screen name="admin/hub-preview" options={{ headerShown: false }} />
-        <Stack.Screen name="admin/ad-preview" options={{ headerShown: false }} />
-        <Stack.Screen name="admin/members" options={{ headerShown: false }} />
+        <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="report-condition" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />

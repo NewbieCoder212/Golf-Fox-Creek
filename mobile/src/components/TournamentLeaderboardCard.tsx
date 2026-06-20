@@ -90,7 +90,7 @@ export function TournamentLeaderboardCard({
       buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults, {
         scores,
         useNetScoring: matchUseNetScoring,
-        tournament,
+        tournament: tournament ?? undefined,
       }),
     [holeResults, teams, matchGroups, scores, matchUseNetScoring, tournament]
   );

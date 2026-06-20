@@ -941,6 +941,7 @@ export function ensureAuthEmailLinkRoute(): void {
   const pathname = window.location.pathname.replace(/\/$/, '') || '/';
   const targetPath = callbackRoute.replace(/\/$/, '') || '/';
   if (pathname === targetPath) return;
+  if (pathname.startsWith('/admin')) return;
 
   window.location.replace(`${callbackRoute}${window.location.hash}${window.location.search}`);
 }

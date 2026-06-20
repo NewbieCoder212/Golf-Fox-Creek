@@ -242,9 +242,9 @@ export function AdminTournamentManagementSection({
   const standings = useMemo(
     () =>
       buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults, {
-        tournament,
+        tournament: selectedTournament ?? undefined,
       }),
-    [teams, matchGroups, holeResults, tournament]
+    [teams, matchGroups, holeResults, selectedTournament]
   );
   const teamStats = useMemo(
     () =>

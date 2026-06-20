@@ -25,26 +25,21 @@ type SessionUnitPoints = {
   countAsMatch: boolean;
 };
 
+const EMPTY_SESSION_UNIT: SessionUnitPoints = {
+  pointsA: 0,
+  pointsB: 0,
+  wonA: false,
+  wonB: false,
+  countAsMatch: false,
+};
+
 function sessionPointsForUnit(
   playStatus: MatchPlayStatus,
   matchStatus: Pick<MatchStatus, 'lead'>,
-  winnerSide: 'side_a' | 'side_b' | 'tie' | null
+  _winnerSide: 'side_a' | 'side_b' | 'tie' | null
 ): SessionUnitPoints {
-  if (playStatus === 'not_started') {
-    return { pointsA: 0, pointsB: 0, wonA: false, wonB: false, countAsMatch: false };
-  }
-
-  if (playStatus === 'complete') {
-    if (winnerSide === 'tie') {
-      return { pointsA: 0.5, pointsB: 0.5, wonA: false, wonB: false, countAsMatch: true };
-    }
-    if (winnerSide === 'side_a') {
-      return { pointsA: 1, pointsB: 0, wonA: true, wonB: false, countAsMatch: true };
-    }
-    if (winnerSide === 'side_b') {
-      return { pointsA: 0, pointsB: 1, wonA: false, wonB: true, countAsMatch: true };
-    }
-    return { pointsA: 0, pointsB: 0, wonA: false, wonB: false, countAsMatch: true };
+  if (playStatus === 'not_started' || playStatus === 'complete') {
+    return EMPTY_SESSION_UNIT;
   }
 
   if (matchStatus.lead === 0) {
@@ -54,21 +49,6 @@ function sessionPointsForUnit(
     return { pointsA: 1, pointsB: 0, wonA: false, wonB: false, countAsMatch: true };
   }
   return { pointsA: 0, pointsB: 1, wonA: false, wonB: false, countAsMatch: true };
-}
-
-function adminDeclaredSessionPoints(
-  group: TournamentMatchGroup
-): SessionUnitPoints {
-  if (group.match_winner === 'tie') {
-    return { pointsA: 0.5, pointsB: 0.5, wonA: false, wonB: false, countAsMatch: true };
-  }
-  if (group.match_winner === 'side_a') {
-    return { pointsA: 1, pointsB: 0, wonA: true, wonB: false, countAsMatch: true };
-  }
-  if (group.match_winner === 'side_b') {
-    return { pointsA: 0, pointsB: 1, wonA: false, wonB: true, countAsMatch: true };
-  }
-  return { pointsA: 0, pointsB: 0, wonA: false, wonB: false, countAsMatch: false };
 }
 
 function applySessionPoints(
@@ -91,7 +71,7 @@ function applySessionPoints(
   }
 }
 
-/** Live round session totals — completed wins/ties plus in-progress up/as projection. */
+/** Live round session totals — in-progress matches only (completed points live in overall). */
 export function buildRoundSessionPointsLeaderboard(
   teams: { id: string; team_name: string; side: string | null }[],
   matchGroups: TournamentMatchGroup[],
@@ -118,7 +98,6 @@ export function buildRoundSessionPointsLeaderboard(
 
   for (const group of matchGroups) {
     if (isAdminDeclaredMatchResult(group)) {
-      applySessionPoints(byTeamId, group, adminDeclaredSessionPoints(group));
       continue;
     }
 

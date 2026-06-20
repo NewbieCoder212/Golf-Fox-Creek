@@ -17,7 +17,7 @@ import {
 } from '@/lib/tournament-service';
 import { buildRoundSessionPointsLeaderboard } from '@/lib/tournament-session-scoring';
 import { getTeamSideDisplayName } from '@/lib/tournament-labels';
-import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
+import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
   getMatchHoleResultsForTournament,
@@ -104,10 +104,13 @@ export function TournamentLiveStandingsPanel({
     [teams, matchGroups, holeResults, scores, matchUseNetScoring, tournament]
   );
 
-  const activeRound = tournament ? getActiveRoundNumber(tournament) : 1;
+  const sessionRound = useMemo(
+    () => (tournament ? getTvDisplayRoundNumber(tournament, matchGroups) : 1),
+    [tournament, matchGroups]
+  );
   const roundMatchGroups = useMemo(
-    () => matchGroups.filter((group) => group.round_number === activeRound),
-    [matchGroups, activeRound]
+    () => matchGroups.filter((group) => group.round_number === sessionRound),
+    [matchGroups, sessionRound]
   );
 
   const sessionStandings = useMemo(() => {

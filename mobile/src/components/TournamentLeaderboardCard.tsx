@@ -19,7 +19,7 @@ import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournamen
 import { getMatchHoleResultsForTournament } from '@/lib/tournament-match-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import { formatTournamentDates, getTeamSideDisplayName } from '@/lib/tournament-labels';
-import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
+import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
 import { cn } from '@/lib/cn';
 
 interface TournamentLeaderboardCardProps {
@@ -95,10 +95,13 @@ export function TournamentLeaderboardCard({
     [holeResults, teams, matchGroups, scores, matchUseNetScoring, tournament]
   );
 
-  const activeRound = tournament ? getActiveRoundNumber(tournament) : 1;
+  const sessionRound = useMemo(
+    () => (tournament ? getTvDisplayRoundNumber(tournament, matchGroups) : 1),
+    [tournament, matchGroups]
+  );
   const roundMatchGroups = useMemo(
-    () => matchGroups.filter((group) => group.round_number === activeRound),
-    [matchGroups, activeRound]
+    () => matchGroups.filter((group) => group.round_number === sessionRound),
+    [matchGroups, sessionRound]
   );
 
   const sessionStandings = useMemo(() => {

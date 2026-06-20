@@ -23,6 +23,42 @@ export function isAdminDeclaredMatchResult(
   return Boolean(group.match_result_declared && group.match_winner != null);
 }
 
+export type OfficialMatchCupPoints = {
+  match_winner: TournamentMatchGroup['match_winner'];
+  match_points_a: number;
+  match_points_b: number;
+};
+
+/** Cup points that count toward team standings — complete matches or admin-declared only. */
+export function getOfficialMatchCupPoints(
+  group: TournamentMatchGroup,
+  playStatus: MatchPlayStatus
+): OfficialMatchCupPoints | null {
+  if (isAdminDeclaredMatchResult(group)) {
+    return {
+      match_winner: group.match_winner ?? null,
+      match_points_a: group.match_points_a,
+      match_points_b: group.match_points_b,
+    };
+  }
+
+  if (playStatus !== 'complete' || group.match_winner == null) {
+    return null;
+  }
+
+  const pointsA = Number(group.match_points_a ?? 0);
+  const pointsB = Number(group.match_points_b ?? 0);
+  if (pointsA === 0 && pointsB === 0) {
+    return null;
+  }
+
+  return {
+    match_winner: group.match_winner,
+    match_points_a: pointsA,
+    match_points_b: pointsB,
+  };
+}
+
 export function isMatchActuallyComplete(
   group: Pick<
     TournamentMatchGroup,

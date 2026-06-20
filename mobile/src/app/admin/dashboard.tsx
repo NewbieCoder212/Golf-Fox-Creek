@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -66,7 +66,11 @@ import type {
 import { AdminAdPlacementsSection } from '@/components/admin/AdminAdPlacementsSection';
 import { AdminTournamentManagementSection } from '@/components/admin/AdminTournamentManagementSection';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
-import { buildMatchPointsLeaderboard, getTournamentTeams } from '@/lib/tournament-service';
+import {
+  buildMatchPointsLeaderboardFromHoleResults,
+  getTournamentTeams,
+} from '@/lib/tournament-service';
+import { getMatchHoleResultsForTournament } from '@/lib/tournament-match-service';
 import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 
 type AdminSection =
@@ -149,11 +153,26 @@ export default function AdminDashboardScreen() {
     enabled: Boolean(adminLeaderboardTournamentId),
   });
 
-  const adminTeamStats = buildMatchPointsLeaderboard(adminTeams, adminMatchGroups).map((row) => ({
-    teamId: row.teamId,
-    matchPoints: row.matchPoints,
-    matchesWon: row.matchesWon,
-  }));
+  const { data: adminHoleResults = [] } = useQuery({
+    queryKey: ['matchHoleResults', 'tournament', adminLeaderboardTournamentId],
+    queryFn: () => getMatchHoleResultsForTournament(adminLeaderboardTournamentId!),
+    enabled: Boolean(adminLeaderboardTournamentId),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const adminTeamStats = useMemo(
+    () =>
+      buildMatchPointsLeaderboardFromHoleResults(
+        adminTeams,
+        adminMatchGroups,
+        adminHoleResults
+      ).map((row) => ({
+        teamId: row.teamId,
+        matchPoints: row.matchPoints,
+        matchesWon: row.matchesWon,
+      })),
+    [adminTeams, adminMatchGroups, adminHoleResults]
+  );
 
   useEffect(() => {
     setAdminTournamentsFlowActive(section === 'tournaments');

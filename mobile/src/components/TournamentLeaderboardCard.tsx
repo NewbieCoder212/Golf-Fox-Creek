@@ -8,7 +8,6 @@ import * as Haptics from 'expo-haptics';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import { TournamentRoundMatchList } from '@/components/TournamentRoundMatchList';
 import {
-  buildMatchPointsLeaderboard,
   buildMatchPointsLeaderboardFromHoleResults,
   getTournamentById,
   getTournamentTeams,
@@ -65,8 +64,8 @@ export function TournamentLeaderboardCard({
   const { data: holeResults = [] } = useQuery({
     queryKey: ['matchHoleResults', 'tournament', tournamentId],
     queryFn: () => getMatchHoleResultsForTournament(tournamentId),
-    enabled: Boolean(tournamentId) && hubEmbedded,
-    refetchInterval: hubEmbedded ? 30_000 : false,
+    enabled: Boolean(tournamentId),
+    refetchInterval: hubEmbedded ? 30_000 : 15_000,
   });
 
   const playerNameById = useMemo(
@@ -74,12 +73,10 @@ export function TournamentLeaderboardCard({
     [tournamentPlayers, members]
   );
 
-  const standings = useMemo(() => {
-    if (hubEmbedded) {
-      return buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults);
-    }
-    return buildMatchPointsLeaderboard(teams, matchGroups);
-  }, [hubEmbedded, holeResults, teams, matchGroups]);
+  const standings = useMemo(
+    () => buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults),
+    [holeResults, teams, matchGroups]
+  );
   const teamStats = standings.map((row) => ({
     teamId: row.teamId,
     matchPoints: row.matchPoints,

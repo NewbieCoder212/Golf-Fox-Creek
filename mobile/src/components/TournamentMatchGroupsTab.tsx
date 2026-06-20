@@ -56,7 +56,7 @@ import { bridgeAdminAuthToMember } from '@/lib/admin-auth-bridge';
 import { setScorecardReturnDestination } from '@/lib/scorecard-navigation';
 import {
   buildMatchStatusFromHoleResults,
-  hasRecordedMatchResult,
+  getOfficialMatchCupPoints,
   type MatchPlayStatus,
 } from '@/lib/tournament-match-play-status';
 import { cn } from '@/lib/cn';
@@ -792,6 +792,10 @@ export function TournamentMatchGroupsTab({
           const pairingComplete = isPairingRowComplete(row, playersPerMatch);
           const teeSlotOnly = isPairingRowTeeSlotOnly(row);
           const matchComplete = matchPlay?.playStatus === 'complete';
+          const officialCupPoints =
+            savedGroup && matchPlay
+              ? getOfficialMatchCupPoints(savedGroup, matchPlay.playStatus)
+              : null;
 
           return (
             <View
@@ -938,11 +942,11 @@ export function TournamentMatchGroupsTab({
                 </View>
               </View>
 
-              {savedGroup && hasRecordedMatchResult(savedGroup) ? (
+              {officialCupPoints ? (
                 <View className="mt-3 bg-lime-900/20 border border-lime-700/30 rounded-lg px-3 py-2">
                   <Text className="text-white text-sm font-semibold">
-                    Match points: {sideAName} {savedGroup.match_points_a} –{' '}
-                    {savedGroup.match_points_b} {sideBName}
+                    Match points: {sideAName} {officialCupPoints.match_points_a} –{' '}
+                    {officialCupPoints.match_points_b} {sideBName}
                   </Text>
                 </View>
               ) : null}

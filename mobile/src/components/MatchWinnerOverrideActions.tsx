@@ -7,7 +7,7 @@ import {
   clearTournamentMatchScoresViaBackend,
   declareMatchWinnerOverride,
 } from '@/lib/tournament-score-sync-service';
-import { hasRecordedMatchResult } from '@/lib/tournament-match-play-status';
+import { hasRecordedMatchResult, isAdminDeclaredMatchResult } from '@/lib/tournament-match-play-status';
 import { confirmAction } from '@/lib/confirm-action';
 import type { TournamentMatchGroup, TournamentTeamSide } from '@/types';
 import { cn } from '@/lib/cn';
@@ -127,7 +127,7 @@ export function MatchWinnerOverrideActions({
         Award cup points without hole-by-hole entry. This does not open the scorecard.
       </Text>
 
-      {hasResult ? (
+      {isAdminDeclaredMatchResult(matchGroup) ? (
         <View className="bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 mb-2">
           <Text className="text-neutral-300 text-xs">
             Current: {sideAName} {matchGroup.match_points_a} – {matchGroup.match_points_b}{' '}

@@ -9,7 +9,7 @@ import { TournamentCopyTvLinkButton } from '@/components/TournamentCopyTvLinkBut
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import { TournamentRoundMatchList } from '@/components/TournamentRoundMatchList';
 import {
-  buildMatchPointsLeaderboard,
+  buildMatchPointsLeaderboardFromHoleResults,
   buildTournamentLeaderboard,
   getTournamentById,
   getTournamentScores,
@@ -17,6 +17,7 @@ import {
 } from '@/lib/tournament-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
+  getMatchHoleResultsForTournament,
   getTeamBySide,
 } from '@/lib/tournament-match-service';
 import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
@@ -81,9 +82,16 @@ export function TournamentLiveStandingsPanel({
     queryFn: getMembersForChallenge,
   });
 
+  const { data: holeResults = [] } = useQuery({
+    queryKey: ['matchHoleResults', 'tournament', tournamentId],
+    queryFn: () => getMatchHoleResultsForTournament(tournamentId),
+    enabled: Boolean(tournamentId),
+    refetchInterval: 15_000,
+  });
+
   const matchPointsLeaderboard = useMemo(
-    () => buildMatchPointsLeaderboard(teams, matchGroups),
-    [teams, matchGroups]
+    () => buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults),
+    [teams, matchGroups, holeResults]
   );
 
   const leaderboard = useMemo(

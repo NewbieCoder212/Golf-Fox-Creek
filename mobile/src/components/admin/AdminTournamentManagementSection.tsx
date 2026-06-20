@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -43,7 +43,7 @@ import {
   TournamentScheduleEditor,
 } from '@/components/TournamentScheduleEditor';
 import {
-  buildMatchPointsLeaderboard,
+  buildMatchPointsLeaderboardFromHoleResults,
   createTournament,
   deleteTournament,
   getTournamentById,
@@ -52,7 +52,7 @@ import {
   updateTournament,
   updateTournamentTeam,
 } from '@/lib/tournament-service';
-import { getTeamBySide } from '@/lib/tournament-match-service';
+import { getMatchHoleResultsForTournament, getTeamBySide } from '@/lib/tournament-match-service';
 import { useTournamentMatchGroupsQuery } from '@/hooks/useTournamentMatchGroupsQuery';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { getMembersForChallenge } from '@/lib/social-service';
@@ -220,6 +220,12 @@ export function AdminTournamentManagementSection({
 
   const { data: matchGroups = [] } = useTournamentMatchGroupsQuery(tournamentId);
 
+  const { data: holeResults = [] } = useQuery({
+    queryKey: ['matchHoleResults', 'tournament', tournamentId],
+    queryFn: () => getMatchHoleResultsForTournament(tournamentId!),
+    enabled: Boolean(tournamentId),
+  });
+
   const { data: tournamentPlayers = [] } = useQuery({
     queryKey: ['tournamentPlayers', tournamentId],
     queryFn: () => getTournamentPlayers(tournamentId!),
@@ -233,12 +239,19 @@ export function AdminTournamentManagementSection({
 
   const sideA = getTeamBySide(teams, 'side_a');
   const sideB = getTeamBySide(teams, 'side_b');
-  const standings = buildMatchPointsLeaderboard(teams, matchGroups);
-  const teamStats = standings.map((row) => ({
-    teamId: row.teamId,
-    matchPoints: row.matchPoints,
-    matchesWon: row.matchesWon,
-  }));
+  const standings = useMemo(
+    () => buildMatchPointsLeaderboardFromHoleResults(teams, matchGroups, holeResults),
+    [teams, matchGroups, holeResults]
+  );
+  const teamStats = useMemo(
+    () =>
+      standings.map((row) => ({
+        teamId: row.teamId,
+        matchPoints: row.matchPoints,
+        matchesWon: row.matchesWon,
+      })),
+    [standings]
+  );
 
   const { nameById: playerNameById } = buildTournamentPlayerMaps(tournamentPlayers, members);
 

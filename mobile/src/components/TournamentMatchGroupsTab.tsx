@@ -26,6 +26,7 @@ import { formatTeeAssignmentTime } from '@/lib/tournament-tee-service';
 import { getDayNumberForRound } from '@/lib/tournament-schedule';
 import { TournamentFormatRulesCard } from '@/components/TournamentFormatRulesCard';
 import { MatchWinnerOverrideActions } from '@/components/MatchWinnerOverrideActions';
+import { SinglesPairingOverrideActions } from '@/components/SinglesPairingOverrideActions';
 import {
   formatLabelFromSettings,
   formatScoringHintFromSettings,
@@ -977,13 +978,40 @@ export function TournamentMatchGroupsTab({
               ) : null}
 
               {isManager && row.groupId && pairingComplete && savedGroup ? (
-                <MatchWinnerOverrideActions
-                  tournamentId={tournamentId}
-                  matchGroup={savedGroup}
-                  roundNumber={roundNumber}
-                  sideAName={sideAName}
-                  sideBName={sideBName}
-                />
+                isSinglesFormat(groupFormat) ? (
+                  Array.from({ length: playersPerMatch }, (_, pairingIndex) => {
+                    const playerAId = row.sideAPlayerIds[pairingIndex];
+                    const playerBId = row.sideBPlayerIds[pairingIndex];
+                    if (!playerAId || !playerBId) return null;
+
+                    const playerAName =
+                      memberNameById[playerAId]?.split(' ')[0] ?? 'Player';
+                    const playerBName =
+                      memberNameById[playerBId]?.split(' ')[0] ?? 'Player';
+
+                    return (
+                      <SinglesPairingOverrideActions
+                        key={`${row.clientKey}-override-${pairingIndex}`}
+                        tournamentId={tournamentId}
+                        matchGroup={savedGroup}
+                        roundNumber={roundNumber}
+                        format={groupFormat}
+                        pairingIndex={pairingIndex}
+                        playerAName={playerAName}
+                        playerBName={playerBName}
+                        holeResults={holeResults}
+                      />
+                    );
+                  })
+                ) : (
+                  <MatchWinnerOverrideActions
+                    tournamentId={tournamentId}
+                    matchGroup={savedGroup}
+                    roundNumber={roundNumber}
+                    sideAName={sideAName}
+                    sideBName={sideBName}
+                  />
+                )
               ) : null}
 
               {row.groupId && pairingComplete && !matchComplete ? (

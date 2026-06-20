@@ -8,7 +8,17 @@ import type {
 import { bridgeAdminAuthToMember, ensureManagerAccessToken } from './admin-auth-bridge';
 import { getBackendUrl, isBackendReachableInBrowser } from './backend-url';
 import { ensureFreshMemberAccessToken, getMemberAccessToken } from './tournament-supabase';
-import { clearTournamentMatchRound, syncMatchHoleResults, syncMatchHoleResultsDirect } from './tournament-match-service';
+import {
+  clearTournamentMatchRound,
+  getMatchHoleResults,
+  syncMatchHoleResults,
+  syncMatchHoleResultsDirect,
+} from './tournament-match-service';
+import {
+  buildDeclaredSinglesPairingHoleResults,
+  mergeSinglesPairingHoleResults,
+  removeSinglesPairingHoleResults,
+} from './singles-pairing-declare';
 import { allOutcomesToHoleResults } from './match-hole-outcomes';
 import {
   computeMatchHoleResults,
@@ -301,6 +311,107 @@ export async function syncTournamentMatchScoresViaBackend(
   }
 
   return supabaseResult;
+}
+
+async function syncSinglesPairingHoleResults(params: {
+  tournamentId: string;
+  matchGroup: TournamentMatchGroup;
+  roundNumber: number;
+  format: TournamentFormat;
+  holeResults: Omit<TournamentMatchHoleResult, 'id'>[];
+}): Promise<{ success: boolean; error?: string }> {
+  const matchPoints = computeMatchPointsFromHoleResults({
+    matchGroup: params.matchGroup,
+    format: params.format,
+    holeResults: params.holeResults,
+  });
+
+  const payload = {
+    roundNumber: params.roundNumber,
+    scores: [] as TournamentScoreInsert[],
+    holeResults: params.holeResults,
+    matchPoints,
+  };
+
+  await bridgeAdminAuthToMember();
+  const accessToken = await ensureManagerAccessToken();
+  if (!accessToken) {
+    return { success: false, error: 'Not signed in' };
+  }
+
+  if (isBackendReachableInBrowser()) {
+    const backendResult = await postToBackend(
+      `/api/tournaments/${params.tournamentId}/match-groups/${params.matchGroup.id}/sync`,
+      accessToken,
+      payload as unknown as Record<string, unknown>
+    );
+
+    if (backendResult.ok) {
+      return { success: true };
+    }
+
+    console.log('[Tournament] Backend singles pairing sync failed, trying Supabase:', backendResult.error);
+  }
+
+  try {
+    await syncMatchHoleResultsDirect({
+      matchGroupId: params.matchGroup.id,
+      roundNumber: params.roundNumber,
+      holeResults: params.holeResults,
+      matchPoints,
+      matchResultDeclared: false,
+      accessToken,
+    });
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to save pairing result';
+    return { success: false, error: message };
+  }
+}
+
+export async function declareSinglesPairingWinnerOverride(params: {
+  tournamentId: string;
+  matchGroup: TournamentMatchGroup;
+  roundNumber: number;
+  pairingIndex: number;
+  winner: 'side_a' | 'side_b' | 'tie';
+  format: TournamentFormat;
+}): Promise<{ success: boolean; error?: string }> {
+  const existing = await getMatchHoleResults(params.matchGroup.id, params.roundNumber);
+  const declaredRows = buildDeclaredSinglesPairingHoleResults({
+    matchGroupId: params.matchGroup.id,
+    roundNumber: params.roundNumber,
+    pairingIndex: params.pairingIndex,
+    winner: params.winner,
+  });
+  const holeResults = mergeSinglesPairingHoleResults(existing, params.pairingIndex, declaredRows);
+
+  return syncSinglesPairingHoleResults({
+    tournamentId: params.tournamentId,
+    matchGroup: params.matchGroup,
+    roundNumber: params.roundNumber,
+    format: params.format,
+    holeResults,
+  });
+}
+
+export async function clearSinglesPairingResult(params: {
+  tournamentId: string;
+  matchGroup: TournamentMatchGroup;
+  roundNumber: number;
+  pairingIndex: number;
+  format: TournamentFormat;
+}): Promise<{ success: boolean; error?: string }> {
+  const existing = await getMatchHoleResults(params.matchGroup.id, params.roundNumber);
+  const holeResults = removeSinglesPairingHoleResults(existing, params.pairingIndex);
+
+  return syncSinglesPairingHoleResults({
+    tournamentId: params.tournamentId,
+    matchGroup: params.matchGroup,
+    roundNumber: params.roundNumber,
+    format: params.format,
+    holeResults,
+  });
 }
 
 export async function declareMatchWinnerOverride(params: {

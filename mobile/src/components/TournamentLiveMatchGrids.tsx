@@ -27,6 +27,8 @@ interface TournamentLiveMatchGridsProps {
   liveOnly?: boolean;
   /** Context for the live-only empty state (tee sheet schedule below) */
   liveEmptySummary?: TvLiveEmptySummary | null;
+  /** Hide round-complete empty state when the full tournament is over */
+  tournamentComplete?: boolean;
   /** Cap height when stacked above tee sheet on TV display */
   maxHeight?: number;
   /** Wall-mounted lounge — larger live cards, no hole grid */
@@ -56,12 +58,18 @@ function chunkMatches<T>(items: T[], size: number): T[][] {
 function TvLiveEmptyStrip({
   summary,
   loungeMode = false,
+  tournamentComplete = false,
 }: {
   summary: TvLiveEmptySummary | null | undefined;
   loungeMode?: boolean;
+  tournamentComplete?: boolean;
 }) {
   const titleClass = loungeMode ? 'text-xl' : 'text-sm';
   const subClass = loungeMode ? 'text-base' : 'text-xs';
+
+  if (tournamentComplete) {
+    return null;
+  }
 
   if (summary?.allFinal) {
     return (
@@ -133,6 +141,7 @@ function TvMatchCarousel({
   prioritizeLive = true,
   liveOnly = false,
   liveEmptySummary,
+  tournamentComplete = false,
   maxHeight,
   loungeMode = false,
 }: {
@@ -142,6 +151,7 @@ function TvMatchCarousel({
   prioritizeLive?: boolean;
   liveOnly?: boolean;
   liveEmptySummary?: TvLiveEmptySummary | null;
+  tournamentComplete?: boolean;
   maxHeight?: number;
   loungeMode?: boolean;
 }) {
@@ -266,6 +276,10 @@ function TvMatchCarousel({
   const showLiveBadge = liveOnly ? hasLive : activePhase === 'live';
 
   if (liveOnly && !hasLive) {
+    if (tournamentComplete) {
+      return null;
+    }
+
     return (
       <View className="shrink-0">
         <View className="flex-row items-center justify-between mb-2 px-0.5">
@@ -276,7 +290,11 @@ function TvMatchCarousel({
             <Text className="text-neutral-600 text-xs mt-1">{statusLine}</Text>
           </View>
         </View>
-        <TvLiveEmptyStrip summary={liveEmptySummary} loungeMode={loungeMode} />
+        <TvLiveEmptyStrip
+          summary={liveEmptySummary}
+          loungeMode={loungeMode}
+          tournamentComplete={tournamentComplete}
+        />
       </View>
     );
   }
@@ -367,6 +385,7 @@ export function TournamentLiveMatchGrids({
   layout = 'stack',
   liveOnly = false,
   liveEmptySummary,
+  tournamentComplete = false,
   maxHeight,
   loungeMode = false,
 }: TournamentLiveMatchGridsProps) {
@@ -443,6 +462,7 @@ export function TournamentLiveMatchGrids({
         prioritizeLive={!liveOnly}
         liveOnly={liveOnly}
         liveEmptySummary={liveEmptySummary}
+        tournamentComplete={tournamentComplete}
         maxHeight={maxHeight}
         loungeMode={loungeMode}
       />

@@ -577,6 +577,8 @@ export interface Tournament {
   display_token?: string;
   /** Short TV URL slug, e.g. generation-cup → foxcreek.golf/tv/generation-cup */
   display_slug?: string | null;
+  /** Cup tie-breaker: retains championship when overall match points are tied. */
+  defending_champion_side?: TournamentTeamSide | null;
   participant_invites_sent_at?: string | null;
   created_at: string;
 }

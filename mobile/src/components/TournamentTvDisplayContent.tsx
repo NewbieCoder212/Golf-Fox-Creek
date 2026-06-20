@@ -18,11 +18,12 @@ import {
 } from '@/components/TvSponsorSlot';
 import { TournamentLiveMatchGrids } from '@/components/TournamentLiveMatchGrids';
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
+import { TournamentTvChampionsBanner } from '@/components/TournamentTvChampionsBanner';
 import { TournamentTvTeeSheet } from '@/components/TournamentTvTeeSheet';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
 import { buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-service';
-import { getTvDisplayRoundNumber } from '@/lib/tournament-tv-display';
+import { getTvDisplayRoundNumber, getTournamentTvChampion, isTournamentTvComplete } from '@/lib/tournament-tv-display';
 import {
   buildTournamentTeeSheetRows,
   resolveTvTeeSheetRound,
@@ -147,6 +148,27 @@ export function TournamentTvDisplayContent({
     }));
   }, [teams, matchGroups, holeResults]);
 
+  const tournamentComplete = useMemo(() => {
+    if (!tournament) return false;
+    return isTournamentTvComplete({
+      tournament,
+      teams,
+      matchGroups,
+      holeResults,
+      playerNameById,
+    });
+  }, [tournament, teams, matchGroups, holeResults, playerNameById]);
+
+  const champion = useMemo(() => {
+    if (!tournament || !tournamentComplete) return null;
+    return getTournamentTvChampion({
+      tournament,
+      teams,
+      matchGroups,
+      holeResults,
+    });
+  }, [tournament, tournamentComplete, teams, matchGroups, holeResults]);
+
   const handleRealtimeUpdate = useCallback(() => {
     onRefetch();
   }, [onRefetch]);
@@ -206,7 +228,7 @@ export function TournamentTvDisplayContent({
       <TournamentTeamMatchupBoard
         teams={teams}
         teamStats={teamStats}
-        subtitle="Live Standings · Match pts"
+        subtitle={tournamentComplete ? 'Final Standings · Match pts' : 'Live Standings · Match pts'}
         tvDisplay={isWideLayout}
         tvStrip={!isWideLayout}
       />
@@ -215,6 +237,11 @@ export function TournamentTvDisplayContent({
         <Trophy size={28} color="#525252" />
         <Text className="text-neutral-500 text-sm mt-3">No scores yet</Text>
       </View>
+    ) : null;
+
+  const championsBanner =
+    champion != null ? (
+      <TournamentTvChampionsBanner champion={champion} compact={!isWideLayout} />
     ) : null;
 
   return (
@@ -238,7 +265,7 @@ export function TournamentTvDisplayContent({
                 {data.tournament.name}
               </Text>
               <Text className="text-lime-400 font-semibold mt-0.5 text-sm" numberOfLines={1}>
-                {roundLabel}
+                {tournamentComplete ? 'Tournament Complete' : roundLabel}
               </Text>
               <Text className="text-neutral-500 text-xs" numberOfLines={1}>
                 {formatTournamentDates(data.tournament.start_date, data.tournament.end_date)}
@@ -247,15 +274,24 @@ export function TournamentTvDisplayContent({
           </View>
 
           <View className="items-end shrink-0">
-            <View className="flex-row items-center bg-lime-950/40 border border-lime-700/30 rounded-full px-2.5 py-1">
-              <Radio size={12} color="#a3e635" />
-              <Text className="text-lime-400 font-semibold ml-1 uppercase tracking-wider text-[10px]">
-                Live
-              </Text>
-              {isFetching ? (
-                <ActivityIndicator size="small" color="#a3e635" style={{ marginLeft: 6 }} />
-              ) : null}
-            </View>
+            {tournamentComplete ? (
+              <View className="flex-row items-center bg-amber-950/40 border border-amber-700/30 rounded-full px-2.5 py-1">
+                <Trophy size={12} color="#facc15" />
+                <Text className="text-amber-300 font-semibold ml-1 uppercase tracking-wider text-[10px]">
+                  Final
+                </Text>
+              </View>
+            ) : (
+              <View className="flex-row items-center bg-lime-950/40 border border-lime-700/30 rounded-full px-2.5 py-1">
+                <Radio size={12} color="#a3e635" />
+                <Text className="text-lime-400 font-semibold ml-1 uppercase tracking-wider text-[10px]">
+                  Live
+                </Text>
+                {isFetching ? (
+                  <ActivityIndicator size="small" color="#a3e635" style={{ marginLeft: 6 }} />
+                ) : null}
+              </View>
+            )}
             <Text className="text-neutral-600 mt-1 text-[10px]">
               Updated {lastUpdated}
             </Text>
@@ -267,6 +303,7 @@ export function TournamentTvDisplayContent({
         {isWideLayout ? (
           <View className="flex-1 min-h-0 flex-row gap-4 overflow-hidden">
             <View className="w-[320px] shrink-0 gap-3">
+              {championsBanner}
               {standingsBoard}
               {sidebarSponsors.length > 0 ? (
                 <TvSidebarSponsorStack sponsors={sidebarSponsors} />
@@ -288,6 +325,7 @@ export function TournamentTvDisplayContent({
                   layout="tv-carousel"
                   liveOnly
                   liveEmptySummary={liveEmptySummary}
+                  tournamentComplete={tournamentComplete}
                   maxHeight={tvLiveMaxHeight}
                 />
               </View>
@@ -296,6 +334,7 @@ export function TournamentTvDisplayContent({
           </View>
         ) : (
           <View className="flex-1 min-h-0 gap-2">
+            {championsBanner}
             {standingsBoard}
 
             <View className="shrink-0 overflow-hidden" style={tvLiveMaxHeight ? { maxHeight: tvLiveMaxHeight } : undefined}>
@@ -312,6 +351,7 @@ export function TournamentTvDisplayContent({
                 layout="tv-carousel"
                 liveOnly
                 liveEmptySummary={liveEmptySummary}
+                tournamentComplete={tournamentComplete}
                 maxHeight={tvLiveMaxHeight}
               />
             </View>

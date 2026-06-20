@@ -14,6 +14,7 @@ type DisplayTournamentRow = {
   round_schedule: Array<{ formats: string[] }>;
   rounds_count: number;
   match_use_net_scoring: boolean;
+  defending_champion_side: 'side_a' | 'side_b' | null;
 };
 
 async function fetchRows<T>(path: string): Promise<T[]> {
@@ -23,7 +24,7 @@ async function fetchRows<T>(path: string): Promise<T[]> {
 }
 
 const TOURNAMENT_SELECT =
-  'id,name,start_date,end_date,display_token,display_slug,round_schedule,rounds_count,match_use_net_scoring';
+  'id,name,start_date,end_date,display_token,display_slug,round_schedule,rounds_count,match_use_net_scoring,defending_champion_side';
 
 async function buildDisplayPayloadForTournament(tournament: DisplayTournamentRow) {
   const tournamentId = tournament.id;

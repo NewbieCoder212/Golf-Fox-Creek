@@ -42,6 +42,7 @@ export interface DisplayTournamentMeta {
   round_schedule: Array<{ formats: string[] }>;
   rounds_count: number;
   match_use_net_scoring: boolean;
+  defending_champion_side: 'side_a' | 'side_b' | null;
 }
 
 export interface DisplayTeamRow {
@@ -132,6 +133,7 @@ type TournamentRow = {
   round_schedule: Array<{ formats: string[] }>;
   rounds_count: number;
   match_use_net_scoring: boolean;
+  defending_champion_side?: 'side_a' | 'side_b' | null;
 };
 
 type TeamRow = {
@@ -398,6 +400,7 @@ export function buildTournamentDisplayPayload(params: {
       round_schedule: tournament.round_schedule,
       rounds_count: tournament.rounds_count,
       match_use_net_scoring: tournament.match_use_net_scoring,
+      defending_champion_side: tournament.defending_champion_side ?? null,
     },
     teams: teams.map((team) => ({
       id: team.id,

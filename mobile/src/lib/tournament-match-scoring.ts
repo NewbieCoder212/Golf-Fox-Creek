@@ -14,7 +14,7 @@ import type {
 import { FOX_CREEK_DATA } from './course-data';
 import { resolveHoleWinner } from './tournament-match-service';
 import { isSinglesFormat } from './tournament-labels';
-import { isMatchActuallyComplete } from './tournament-match-play-status';
+import { isHoleResultContestComplete } from './tournament-match-play-status';
 import { computeLiveMatchStatus } from './tournament-match-status';
 import {
   buildTournamentHoleScores,
@@ -531,9 +531,8 @@ function persistedCupPointsForHoleResults(
   }
 
   const matchStatus = computeLiveMatchStatus({ holeResults: rows });
-  const emptyGroup = { match_winner: null, match_points_a: 0, match_points_b: 0 };
 
-  if (!isMatchActuallyComplete(emptyGroup, matchStatus, rows.length)) {
+  if (!isHoleResultContestComplete(matchStatus)) {
     return { ...EMPTY_PERSISTED_CUP_POINTS };
   }
 

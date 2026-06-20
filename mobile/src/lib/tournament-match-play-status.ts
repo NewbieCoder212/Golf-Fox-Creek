@@ -73,6 +73,12 @@ export function getOfficialMatchCupPoints(
   };
 }
 
+/** Hole-result contest is complete for cup-point persistence (incl. halved through 18). */
+export function isHoleResultContestComplete(matchStatus: MatchStatus): boolean {
+  if (matchStatus.clinched) return true;
+  return matchStatus.throughHole >= 18;
+}
+
 export function isMatchActuallyComplete(
   group: Pick<
     TournamentMatchGroup,
@@ -85,10 +91,7 @@ export function isMatchActuallyComplete(
 
   if (matchStatus.clinched) return true;
 
-  if (matchStatus.throughHole >= 18) {
-    if (matchStatus.lead !== 0) return true;
-    if (group.match_winner === 'tie') return true;
-  }
+  if (matchStatus.throughHole >= 18) return true;
 
   // Persisted winner with partial scoring — only final once clinched or through 18
   if (group.match_winner != null && holeResultCount > 0) {

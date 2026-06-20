@@ -141,7 +141,7 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="tournament" options={{ headerShown: false }} />
         <Stack.Screen name="wagering/[sessionId]" options={{ headerShown: false }} />
         <Stack.Screen name="display" options={{ headerShown: false }} />
-        <Stack.Screen name="tv/[slug]" options={{ headerShown: false }} />
+        <Stack.Screen name="tv" options={{ headerShown: false }} />
         </Stack>
         <AddToHomeScreenPrompt visible={isAuthenticated && !inPublicRoute} />
       </View>

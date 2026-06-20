@@ -20,10 +20,11 @@ import { TournamentLiveMatchGrids } from '@/components/TournamentLiveMatchGrids'
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
 import { TournamentTvChampionsBanner } from '@/components/TournamentTvChampionsBanner';
 import { TournamentTvTeeSheet } from '@/components/TournamentTvTeeSheet';
+import { cn } from '@/lib/cn';
 import { buildTournamentPlayerMaps } from '@/lib/tournament-player-service';
 import { getTeamBySide } from '@/lib/tournament-match-service';
 import { buildMatchPointsLeaderboardFromHoleResults } from '@/lib/tournament-service';
-import { getTvDisplayRoundNumber, getTournamentTvChampion, isTournamentTvComplete } from '@/lib/tournament-tv-display';
+import { getTvDisplayRoundNumber, getTournamentEventTitle, getTournamentTvChampion, isTournamentTvComplete } from '@/lib/tournament-tv-display';
 import {
   buildTournamentTeeSheetRows,
   resolveTvTeeSheetRound,
@@ -249,28 +250,17 @@ export function TournamentTvDisplayContent({
       className="flex-1 bg-[#0c0c0c] overflow-hidden"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <View className="border-b border-neutral-800 bg-[#111111] px-5 py-2">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center flex-1 mr-3 min-w-0">
+      <View
+        className={cn(
+          'border-b border-neutral-800 bg-[#111111] px-5',
+          isWideLayout ? 'py-4' : 'py-3'
+        )}
+      >
+        <View className="flex-row items-start justify-between mb-2">
+          <View className="w-28 shrink-0">
             {data.sponsors.header_left[0] && isLandscape ? (
-              <View className="w-28 mr-3">
-                <TvSponsorSlot sponsor={data.sponsors.header_left[0]} variant="header" />
-              </View>
+              <TvSponsorSlot sponsor={data.sponsors.header_left[0]} variant="header" />
             ) : null}
-            <View className="flex-1 min-w-0">
-              <Text className="text-lime-400 font-semibold uppercase tracking-[0.2em] text-[10px]">
-                Fox Creek Golf Club
-              </Text>
-              <Text className="text-white font-bold text-xl" numberOfLines={1}>
-                {data.tournament.name}
-              </Text>
-              <Text className="text-lime-400 font-semibold mt-0.5 text-sm" numberOfLines={1}>
-                {tournamentComplete ? 'Tournament Complete' : roundLabel}
-              </Text>
-              <Text className="text-neutral-500 text-xs" numberOfLines={1}>
-                {formatTournamentDates(data.tournament.start_date, data.tournament.end_date)}
-              </Text>
-            </View>
           </View>
 
           <View className="items-end shrink-0">
@@ -296,6 +286,27 @@ export function TournamentTvDisplayContent({
               Updated {lastUpdated}
             </Text>
           </View>
+        </View>
+
+        <View className={cn('items-center', isWideLayout ? 'px-16' : 'px-8')}>
+          <Text className="text-lime-400 font-semibold uppercase tracking-[0.2em] text-[10px] text-center">
+            Fox Creek Golf Club
+          </Text>
+          <Text
+            className={cn(
+              'text-white font-bold text-center mt-1 tracking-tight',
+              isWideLayout ? 'text-4xl' : 'text-2xl'
+            )}
+            numberOfLines={2}
+          >
+            {getTournamentEventTitle(data.tournament)}
+          </Text>
+          <Text className="text-lime-400 font-semibold mt-1 text-sm text-center" numberOfLines={1}>
+            {tournamentComplete ? 'Tournament Complete' : roundLabel}
+          </Text>
+          <Text className="text-neutral-500 text-xs mt-0.5 text-center" numberOfLines={1}>
+            {formatTournamentDates(data.tournament.start_date, data.tournament.end_date)}
+          </Text>
         </View>
       </View>
 

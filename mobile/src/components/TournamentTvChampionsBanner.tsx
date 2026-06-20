@@ -13,6 +13,9 @@ import type { TournamentTeam, TournamentTeamSide } from '@/types';
 interface TournamentTvChampionsBannerProps {
   champion: TournamentTvChampionResult;
   compact?: boolean;
+  /** Full-width centerpiece when the tournament is complete */
+  hero?: boolean;
+  heroWide?: boolean;
   className?: string;
 }
 
@@ -69,6 +72,8 @@ function ChampionLogo({
 export function TournamentTvChampionsBanner({
   champion,
   compact = false,
+  hero = false,
+  heroWide = false,
   className,
 }: TournamentTvChampionsBannerProps) {
   const side = champion.team.side ?? 'side_a';
@@ -76,7 +81,75 @@ export function TournamentTvChampionsBanner({
   const teamName =
     champion.team.team_name?.trim() || getTeamSideDisplayName(side, [champion.team]);
   const scoreLine = formatTournamentTvChampionScoreLine(champion);
-  const logoSize = compact ? 56 : 72;
+  const logoSize = hero ? (heroWide ? 144 : 112) : compact ? 56 : 72;
+  const trophySize = hero ? (heroWide ? 48 : 40) : compact ? 22 : 26;
+
+  if (hero) {
+    return (
+      <View
+        className={cn(
+          'flex-1 rounded-2xl overflow-hidden border bg-[#101010] items-center justify-center px-8 py-10',
+          className
+        )}
+        style={{ borderColor: theme.panelBorder }}
+      >
+        <View
+          className="absolute inset-0 opacity-35"
+          style={{ backgroundColor: theme.panelBg }}
+        />
+
+        <View
+          className={cn(
+            'rounded-full items-center justify-center mb-6',
+            heroWide ? 'w-24 h-24' : 'w-20 h-20'
+          )}
+          style={{
+            backgroundColor: 'rgba(250, 204, 21, 0.14)',
+            borderWidth: 1.5,
+            borderColor: 'rgba(250, 204, 21, 0.4)',
+          }}
+        >
+          <Trophy size={trophySize} color="#facc15" />
+        </View>
+
+        <Text
+          className={cn(
+            'text-amber-300 uppercase tracking-[0.22em] font-semibold text-center',
+            heroWide ? 'text-sm' : 'text-xs'
+          )}
+        >
+          Champions
+        </Text>
+        <Text
+          className={cn(
+            'text-white font-bold text-center mt-4 leading-tight',
+            heroWide ? 'text-5xl' : 'text-3xl'
+          )}
+          numberOfLines={3}
+        >
+          Congratulations to Team {teamName}
+        </Text>
+        <Text
+          className={cn(
+            'text-lime-400 font-semibold mt-4 text-center',
+            heroWide ? 'text-3xl' : 'text-xl'
+          )}
+          numberOfLines={2}
+        >
+          {champion.eventTitle} Champions
+        </Text>
+        <Text
+          className={cn('text-neutral-400 mt-4 text-center', heroWide ? 'text-xl' : 'text-base')}
+        >
+          {scoreLine}
+        </Text>
+
+        <View className="mt-8">
+          <ChampionLogo team={champion.team} side={side} size={logoSize} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -104,7 +177,7 @@ export function TournamentTvChampionsBanner({
             borderColor: 'rgba(250, 204, 21, 0.35)',
           }}
         >
-          <Trophy size={compact ? 22 : 26} color="#facc15" />
+          <Trophy size={trophySize} color="#facc15" />
         </View>
 
         <View className="flex-1 min-w-0">

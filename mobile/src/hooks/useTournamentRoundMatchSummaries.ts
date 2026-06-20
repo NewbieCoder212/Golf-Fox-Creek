@@ -4,7 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import {
   buildMatchStatusFromHoleResults,
   formatMatchResultSummary,
+  resolveEffectiveGroupHoleResults,
+  resolveMatchGroupDisplayStatus,
   resolveMatchWinnerSide,
+  type MatchGroupDisplayTone,
   type MatchPlayStatus,
 } from '@/lib/tournament-match-play-status';
 import { getMatchHoleResultsForGroups } from '@/lib/tournament-match-service';
@@ -15,7 +18,13 @@ import {
 } from '@/lib/tournament-labels';
 import { buildPairingMatchStatus } from '@/lib/tournament-pairing-status';
 import type { MatchStatus } from '@/lib/tournament-match-status';
-import type { Tournament, TournamentMatchGroup, TournamentMatchHoleResult, TournamentTeam } from '@/types';
+import type {
+  Tournament,
+  TournamentMatchGroup,
+  TournamentMatchHoleResult,
+  TournamentScore,
+  TournamentTeam,
+} from '@/types';
 
 export type RoundMatchSinglesPairing = {
   pairingIndex: number;
@@ -38,6 +47,7 @@ export type RoundMatchSummary = {
   lineup: RoundMatchLineup;
   playStatus: MatchPlayStatus;
   statusLabel: string;
+  displayTone: MatchGroupDisplayTone;
   resultSummary: string | null;
   matchStatus: MatchStatus;
   winnerSide: ReturnType<typeof resolveMatchWinnerSide>;
@@ -102,7 +112,9 @@ export function useTournamentRoundMatchSummaries(
   teams: TournamentTeam[],
   matchGroups: TournamentMatchGroup[],
   roundNumber: number,
-  playerNameById: Record<string, string> = {}
+  playerNameById: Record<string, string> = {},
+  scores: TournamentScore[] = [],
+  useNetScoring = false
 ) {
   const roundGroups = useMemo(
     () =>
@@ -124,14 +136,28 @@ export function useTournamentRoundMatchSummaries(
   const summaries = useMemo((): RoundMatchSummary[] => {
     const sideAName = getTeamSideDisplayName('side_a', teams);
     const sideBName = getTeamSideDisplayName('side_b', teams);
+    const now = new Date();
 
     return roundGroups.map((group) => {
-      const groupHoleResults = holeResults.filter((row) => row.match_group_id === group.id);
+      const effectiveHoleResults = resolveEffectiveGroupHoleResults(
+        group,
+        holeResults,
+        scores,
+        useNetScoring
+      );
       const { matchStatus, playStatus } = buildMatchStatusFromHoleResults(
         group,
         holeResults,
         sideAName,
-        sideBName
+        sideBName,
+        { scores, useNetScoring }
+      );
+      const display = resolveMatchGroupDisplayStatus(
+        group,
+        playStatus,
+        matchStatus,
+        effectiveHoleResults.length,
+        now
       );
 
       return {
@@ -143,24 +169,20 @@ export function useTournamentRoundMatchSummaries(
               group,
               tournament,
               playerNameById,
-              groupHoleResults,
+              effectiveHoleResults,
               sideAName,
               sideBName
             )
           : { kind: 'team', sideAPlayers: [], sideBPlayers: [] },
         playStatus,
-        statusLabel:
-          playStatus === 'complete'
-            ? 'Match complete'
-            : playStatus === 'in_progress'
-              ? 'In progress'
-              : 'Scheduled',
+        statusLabel: display.label,
+        displayTone: display.tone,
         resultSummary: formatMatchResultSummary(group, matchStatus, sideAName, sideBName),
         matchStatus,
         winnerSide: resolveMatchWinnerSide(group, matchStatus),
       };
     });
-  }, [roundGroups, holeResults, teams, tournament, playerNameById]);
+  }, [roundGroups, holeResults, teams, tournament, playerNameById, scores, useNetScoring]);
 
   return { summaries, isLoading: isPending && groupIds.length > 0 };
 }

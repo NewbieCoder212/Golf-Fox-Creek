@@ -151,6 +151,7 @@ export function TournamentMatchGridCard({
   const showLive = highlight || model.inProgress;
   const isComplete = model.playStatus === 'complete';
   const isScheduled = model.playStatus === 'not_started';
+  const isOnCourse = model.statusLabel === 'On course';
 
   return (
     <View
@@ -276,8 +277,18 @@ export function TournamentMatchGridCard({
               </Text>
             </View>
           ) : isScheduled ? (
-            <View className="rounded-full px-2 py-0.5 border bg-neutral-900 border-neutral-700">
-              <Text className="text-neutral-500 text-[9px] font-bold uppercase tracking-wider">
+            <View
+              className={cn(
+                'rounded-full px-2 py-0.5 border',
+                isOnCourse ? 'bg-amber-950/40 border-amber-700/50' : 'bg-neutral-900 border-neutral-700'
+              )}
+            >
+              <Text
+                className={cn(
+                  'text-[9px] font-bold uppercase tracking-wider',
+                  isOnCourse ? 'text-amber-300' : 'text-neutral-500'
+                )}
+              >
                 {model.statusLabel}
               </Text>
             </View>

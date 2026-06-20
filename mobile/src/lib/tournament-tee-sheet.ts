@@ -6,6 +6,7 @@ import {
   buildMatchStatusFromHoleResults,
   formatMatchResultSummary,
   isMatchActuallyComplete,
+  isMatchGroupOnCourse,
   type MatchPlayStatus,
 } from './tournament-match-play-status';
 import { getMatchGroupFormat, getTeamSideDisplayName, isSinglesFormat } from './tournament-labels';
@@ -14,6 +15,7 @@ import type {
   Tournament,
   TournamentMatchGroup,
   TournamentMatchHoleResult,
+  TournamentScore,
   TournamentTeam,
 } from '@/types';
 import type { MatchStatus } from './tournament-match-status';
@@ -31,6 +33,7 @@ export interface TournamentTeeSheetRow {
   displayStatus: TeeSheetDisplayStatus;
   statusLabel: string;
   resultSummary: string | null;
+  matchStatus: MatchStatus;
 }
 
 export interface TvLiveEmptySummary {
@@ -45,8 +48,6 @@ export interface TvLiveEmptySummary {
   allFinal: boolean;
 }
 
-const ON_TEE_GRACE_MS = 2 * 60 * 1000;
-
 export function resolveTeeSheetDisplayStatus(
   group: TournamentMatchGroup,
   playStatus: MatchPlayStatus,
@@ -56,11 +57,7 @@ export function resolveTeeSheetDisplayStatus(
 ): TeeSheetDisplayStatus {
   if (isMatchActuallyComplete(group, matchStatus, holeResultCount)) return 'complete';
   if (playStatus === 'in_progress' || holeResultCount > 0) return 'live';
-
-  const teeMs = new Date(group.tee_time).getTime();
-  const nowMs = now.getTime();
-
-  if (nowMs + ON_TEE_GRACE_MS < teeMs) return 'upcoming';
+  if (!isMatchGroupOnCourse(group, now)) return 'upcoming';
   return 'on_course';
 }
 
@@ -106,6 +103,8 @@ export function resolveTvTeeSheetRound(params: {
   matchGroups: TournamentMatchGroup[];
   holeResults: TournamentMatchHoleResult[];
   playerNameById: Record<string, string>;
+  scores?: TournamentScore[];
+  useNetScoring?: boolean;
   now?: Date;
 }): { teeSheetRound: number; isPreviewingNextRound: boolean } {
   const {
@@ -115,6 +114,8 @@ export function resolveTvTeeSheetRound(params: {
     matchGroups,
     holeResults,
     playerNameById,
+    scores,
+    useNetScoring,
     now,
   } = params;
 
@@ -125,6 +126,8 @@ export function resolveTvTeeSheetRound(params: {
     holeResults,
     playerNameById,
     roundNumber: activeRound,
+    scores,
+    useNetScoring,
     now,
   });
 
@@ -148,6 +151,8 @@ export function resolveTvTeeSheetRound(params: {
     holeResults,
     playerNameById,
     roundNumber: nextRound,
+    scores,
+    useNetScoring,
     now,
   });
 
@@ -191,9 +196,20 @@ export function buildTournamentTeeSheetRows(params: {
   holeResults: TournamentMatchHoleResult[];
   playerNameById: Record<string, string>;
   roundNumber: number;
+  scores?: TournamentScore[];
+  useNetScoring?: boolean;
   now?: Date;
 }): TournamentTeeSheetRow[] {
-  const { tournament, teams, matchGroups, holeResults, playerNameById, roundNumber } = params;
+  const {
+    tournament,
+    teams,
+    matchGroups,
+    holeResults,
+    playerNameById,
+    roundNumber,
+    scores,
+    useNetScoring = false,
+  } = params;
   const now = params.now ?? new Date();
   const sideAName = getTeamSideDisplayName('side_a', teams);
   const sideBName = getTeamSideDisplayName('side_b', teams);
@@ -206,18 +222,19 @@ export function buildTournamentTeeSheetRows(params: {
         a.group_number - b.group_number
     )
     .map((group) => {
-      const groupHoles = holeResults.filter((row) => row.match_group_id === group.id);
       const { matchStatus, playStatus } = buildMatchStatusFromHoleResults(
         group,
         holeResults,
         sideAName,
-        sideBName
+        sideBName,
+        { scores, useNetScoring }
       );
+      const effectiveHoleCount = matchStatus.throughHole;
       const displayStatus = resolveTeeSheetDisplayStatus(
         group,
         playStatus,
         matchStatus,
-        groupHoles.length,
+        effectiveHoleCount,
         now
       );
 
@@ -232,6 +249,7 @@ export function buildTournamentTeeSheetRows(params: {
         displayStatus,
         statusLabel: teeSheetStatusLabel(displayStatus),
         resultSummary: formatMatchResultSummary(group, matchStatus, sideAName, sideBName),
+        matchStatus,
       };
     });
 }

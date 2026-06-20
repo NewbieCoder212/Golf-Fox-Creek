@@ -10,6 +10,7 @@ import { TournamentRoundMatchList } from '@/components/TournamentRoundMatchList'
 import {
   buildMatchPointsLeaderboardFromHoleResults,
   getTournamentById,
+  getTournamentScores,
   getTournamentTeams,
 } from '@/lib/tournament-service';
 import { buildRoundSessionPointsLeaderboard } from '@/lib/tournament-session-scoring';
@@ -70,6 +71,13 @@ export function TournamentLeaderboardCard({
     refetchInterval: hubEmbedded ? 30_000 : 15_000,
   });
 
+  const { data: scores = [] } = useQuery({
+    queryKey: ['tournamentScores', tournamentId],
+    queryFn: () => getTournamentScores(tournamentId),
+    enabled: Boolean(tournamentId) && hubEmbedded,
+    refetchInterval: hubEmbedded ? 30_000 : 15_000,
+  });
+
   const playerNameById = useMemo(
     () => buildTournamentPlayerMaps(tournamentPlayers, members).nameById,
     [tournamentPlayers, members]
@@ -86,6 +94,8 @@ export function TournamentLeaderboardCard({
     [matchGroups, activeRound]
   );
 
+  const matchUseNetScoring = tournament?.match_use_net_scoring ?? false;
+
   const sessionStandings = useMemo(() => {
     if (!tournament) return [];
     const sideAName = getTeamSideDisplayName('side_a', teams);
@@ -96,9 +106,11 @@ export function TournamentLeaderboardCard({
       holeResults,
       tournament,
       sideAName,
-      sideBName
+      sideBName,
+      scores,
+      matchUseNetScoring
     );
-  }, [teams, roundMatchGroups, holeResults, tournament]);
+  }, [teams, roundMatchGroups, holeResults, tournament, scores, matchUseNetScoring]);
 
   const overallTeamStats = standings.map((row) => ({
     teamId: row.teamId,
@@ -212,6 +224,8 @@ export function TournamentLeaderboardCard({
             teams={teams}
             matchGroups={matchGroups}
             playerNameById={playerNameById}
+            scores={scores}
+            useNetScoring={matchUseNetScoring}
             compact
             className="mt-3 pt-3 border-t border-neutral-800/60"
           />

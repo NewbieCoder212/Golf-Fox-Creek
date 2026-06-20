@@ -20,7 +20,7 @@ import type { MatchStatus } from '@/lib/tournament-match-status';
 import type { MatchPlayStatus } from '@/lib/tournament-match-play-status';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { getMembersForChallenge } from '@/lib/social-service';
-import type { Tournament, TournamentMatchGroup, TournamentTeam } from '@/types';
+import type { Tournament, TournamentMatchGroup, TournamentScore, TournamentTeam } from '@/types';
 import { cn } from '@/lib/cn';
 
 interface TournamentRoundMatchListProps {
@@ -28,6 +28,8 @@ interface TournamentRoundMatchListProps {
   teams: TournamentTeam[];
   matchGroups: TournamentMatchGroup[];
   playerNameById?: Record<string, string>;
+  scores?: TournamentScore[];
+  useNetScoring?: boolean;
   roundNumber?: number;
   compact?: boolean;
   className?: string;
@@ -423,6 +425,8 @@ export function TournamentRoundMatchList({
   teams,
   matchGroups,
   playerNameById: playerNameByIdProp,
+  scores = [],
+  useNetScoring = false,
   roundNumber,
   compact = false,
   className,
@@ -451,7 +455,9 @@ export function TournamentRoundMatchList({
     teams,
     matchGroups,
     activeRound,
-    resolvedPlayerNameById
+    resolvedPlayerNameById,
+    scores,
+    useNetScoring
   );
 
   if (summaries.length === 0) {
@@ -472,15 +478,7 @@ export function TournamentRoundMatchList({
         {roundLabel} · Matches
       </Text>
       <View className="gap-2">
-        {summaries.map((match) => {
-          const tone =
-            match.playStatus === 'complete'
-              ? 'complete'
-              : match.playStatus === 'in_progress'
-                ? 'progress'
-                : 'scheduled';
-
-          return (
+        {summaries.map((match) => (
             <View
               key={match.group.id}
               className="rounded-xl overflow-hidden border border-neutral-800 bg-[#0a0a0a]"
@@ -500,7 +498,7 @@ export function TournamentRoundMatchList({
                   <Text className="text-neutral-500 text-[10px] font-semibold uppercase tracking-wide flex-1">
                     {formatTeeAssignmentTime(match.group.tee_time)} · Group {match.group.group_number}
                   </Text>
-                  <StatusBadge label={match.statusLabel} tone={tone} />
+                  <StatusBadge label={match.statusLabel} tone={match.displayTone} />
                 </View>
                 {match.lineup.kind !== 'singles' && match.resultSummary ? (
                   <View className="mt-1.5">
@@ -516,8 +514,7 @@ export function TournamentRoundMatchList({
                 ) : null}
               </View>
             </View>
-          );
-        })}
+        ))}
       </View>
     </View>
   );

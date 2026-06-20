@@ -57,6 +57,7 @@ import { setScorecardReturnDestination } from '@/lib/scorecard-navigation';
 import {
   buildMatchStatusFromHoleResults,
   getOfficialMatchCupPoints,
+  resolveMatchGroupDisplayStatus,
   type MatchPlayStatus,
 } from '@/lib/tournament-match-play-status';
 import { cn } from '@/lib/cn';
@@ -259,18 +260,27 @@ export function TournamentMatchGroupsTab({
   const matchPlayByGroupId = useMemo(() => {
     const map: Record<
       string,
-      { playStatus: MatchPlayStatus; resultSummary: string | null }
+      { playStatus: MatchPlayStatus; resultSummary: string | null; statusLabel: string }
     > = {};
+    const now = new Date();
 
     for (const groupId of savedGroupIds) {
       const group = savedGroupById[groupId];
       if (!group) continue;
 
+      const groupHoles = holeResults.filter((row) => row.match_group_id === group.id);
       const { matchStatus, playStatus } = buildMatchStatusFromHoleResults(
         group,
         holeResults,
         sideAName,
         sideBName
+      );
+      const display = resolveMatchGroupDisplayStatus(
+        group,
+        playStatus,
+        matchStatus,
+        groupHoles.length,
+        now
       );
 
       let resultSummary: string | null = null;
@@ -282,7 +292,7 @@ export function TournamentMatchGroupsTab({
         resultSummary = matchStatus.label;
       }
 
-      map[groupId] = { playStatus, resultSummary };
+      map[groupId] = { playStatus, resultSummary, statusLabel: display.label };
     }
 
     return map;
@@ -849,6 +859,10 @@ export function TournamentMatchGroupsTab({
                   ) : matchPlay?.playStatus === 'in_progress' ? (
                     <Text className="text-amber-400 text-[10px] font-semibold uppercase tracking-widest">
                       In progress
+                    </Text>
+                  ) : matchPlay?.statusLabel === 'On course' ? (
+                    <Text className="text-amber-400 text-[10px] font-semibold uppercase tracking-widest">
+                      On course
                     </Text>
                   ) : pairingComplete ? (
                     <Text className="text-lime-500 text-[10px] font-semibold uppercase tracking-widest">

@@ -3,9 +3,23 @@ import {
   outcomesMapToHoleResultRows,
 } from '@/lib/match-hole-outcomes';
 import { computeLiveMatchStatus, type MatchStatus } from '@/lib/tournament-match-status';
-import type { TournamentMatchGroup, TournamentMatchHoleResult } from '@/types';
+import { computeMatchHoleResults } from '@/lib/tournament-match-scoring';
+import type {
+  TournamentMatchGroup,
+  TournamentMatchHoleResult,
+  TournamentScore,
+} from '@/types';
 
 export type MatchPlayStatus = 'not_started' | 'in_progress' | 'complete';
+
+export type MatchGroupDisplayTone = 'scheduled' | 'progress' | 'complete';
+
+export type MatchGroupDisplayStatus = {
+  label: string;
+  tone: MatchGroupDisplayTone;
+};
+
+export const ON_TEE_GRACE_MS = 2 * 60 * 1000;
 
 export function hasRecordedMatchResult(
   group: Pick<TournamentMatchGroup, 'match_winner' | 'match_points_a' | 'match_points_b'>
@@ -116,13 +130,56 @@ export function resolveMatchGroupPlayStatus(
   return 'not_started';
 }
 
+export function isMatchGroupOnCourse(
+  group: Pick<TournamentMatchGroup, 'tee_time'>,
+  now: Date = new Date()
+): boolean {
+  const teeMs = new Date(group.tee_time).getTime();
+  return now.getTime() + ON_TEE_GRACE_MS >= teeMs;
+}
+
+export function resolveEffectiveGroupHoleResults(
+  group: TournamentMatchGroup,
+  holeResults: TournamentMatchHoleResult[],
+  scores?: TournamentScore[],
+  useNetScoring = false
+): TournamentMatchHoleResult[] {
+  const persisted = holeResults.filter((row) => row.match_group_id === group.id);
+  if (persisted.length > 0) return persisted;
+
+  if (!scores || scores.length === 0) return [];
+
+  const groupScores = scores.filter(
+    (score) =>
+      score.match_group_id === group.id && score.round_number === group.round_number
+  );
+  if (groupScores.length === 0) return [];
+
+  return computeMatchHoleResults(
+    group,
+    group.round_number,
+    group.format,
+    groupScores,
+    { useNetScoring }
+  ) as TournamentMatchHoleResult[];
+}
+
 export function buildMatchStatusFromHoleResults(
   group: TournamentMatchGroup,
   holeResults: TournamentMatchHoleResult[],
   sideAName: string,
-  sideBName: string
+  sideBName: string,
+  options?: {
+    scores?: TournamentScore[];
+    useNetScoring?: boolean;
+  }
 ): { matchStatus: MatchStatus; playStatus: MatchPlayStatus } {
-  const groupHoles = holeResults.filter((row) => row.match_group_id === group.id);
+  const groupHoles = resolveEffectiveGroupHoleResults(
+    group,
+    holeResults,
+    options?.scores,
+    options?.useNetScoring ?? false
+  );
   const outcomes = holeResultsToOutcomes(groupHoles);
   const rows = outcomesMapToHoleResultRows(outcomes);
   const matchStatus = computeLiveMatchStatus({
@@ -136,9 +193,36 @@ export function buildMatchStatusFromHoleResults(
   return { matchStatus, playStatus };
 }
 
-export function formatMatchPlayStatusLabel(status: MatchPlayStatus): string {
+export function resolveMatchGroupDisplayStatus(
+  group: TournamentMatchGroup,
+  playStatus: MatchPlayStatus,
+  matchStatus: MatchStatus,
+  holeResultCount: number,
+  now: Date = new Date()
+): MatchGroupDisplayStatus {
+  if (isMatchActuallyComplete(group, matchStatus, holeResultCount)) {
+    return { label: 'Match complete', tone: 'complete' };
+  }
+
+  if (playStatus === 'in_progress' || holeResultCount > 0) {
+    return { label: 'In progress', tone: 'progress' };
+  }
+
+  if (isMatchGroupOnCourse(group, now)) {
+    return { label: 'On course', tone: 'progress' };
+  }
+
+  return { label: 'Scheduled', tone: 'scheduled' };
+}
+
+export function formatMatchPlayStatusLabel(
+  status: MatchPlayStatus,
+  group?: Pick<TournamentMatchGroup, 'tee_time'>,
+  now: Date = new Date()
+): string {
   if (status === 'complete') return 'Match complete';
   if (status === 'in_progress') return 'In progress';
+  if (group && isMatchGroupOnCourse(group, now)) return 'On course';
   return 'Scheduled';
 }
 

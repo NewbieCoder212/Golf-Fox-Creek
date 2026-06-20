@@ -1,6 +1,7 @@
 import {
   buildMatchStatusFromHoleResults,
   isAdminDeclaredMatchResult,
+  resolveEffectiveGroupHoleResults,
   resolveMatchWinnerSide,
   type MatchPlayStatus,
 } from '@/lib/tournament-match-play-status';
@@ -12,6 +13,7 @@ import type {
   Tournament,
   TournamentMatchGroup,
   TournamentMatchHoleResult,
+  TournamentScore,
   TournamentTeam,
 } from '@/types';
 
@@ -96,7 +98,9 @@ export function buildRoundSessionPointsLeaderboard(
   holeResults: TournamentMatchHoleResult[],
   tournament: Tournament,
   sideAName: string,
-  sideBName: string
+  sideBName: string,
+  scores: TournamentScore[] = [],
+  useNetScoring = false
 ): MatchPointsStanding[] {
   const byTeamId = new Map<string, MatchPointsStanding>();
 
@@ -118,7 +122,12 @@ export function buildRoundSessionPointsLeaderboard(
       continue;
     }
 
-    const groupHoleResults = holeResults.filter((row) => row.match_group_id === group.id);
+    const groupHoleResults = resolveEffectiveGroupHoleResults(
+      group,
+      holeResults,
+      scores,
+      useNetScoring
+    );
     const groupFormat = getMatchGroupFormat(group, tournament);
 
     if (isSinglesFormat(groupFormat)) {
@@ -149,7 +158,8 @@ export function buildRoundSessionPointsLeaderboard(
       group,
       holeResults,
       sideAName,
-      sideBName
+      sideBName,
+      { scores, useNetScoring }
     );
     const winnerSide = resolveMatchWinnerSide(group, matchStatus);
     const unit = sessionPointsForUnit(playStatus, matchStatus, winnerSide);

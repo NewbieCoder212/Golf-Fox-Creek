@@ -9,11 +9,13 @@ import {
 import { formatLabel, formatRoundPickerLabel } from '@/lib/tournament-labels';
 import { formatClubTime } from '@/lib/club-timezone';
 import { SIDE_A_COLOR, SIDE_B_COLOR } from '@/lib/match-play-theme';
+import { ColoredMatchStatusText } from '@/components/match-play/ColoredMatchStatusText';
 import { cn } from '@/lib/cn';
 import type {
   Tournament,
   TournamentMatchGroup,
   TournamentMatchHoleResult,
+  TournamentScore,
   TournamentTeam,
 } from '@/types';
 
@@ -29,6 +31,8 @@ interface TournamentTvTeeSheetProps {
   holeResults: TournamentMatchHoleResult[];
   playerNameById: Record<string, string>;
   roundNumber: number;
+  scores?: TournamentScore[];
+  useNetScoring?: boolean;
   isPreviewingNextRound?: boolean;
   loungeMode?: boolean;
   compact?: boolean;
@@ -115,7 +119,23 @@ function TeeSheetRow({
               {row.playersLabel}
             </Text>
           ) : null}
-          {row.resultSummary && !loungeMode ? (
+          {row.displayStatus === 'complete' && row.resultSummary && !loungeMode ? (
+            <Text
+              className="text-[10px] mt-0.5 font-semibold text-neutral-400"
+              numberOfLines={1}
+            >
+              {row.resultSummary}
+            </Text>
+          ) : row.matchStatus.throughHole > 0 && !loungeMode ? (
+            <View className="mt-0.5">
+              <ColoredMatchStatusText
+                matchStatus={row.matchStatus}
+                sideAName={row.sideAName}
+                sideBName={row.sideBName}
+                compact
+              />
+            </View>
+          ) : row.resultSummary && !loungeMode ? (
             <Text
               className={cn(
                 'text-[10px] mt-0.5 font-semibold',
@@ -140,6 +160,8 @@ export function TournamentTvTeeSheet({
   holeResults,
   playerNameById,
   roundNumber,
+  scores,
+  useNetScoring = false,
   isPreviewingNextRound = false,
   loungeMode = false,
   compact = false,
@@ -163,9 +185,11 @@ export function TournamentTvTeeSheet({
         holeResults,
         playerNameById,
         roundNumber,
+        scores,
+        useNetScoring,
         now,
       }),
-    [tournament, teams, matchGroups, holeResults, playerNameById, roundNumber, now]
+    [tournament, teams, matchGroups, holeResults, playerNameById, roundNumber, scores, useNetScoring, now]
   );
 
   const pages = useMemo(() => {

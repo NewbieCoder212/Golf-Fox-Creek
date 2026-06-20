@@ -20,8 +20,8 @@ import {
   TOURNAMENT_MATCH_HOLES,
 } from './tournament-match-scoring';
 import {
-  formatMatchPlayStatusLabel,
   formatMatchResultSummary,
+  resolveMatchGroupDisplayStatus,
   resolveMatchGroupPlayStatus,
   type MatchPlayStatus,
 } from './tournament-match-play-status';
@@ -412,6 +412,12 @@ export function buildMatchGridModel(params: {
     overallHoleResults.length
   );
   const inProgress = playStatus === 'in_progress';
+  const display = resolveMatchGroupDisplayStatus(
+    matchGroup,
+    playStatus,
+    liveStatus,
+    overallHoleResults.length
+  );
 
   return {
     matchGroupId: matchGroup.id,
@@ -426,7 +432,7 @@ export function buildMatchGridModel(params: {
     throughHole: liveStatus.throughHole,
     inProgress,
     playStatus,
-    statusLabel: formatMatchPlayStatusLabel(playStatus),
+    statusLabel: display.label,
     resultSummary: formatMatchResultSummary(matchGroup, liveStatus, sideAName, sideBName),
     matchStatus: liveStatus,
     rows,

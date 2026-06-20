@@ -32,6 +32,7 @@ import { useTranslations } from '@/lib/language-store';
 import { useTournamentScorecardSession } from '@/hooks/useTournamentScorecardSession';
 import { TournamentScorecardToolbar } from '@/components/TournamentScorecardToolbar';
 import { TournamentDirectResultPanel } from '@/components/TournamentDirectResultPanel';
+import { ScorecardOnboardingModal } from '@/components/ScorecardOnboardingModal';
 import type { TournamentTeamSide } from '@/types';
 
 // Fox Creek Golf Club - Dieppe, NB, Canada
@@ -1162,6 +1163,11 @@ export default function ScorecardScreen() {
           </ScrollView>
         </Animated.View>
       )}
+
+      <ScorecardOnboardingModal
+        enabled={isTournamentMode && tournamentSession.hasMatchPlay}
+        userId={authUser?.id}
+      />
 
     </View>
   );

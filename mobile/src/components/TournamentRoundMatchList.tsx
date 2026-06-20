@@ -2,12 +2,21 @@ import { useMemo } from 'react';
 import { View, Text } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 
+import {
+  ColoredMatchResultText,
+  ColoredMatchStatusText,
+} from '@/components/match-play/ColoredMatchStatusText';
 import { useTournamentRoundMatchSummaries } from '@/hooks/useTournamentRoundMatchSummaries';
-import type { RoundMatchLineup } from '@/hooks/useTournamentRoundMatchSummaries';
+import type {
+  RoundMatchLineup,
+  RoundMatchSinglesPairing,
+  RoundMatchSummary,
+} from '@/hooks/useTournamentRoundMatchSummaries';
 import { formatRoundPickerLabel } from '@/lib/tournament-labels';
 import { formatTeeAssignmentTime } from '@/lib/tournament-tee-service';
 import { getActiveRoundNumber } from '@/lib/tournament-scorecard-routing';
 import { getTeamSideTheme } from '@/lib/match-play-theme';
+import type { MatchStatus } from '@/lib/tournament-match-status';
 import { buildTournamentPlayerMaps, getTournamentPlayers } from '@/lib/tournament-player-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import type { Tournament, TournamentMatchGroup, TournamentTeam } from '@/types';
@@ -96,6 +105,127 @@ function PlayerNames({
   );
 }
 
+type StatusAlignment = 'left' | 'center' | 'right';
+
+function getStatusAlignment(
+  matchStatus: MatchStatus,
+  winnerSide: RoundMatchSummary['winnerSide']
+): StatusAlignment {
+  if (winnerSide === 'tie' || matchStatus.lead === 0) {
+    return 'center';
+  }
+  if (winnerSide === 'side_a' || matchStatus.lead > 0) {
+    return 'left';
+  }
+  if (winnerSide === 'side_b' || matchStatus.lead < 0) {
+    return 'right';
+  }
+  return 'center';
+}
+
+function isFinalWinSummary(
+  summary: string,
+  sideAName: string,
+  sideBName: string
+): boolean {
+  return (
+    summary === 'Halved' ||
+    summary === `${sideAName} won` ||
+    summary === `${sideBName} won`
+  );
+}
+
+function AlignedMatchStatus({
+  matchStatus,
+  resultSummary,
+  winnerSide,
+  playStatus,
+  sideAName,
+  sideBName,
+  prominent = true,
+}: {
+  matchStatus: MatchStatus;
+  resultSummary: string | null;
+  winnerSide: RoundMatchSummary['winnerSide'];
+  playStatus: RoundMatchSummary['playStatus'];
+  sideAName: string;
+  sideBName: string;
+  prominent?: boolean;
+}) {
+  if (playStatus === 'not_started' || matchStatus.throughHole === 0) {
+    return null;
+  }
+
+  const alignment = getStatusAlignment(matchStatus, winnerSide);
+  const summary = resultSummary ?? matchStatus.label;
+  const showResultText =
+    playStatus === 'complete' && summary != null && isFinalWinSummary(summary, sideAName, sideBName);
+
+  const content = showResultText ? (
+    <ColoredMatchResultText
+      summary={summary}
+      sideAName={sideAName}
+      sideBName={sideBName}
+      prominent={prominent}
+    />
+  ) : (
+    <ColoredMatchStatusText
+      matchStatus={matchStatus}
+      sideAName={sideAName}
+      sideBName={sideBName}
+      prominent={prominent}
+    />
+  );
+
+  return (
+    <View
+      className={cn(
+        'flex-row',
+        alignment === 'left' && 'justify-start',
+        alignment === 'right' && 'justify-end',
+        alignment === 'center' && 'justify-center'
+      )}
+    >
+      <View
+        className={cn(
+          alignment === 'left' && 'items-start',
+          alignment === 'right' && 'items-end',
+          alignment === 'center' && 'items-center'
+        )}
+      >
+        {content}
+      </View>
+    </View>
+  );
+}
+
+function SinglesPairingStatusBar({
+  pairing,
+  sideAName,
+  sideBName,
+}: {
+  pairing: RoundMatchSinglesPairing;
+  sideAName: string;
+  sideBName: string;
+}) {
+  if (pairing.playStatus === 'not_started' || pairing.matchStatus.throughHole === 0) {
+    return null;
+  }
+
+  return (
+    <View className="px-3 py-1.5 bg-[#0f0f0f] border-t border-neutral-800/80">
+      <AlignedMatchStatus
+        matchStatus={pairing.matchStatus}
+        resultSummary={pairing.resultSummary}
+        winnerSide={pairing.winnerSide}
+        playStatus={pairing.playStatus}
+        sideAName={sideAName}
+        sideBName={sideBName}
+      />
+    </View>
+  );
+}
+
 function MatchLineupRow({
   lineup,
   sideAName,
@@ -113,69 +243,76 @@ function MatchLineupRow({
   if (lineup.kind === 'singles') {
     return (
       <View className="gap-1.5">
-        {lineup.pairings.map((pairing, index) => (
-          <View key={`pair-${index}`} className="flex-row items-stretch">
-            <View
-              className="flex-1 px-3 py-2 justify-center"
-              style={{
-                backgroundColor: themeA.panelBg,
-                borderLeftWidth: 3,
-                borderLeftColor: themeA.color,
-              }}
-            >
-              {index === 0 ? (
+        {lineup.pairings.map((pairing) => (
+          <View key={`pair-${pairing.pairingIndex}`}>
+            <View className="flex-row items-stretch">
+              <View
+                className="flex-1 px-3 py-2 justify-center"
+                style={{
+                  backgroundColor: themeA.panelBg,
+                  borderLeftWidth: 3,
+                  borderLeftColor: themeA.color,
+                }}
+              >
+                {pairing.pairingIndex === 0 ? (
+                  <Text
+                    style={{ color: themeA.color }}
+                    className={cn('font-bold', compact ? 'text-xs' : 'text-sm')}
+                    numberOfLines={1}
+                  >
+                    {sideAName}
+                  </Text>
+                ) : null}
                 <Text
-                  style={{ color: themeA.color }}
-                  className={cn('font-bold', compact ? 'text-xs' : 'text-sm')}
+                  className={cn(
+                    'text-neutral-100 font-medium',
+                    compact ? 'text-[11px]' : 'text-xs',
+                    pairing.pairingIndex === 0 ? 'mt-0.5' : ''
+                  )}
                   numberOfLines={1}
                 >
-                  {sideAName}
+                  {pairing.sideAPlayer}
                 </Text>
-              ) : null}
-              <Text
-                className={cn(
-                  'text-neutral-100 font-medium',
-                  compact ? 'text-[11px]' : 'text-xs',
-                  index === 0 ? 'mt-0.5' : ''
-                )}
-                numberOfLines={1}
+              </View>
+
+              <View className="items-center justify-center px-1.5 bg-[#111] border-x border-neutral-800">
+                <Text className="text-neutral-600 text-[8px] font-bold">VS</Text>
+              </View>
+
+              <View
+                className="flex-1 px-3 py-2 justify-center items-end"
+                style={{
+                  backgroundColor: themeB.panelBg,
+                  borderRightWidth: 3,
+                  borderRightColor: themeB.color,
+                }}
               >
-                {pairing.sideAPlayer}
-              </Text>
-            </View>
-
-            <View className="items-center justify-center px-1.5 bg-[#111] border-x border-neutral-800">
-              <Text className="text-neutral-600 text-[8px] font-bold">VS</Text>
-            </View>
-
-            <View
-              className="flex-1 px-3 py-2 justify-center items-end"
-              style={{
-                backgroundColor: themeB.panelBg,
-                borderRightWidth: 3,
-                borderRightColor: themeB.color,
-              }}
-            >
-              {index === 0 ? (
+                {pairing.pairingIndex === 0 ? (
+                  <Text
+                    style={{ color: themeB.color }}
+                    className={cn('font-bold text-right', compact ? 'text-xs' : 'text-sm')}
+                    numberOfLines={1}
+                  >
+                    {sideBName}
+                  </Text>
+                ) : null}
                 <Text
-                  style={{ color: themeB.color }}
-                  className={cn('font-bold text-right', compact ? 'text-xs' : 'text-sm')}
+                  className={cn(
+                    'text-neutral-100 font-medium text-right',
+                    compact ? 'text-[11px]' : 'text-xs',
+                    pairing.pairingIndex === 0 ? 'mt-0.5' : ''
+                  )}
                   numberOfLines={1}
                 >
-                  {sideBName}
+                  {pairing.sideBPlayer}
                 </Text>
-              ) : null}
-              <Text
-                className={cn(
-                  'text-neutral-100 font-medium text-right',
-                  compact ? 'text-[11px]' : 'text-xs',
-                  index === 0 ? 'mt-0.5' : ''
-                )}
-                numberOfLines={1}
-              >
-                {pairing.sideBPlayer}
-              </Text>
+              </View>
             </View>
+            <SinglesPairingStatusBar
+              pairing={pairing}
+              sideAName={sideAName}
+              sideBName={sideBName}
+            />
           </View>
         ))}
       </View>
@@ -301,25 +438,25 @@ export function TournamentRoundMatchList({
                 compact={compact}
               />
 
-              <View className="flex-row items-start justify-between gap-2 px-3 py-2">
-                <View className="flex-1 min-w-0">
-                  <Text className="text-neutral-500 text-[10px] font-semibold uppercase tracking-wide">
+              <View className="px-3 py-2">
+                <View className="flex-row items-start justify-between gap-2">
+                  <Text className="text-neutral-500 text-[10px] font-semibold uppercase tracking-wide flex-1">
                     {formatTeeAssignmentTime(match.group.tee_time)} · Group {match.group.group_number}
                   </Text>
-                  {match.resultSummary ? (
-                    <Text
-                      className={cn(
-                        'mt-1 text-sm font-semibold',
-                        match.playStatus === 'complete'
-                          ? 'text-neutral-200'
-                          : 'text-neutral-400 text-xs'
-                      )}
-                    >
-                      {match.resultSummary}
-                    </Text>
-                  ) : null}
+                  <StatusBadge label={match.statusLabel} tone={tone} />
                 </View>
-                <StatusBadge label={match.statusLabel} tone={tone} />
+                {match.lineup.kind !== 'singles' && match.resultSummary ? (
+                  <View className="mt-1.5">
+                    <AlignedMatchStatus
+                      matchStatus={match.matchStatus}
+                      resultSummary={match.resultSummary}
+                      winnerSide={match.winnerSide}
+                      playStatus={match.playStatus}
+                      sideAName={match.sideAName}
+                      sideBName={match.sideBName}
+                    />
+                  </View>
+                ) : null}
               </View>
             </View>
           );

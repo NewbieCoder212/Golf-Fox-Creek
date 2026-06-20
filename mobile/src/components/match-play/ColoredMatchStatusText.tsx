@@ -32,6 +32,7 @@ interface ColoredMatchStatusTextProps {
   sideBName: string;
   compact?: boolean;
   lounge?: boolean;
+  prominent?: boolean;
 }
 
 /** TV / leaderboard live match standing with team colors and hole progress. */
@@ -41,6 +42,7 @@ export function ColoredMatchStatusText({
   sideBName,
   compact = false,
   lounge = false,
+  prominent = false,
 }: ColoredMatchStatusTextProps) {
   const { lead, dormie, clinched, throughHole } = matchStatus;
   const leaderSide: TournamentTeamSide | null =
@@ -48,8 +50,20 @@ export function ColoredMatchStatusText({
   const leaderName = leaderSide === 'side_a' ? sideAName : leaderSide === 'side_b' ? sideBName : null;
   const color = leaderColor(leaderSide);
   const progress = formatHoleProgress(matchStatus);
-  const standingSize = lounge ? 'text-2xl' : compact ? 'text-[10px]' : 'text-sm';
-  const progressSize = lounge ? 'text-lg' : compact ? 'text-[9px]' : 'text-[10px]';
+  const standingSize = prominent
+    ? 'text-lg font-bold'
+    : lounge
+      ? 'text-2xl'
+      : compact
+        ? 'text-[10px]'
+        : 'text-sm';
+  const progressSize = prominent
+    ? 'text-[10px]'
+    : lounge
+      ? 'text-lg'
+      : compact
+        ? 'text-[9px]'
+        : 'text-[10px]';
 
   if (throughHole === 0) {
     return null;
@@ -111,14 +125,22 @@ export function ColoredMatchResultText({
   sideBName,
   compact = false,
   lounge = false,
+  prominent = false,
 }: {
   summary: string;
   sideAName: string;
   sideBName: string;
   compact?: boolean;
   lounge?: boolean;
+  prominent?: boolean;
 }) {
-  const standingSize = lounge ? 'text-xl' : compact ? 'text-[10px]' : 'text-sm';
+  const standingSize = prominent
+    ? 'text-lg font-bold'
+    : lounge
+      ? 'text-xl'
+      : compact
+        ? 'text-[10px]'
+        : 'text-sm';
 
   if (summary === 'Halved') {
     return (

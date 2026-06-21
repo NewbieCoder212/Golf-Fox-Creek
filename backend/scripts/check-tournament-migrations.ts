@@ -18,6 +18,7 @@ const REQUIRED_POLICIES = [
 const REQUIRED_COLUMNS = [
   { table: 'tournaments', column: 'display_token' },
   { table: 'tournaments', column: 'display_slug' },
+  { table: 'tournaments', column: 'access_locked_at' },
   { table: 'ad_placements', column: 'display_position' },
   { table: 'tournament_match_hole_results', column: 'pairing_index' },
 ] as const;
@@ -65,7 +66,9 @@ async function main() {
         const hint =
           column === 'pairing_index'
             ? 'Run supabase/migrations/20260718000000_direct_result_hole_outcomes.sql'
-            : 'Run supabase/migrations/20260628000000_tournament_tv_display.sql';
+            : column === 'access_locked_at'
+              ? 'Run supabase/migrations/20260725000000_tournament_access_lock.sql'
+              : 'Run supabase/migrations/20260628000000_tournament_tv_display.sql';
         console.error(`  ${hint}`);
         ok = false;
       } else {

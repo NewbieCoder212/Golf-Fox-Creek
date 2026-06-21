@@ -580,6 +580,8 @@ export interface Tournament {
   /** Cup tie-breaker: retains championship when overall match points are tied. */
   defending_champion_side?: TournamentTeamSide | null;
   participant_invites_sent_at?: string | null;
+  /** When set, members and TV display cannot access this tournament. */
+  access_locked_at?: string | null;
   created_at: string;
 }
 
@@ -593,6 +595,7 @@ export interface TournamentInsert {
   handicap_use_index?: boolean;
   handicap_allowance_pct?: number;
   match_use_net_scoring?: boolean;
+  access_locked_at?: string | null;
 }
 
 export type TournamentRosterStatus = 'draft' | 'ready';

@@ -15,6 +15,7 @@ type DisplayTournamentRow = {
   rounds_count: number;
   match_use_net_scoring: boolean;
   defending_champion_side: 'side_a' | 'side_b' | null;
+  access_locked_at: string | null;
 };
 
 async function fetchRows<T>(path: string): Promise<T[]> {
@@ -24,7 +25,11 @@ async function fetchRows<T>(path: string): Promise<T[]> {
 }
 
 const TOURNAMENT_SELECT =
-  'id,name,start_date,end_date,display_token,display_slug,round_schedule,rounds_count,match_use_net_scoring,defending_champion_side';
+  'id,name,start_date,end_date,display_token,display_slug,round_schedule,rounds_count,match_use_net_scoring,defending_champion_side,access_locked_at';
+
+function isTournamentDisplayLocked(tournament: DisplayTournamentRow): boolean {
+  return tournament.access_locked_at != null;
+}
 
 async function buildDisplayPayloadForTournament(tournament: DisplayTournamentRow) {
   const tournamentId = tournament.id;
@@ -106,6 +111,10 @@ displayRouter.get('/tournament/by-slug/:slug', async (c) => {
     return c.json({ error: 'Tournament display not found' }, 404);
   }
 
+  if (isTournamentDisplayLocked(tournament)) {
+    return c.json({ error: 'Tournament display is closed' }, 403);
+  }
+
   const payload = await buildDisplayPayloadForTournament(tournament);
   return c.json(payload);
 });
@@ -129,6 +138,10 @@ displayRouter.get('/tournament/:id', async (c) => {
   const tournament = tournaments[0];
   if (!tournament) {
     return c.json({ error: 'Tournament not found or invalid token' }, 404);
+  }
+
+  if (isTournamentDisplayLocked(tournament)) {
+    return c.json({ error: 'Tournament display is closed' }, 403);
   }
 
   const payload = await buildDisplayPayloadForTournament(tournament);

@@ -34,6 +34,16 @@ export type { TournamentServiceError, TournamentServiceResult } from './tourname
 
 const isConfigured = isTournamentSupabaseConfigured;
 
+export function isTournamentAccessLocked(
+  tournament: Pick<Tournament, 'access_locked_at'>
+): boolean {
+  return tournament.access_locked_at != null;
+}
+
+function filterUnlockedTournaments(tournaments: Tournament[]): Tournament[] {
+  return tournaments.filter((tournament) => !isTournamentAccessLocked(tournament));
+}
+
 export async function getTournaments(options?: {
   upcomingOnly?: boolean;
   limit?: number;
@@ -160,7 +170,28 @@ export async function isUserRegisteredForTournament(
   tournamentId: string
 ): Promise<boolean> {
   const ids = await getMyTournamentIds(userId);
-  return ids.includes(tournamentId);
+  if (!ids.includes(tournamentId)) return false;
+
+  const tournament = await getTournamentById(tournamentId);
+  return tournament != null && !isTournamentAccessLocked(tournament);
+}
+
+export type MemberTournamentAccessState = 'registered' | 'locked' | 'not_registered';
+
+/** Distinguishes locked events from roster misses for member tournament screens. */
+export async function getMemberTournamentAccessState(
+  userId: string,
+  tournamentId: string
+): Promise<MemberTournamentAccessState> {
+  const ids = await getMyTournamentIds(userId, {
+    email: useMemberAuthStore.getState().user?.email,
+  });
+  if (!ids.includes(tournamentId)) return 'not_registered';
+
+  const tournament = await getTournamentById(tournamentId);
+  if (!tournament || isTournamentAccessLocked(tournament)) return 'locked';
+
+  return 'registered';
 }
 
 /** Managers see all events; members only see tournaments they are registered for. */
@@ -197,7 +228,12 @@ export async function getTournamentsForUser(
     query.end_date = `gte.${new Date().toISOString()}`;
   }
 
-  return tournamentSupabaseRequest<Tournament[]>('tournaments', { query });
+  const result = await tournamentSupabaseRequest<Tournament[]>('tournaments', { query });
+  if (result.error || !result.data) {
+    return result;
+  }
+
+  return { data: filterUnlockedTournaments(result.data), error: null };
 }
 
 export async function getTournamentsForUserList(
@@ -221,6 +257,18 @@ export async function getTournamentById(tournamentId: string): Promise<Tournamen
   });
 
   return unwrapSingle(result);
+}
+
+export async function lockTournamentAccess(tournamentId: string): Promise<Tournament | null> {
+  return updateTournament(tournamentId, {
+    access_locked_at: new Date().toISOString(),
+  });
+}
+
+export async function unlockTournamentAccess(tournamentId: string): Promise<Tournament | null> {
+  return updateTournament(tournamentId, {
+    access_locked_at: null,
+  });
 }
 
 export async function createTournament(

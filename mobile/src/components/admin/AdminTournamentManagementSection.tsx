@@ -26,6 +26,8 @@ import {
   UserRound,
   Mail,
   Medal,
+  Lock,
+  LockOpen,
 } from 'lucide-react-native';
 
 import { TournamentTeamMatchupBoard } from '@/components/TournamentTeamMatchupBoard';
@@ -49,6 +51,9 @@ import {
   getTournamentById,
   getTournamentsResult,
   getTournamentTeams,
+  isTournamentAccessLocked,
+  lockTournamentAccess,
+  unlockTournamentAccess,
   updateTournament,
   updateTournamentTeam,
 } from '@/lib/tournament-service';
@@ -345,6 +350,67 @@ export function AdminTournamentManagementSection({
           text: 'Delete',
           style: 'destructive',
           onPress: () => deleteTournamentMutation.mutate(tournament.id),
+        },
+      ]
+    );
+  };
+
+  const lockAccessMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const updated = await lockTournamentAccess(id);
+      if (!updated) throw new Error('Could not close tournament access');
+      return updated;
+    },
+    onSuccess: (tournament) => {
+      invalidateTournamentQueries(tournament.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Access closed', 'Players and TV display can no longer view this tournament.');
+    },
+    onError: (error: Error) => {
+      Alert.alert('Close access failed', error.message);
+    },
+  });
+
+  const unlockAccessMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const updated = await unlockTournamentAccess(id);
+      if (!updated) throw new Error('Could not reopen tournament access');
+      return updated;
+    },
+    onSuccess: (tournament) => {
+      invalidateTournamentQueries(tournament.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Access reopened', 'Players and TV display can view this tournament again.');
+    },
+    onError: (error: Error) => {
+      Alert.alert('Reopen access failed', error.message);
+    },
+  });
+
+  const confirmLockTournamentAccess = (tournament: Tournament) => {
+    Alert.alert(
+      'Close tournament access?',
+      'This removes the tournament from all players\' My Events, blocks tournament pages, and shuts down the TV display. Managers can still view and manage it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Close access',
+          style: 'destructive',
+          onPress: () => lockAccessMutation.mutate(tournament.id),
+        },
+      ]
+    );
+  };
+
+  const confirmUnlockTournamentAccess = (tournament: Tournament) => {
+    Alert.alert(
+      'Reopen tournament access?',
+      'Players will see this tournament in My Events again and the TV display will work.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reopen access',
+          onPress: () => unlockAccessMutation.mutate(tournament.id),
         },
       ]
     );
@@ -679,6 +745,37 @@ export function AdminTournamentManagementSection({
                   </>
                 )}
               </Pressable>
+
+              {!isCreating && activeTournament && isTournamentAccessLocked(activeTournament) ? (
+                <View className="mt-4 rounded-xl border border-amber-800/60 bg-amber-900/20 px-4 py-3">
+                  <Text className="text-amber-300 text-sm font-semibold">Player access closed</Text>
+                  <Text className="text-amber-200/80 text-xs mt-1">
+                    Members and TV display cannot view this tournament.
+                  </Text>
+                </View>
+              ) : null}
+
+              {!isCreating && activeTournament && (
+                isTournamentAccessLocked(activeTournament) ? (
+                  <Pressable
+                    onPress={() => confirmUnlockTournamentAccess(activeTournament)}
+                    disabled={unlockAccessMutation.isPending}
+                    className="flex-row items-center justify-center border border-lime-800/60 bg-lime-900/20 rounded-xl py-3.5 mt-3 active:opacity-80"
+                  >
+                    <LockOpen size={16} color="#a3e635" />
+                    <Text className="text-lime-400 font-semibold ml-2">Reopen Access</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => confirmLockTournamentAccess(activeTournament)}
+                    disabled={lockAccessMutation.isPending}
+                    className="flex-row items-center justify-center border border-amber-800/60 bg-amber-900/20 rounded-xl py-3.5 mt-3 active:opacity-80"
+                  >
+                    <Lock size={16} color="#fbbf24" />
+                    <Text className="text-amber-300 font-semibold ml-2">Close Tournament Access</Text>
+                  </Pressable>
+                )
+              )}
 
               {!isCreating && activeTournament && (
                 <Pressable

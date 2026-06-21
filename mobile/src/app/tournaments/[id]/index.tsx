@@ -24,9 +24,10 @@ import { useMemberAuthStore } from '@/lib/member-auth-store';
 import { canAccessAdminRole } from '@/lib/admin-auth-bridge';
 import {
   getTeamsForPlayer,
+  getMemberTournamentAccessState,
   getTournamentById,
   getTournamentTeams,
-  isUserRegisteredForTournament,
+  type MemberTournamentAccessState,
 } from '@/lib/tournament-service';
 import { getMembersForChallenge } from '@/lib/social-service';
 import {
@@ -101,14 +102,19 @@ export default function TournamentDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const { data: hasAccess = viewAllTournaments, isLoading: isCheckingAccess } = useQuery({
+  const { data: accessState = viewAllTournaments ? 'registered' : 'not_registered', isLoading: isCheckingAccess } = useQuery({
     queryKey: ['tournamentAccess', id, user?.id, viewAllTournaments],
-    queryFn: async () => {
-      if (viewAllTournaments || !user?.id || !id) return true;
-      return isUserRegisteredForTournament(user.id, id);
+    queryFn: async (): Promise<MemberTournamentAccessState | 'registered'> => {
+      if (viewAllTournaments || !user?.id || !id) return 'registered';
+      return getMemberTournamentAccessState(user.id, id);
     },
     enabled: Boolean(id && user?.id),
   });
+
+  const hasAccess = viewAllTournaments || accessState === 'registered';
+  const isPageLoading = viewAllTournaments
+    ? isLoading || !tournament
+    : isCheckingAccess || (accessState === 'registered' && (isLoading || !tournament));
 
   const { data: teams = [] } = useQuery({
     queryKey: ['tournamentTeams', id],
@@ -204,7 +210,7 @@ export default function TournamentDetailScreen() {
     });
   }, [router]);
 
-  if (isLoading || isCheckingAccess || !tournament) {
+  if (isPageLoading) {
     return (
       <View className="flex-1 bg-[#0c0c0c] items-center justify-center">
         <ActivityIndicator size="large" color="#a3e635" />
@@ -212,7 +218,28 @@ export default function TournamentDetailScreen() {
     );
   }
 
-  if (!hasAccess) {
+  if (!viewAllTournaments && accessState === 'locked') {
+    return (
+      <View className="flex-1 bg-[#0c0c0c]">
+        <View style={{ paddingTop: insets.top }} className="px-4 py-3">
+          <Pressable onPress={() => router.back()} className="flex-row items-center active:opacity-60">
+            <ChevronLeft size={24} color="#a3e635" />
+            <Text className="text-lime-400 text-base font-medium ml-1">Back</Text>
+          </Pressable>
+        </View>
+        <View className="flex-1 items-center justify-center px-8">
+          <Trophy size={48} color="#525252" />
+          <Text className="text-white text-xl font-bold mt-4 text-center">Tournament closed</Text>
+          <Text className="text-neutral-400 text-sm text-center mt-2">
+            {tournament?.name ?? 'This tournament'} is no longer available in the app. Contact the
+            pro shop if you need help.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!hasAccess || !tournament) {
     return (
       <View className="flex-1 bg-[#0c0c0c]">
         <View style={{ paddingTop: insets.top }} className="px-4 py-3">

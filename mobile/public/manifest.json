@@ -1,7 +1,7 @@
 {
-  "name": "Generation Cup 2026",
-  "short_name": "Gen Cup 2026",
-  "description": "Sign in for Generation Cup Weekend — June 19–20, 2026 at Fox Creek Golf Club",
+  "name": "Coming Soon",
+  "short_name": "Coming Soon",
+  "description": "Something new is coming. Check back soon.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c0c0c",
@@ -9,13 +9,13 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/generation-cup-icon-192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/generation-cup-icon-512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

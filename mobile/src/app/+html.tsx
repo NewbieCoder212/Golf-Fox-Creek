@@ -13,26 +13,26 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 
         {/* Browser Tab Title */}
-        <title>Generation Cup 2026</title>
+        <title>Coming Soon</title>
 
         {/* PWA Meta Tags */}
-        <meta name="application-name" content="Generation Cup 2026" />
+        <meta name="application-name" content="Coming Soon" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Generation Cup 2026" />
+        <meta name="apple-mobile-web-app-title" content="Coming Soon" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#0c0c0c" />
-        <meta name="description" content="Sign in for Generation Cup Weekend — June 19–20, 2026 at Fox Creek Golf Club" />
+        <meta name="description" content="Something new is coming. Check back soon." />
 
         {/* Open Graph / Social Sharing */}
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="Generation Cup 2026" />
-        <meta property="og:description" content="Sign in for Generation Cup Weekend — June 19–20, 2026 at Fox Creek Golf Club" />
-        <meta property="og:image" content="/generation-cup-icon-512.png" />
+        <meta property="og:title" content="Coming Soon" />
+        <meta property="og:description" content="Something new is coming. Check back soon." />
+        <meta property="og:image" content="/icon-512.png" />
 
-        {/* Favicon + home screen icon — Generation Cup logo */}
+        {/* Favicon + home screen icon */}
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
-        <link rel="icon" type="image/png" sizes="192x192" href="/generation-cup-icon-192.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
         {/* Web App Manifest */}
